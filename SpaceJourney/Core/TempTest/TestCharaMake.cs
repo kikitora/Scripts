@@ -94,7 +94,9 @@ public class TestCharaMake : MonoBehaviour
         );
 
         Debug.Log(sb.ToString());
-
+#if UNITY_EDITOR
+        FindObjectOfType<WorldStateRuntime>()?.RefreshDebugLists();
+#endif
         Debug.Log(
             $"[TestCharaMake] Soul:{soul.SoulName} / " +
             $"Body:{(body != null ? $"{body.RaceId}/{body.BodyJobId} (InstanceId={body.InstanceId})" : "none")} / " +

@@ -182,7 +182,11 @@ namespace SteraCube.SpaceJourney
             {
                 foreach (var body in world.ExBodys)
                 {
-                    body?.EnsureInstanceId();
+                    if (body == null) continue;
+                    if (string.IsNullOrEmpty(body.InstanceId))
+                    {
+                        body.SetInstanceIdForWorld(world.GenerateUniqueInstanceId());
+                    }
                 }
             }
 

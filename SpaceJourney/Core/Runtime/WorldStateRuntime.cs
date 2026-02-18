@@ -29,7 +29,8 @@ namespace SteraCube.SpaceJourney
         /// <summary>
         /// 現在アクティブなワールド状態（セーブ／ロードの単位）。
         /// </summary>
-        public WorldState CurrentWorld { get; private set; }
+        [SerializeField] private WorldState currentWorld;
+        public WorldState CurrentWorld => currentWorld;
 
         /// <summary>WorldState が既に用意されているか。</summary>
         public bool HasWorld => CurrentWorld != null;
@@ -61,7 +62,7 @@ namespace SteraCube.SpaceJourney
             {
                 if (WorldStateSaveSystem.TryLoadWorld(profileId, out var loadedWorld))
                 {
-                    CurrentWorld = loadedWorld;
+                    currentWorld = loadedWorld;
 
                     // ProfileId が空なら補完
                     if (string.IsNullOrEmpty(CurrentWorld.ProfileId))
@@ -77,7 +78,7 @@ namespace SteraCube.SpaceJourney
             // 2) セーブが見つからない場合 or 強制NewGame
             if (createNewIfNoSave || forceNewGame)
             {
-                CurrentWorld = CreateNewWorld_Default(profileId);
+                currentWorld = CreateNewWorld_Default(profileId);
                 DumpCurrentWorldSummary("CreatedNew");
             }
             else
@@ -286,7 +287,7 @@ namespace SteraCube.SpaceJourney
         /// デバッグ用の一覧情報を再構築します（エディタ専用）。
         /// </summary>
         [ContextMenu("Refresh Debug World Lists (Editor Only)")]
-        private void RefreshDebugLists()
+        public void RefreshDebugLists()
         {
             if (CurrentWorld == null)
             {

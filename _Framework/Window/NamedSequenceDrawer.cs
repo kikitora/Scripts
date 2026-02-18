@@ -1,8 +1,8 @@
-#if UNITY_EDITOR
+Ôªø#if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 
-// CommentUI.NamedSequence óp PropertyDrawer
+// CommentUI.NamedSequence Áî® PropertyDrawer
 [CustomPropertyDrawer(typeof(CommentUI.NamedSequence))]
 public class NamedSequenceDrawer : PropertyDrawer
 {
@@ -22,21 +22,21 @@ public class NamedSequenceDrawer : PropertyDrawer
         var keyProp = property.FindPropertyRelative("key");
         var seqProp = property.FindPropertyRelative("sequence");
 
-        // 1çsñ⁄ÅFKeyÅièÌÇ…ï\é¶Åj
+        // 1Ë°åÁõÆÔºöKeyÔºàÂ∏∏„Å´Ë°®Á§∫Ôºâ
         var keyRect = new Rect(position.x + 16f, y, position.width - 16f, lh);
         if (keyProp != null) EditorGUI.PropertyField(keyRect, keyProp, new GUIContent("Key"));
         y += lh + PAD;
 
         if (property.isExpanded)
         {
-            // 2çsñ⁄ÅFSequence
+            // 2Ë°åÁõÆÔºöSequence
             if (seqProp != null)
             {
                 EditorGUI.PropertyField(new Rect(position.x, y, position.width, lh), seqProp, new GUIContent("Sequence"));
                 y += lh + PAD;
             }
 
-            // îñÇ¢ê¸
+            // ËñÑ„ÅÑÁ∑ö
             EditorGUI.DrawRect(new Rect(position.x, y + 1f, position.width, 1f), new Color(0, 0, 0, 0.1f));
         }
     }

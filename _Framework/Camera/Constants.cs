@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using UnityEngine;
 
 public static class Constants
@@ -24,7 +24,7 @@ public static class Constants
         }
     }
 
-    // ‚±‚±‚ÉƒvƒŠƒZƒbƒg‚ğ’Ç‰Á‚µ‚Ä‚¢‚­
+    // ã“ã“ã«ãƒ—ãƒªã‚»ãƒƒãƒˆã‚’è¿½åŠ ã—ã¦ã„ã
     public static readonly CameraConstants PlayerFollowCam =
         new CameraConstants(
             localPos: new Vector3(0f, 25f, -17f),
@@ -39,7 +39,7 @@ public static class Constants
             fieldOfView: 27f
         );
 
-    // ƒL[ ¨ ’è‹`æ“¾
+    // ã‚­ãƒ¼ â†’ å®šç¾©å–å¾—
     public static CameraConstants GetCamera(CameraKey key)
     {
         return key switch

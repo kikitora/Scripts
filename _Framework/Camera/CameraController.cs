@@ -1,11 +1,11 @@
-using DG.Tweening;
+ï»¿using DG.Tweening;
 using System.Collections;
 using UnityEngine;
 using static Constants;
 public class CameraController : MonoBehaviour
 {
     [SerializeField] Camera playerCamera;
-    // ’¼Ú’lw’è‚Å“®‚©‚·”Å
+    // ç›´æ¥å€¤æŒ‡å®šã§å‹•ã‹ã™ç‰ˆ
     public IEnumerator MoveCameraCoroutine(
         Camera cam,
         Vector3 localPos,
@@ -29,7 +29,7 @@ public class CameraController : MonoBehaviour
         yield return seq.WaitForCompletion();
     }
 
-    // ƒvƒŠƒZƒbƒgƒL[‚©‚ç“®‚©‚·”Å
+    // ãƒ—ãƒªã‚»ãƒƒãƒˆã‚­ãƒ¼ã‹ã‚‰å‹•ã‹ã™ç‰ˆ
     public IEnumerator MoveCameraCoroutine(
         Camera cam,
         CameraKey key,
@@ -50,7 +50,7 @@ public class CameraController : MonoBehaviour
     }
 
     // ============================================================================
-    //  RUNTIME API „Ÿ„Ÿ ‚±‚±‚©‚çÀÛ‚É“®‚©‚·ŠÖ”ŒQ
+    //  RUNTIME API â”€â”€ ã“ã“ã‹ã‚‰å®Ÿéš›ã«å‹•ã‹ã™é–¢æ•°ç¾¤
     // ============================================================================
 
     public IEnumerator ChangeModeToPlayerFollow()

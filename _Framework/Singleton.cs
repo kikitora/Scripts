@@ -1,4 +1,4 @@
-using UnityEngine;
+Ôªøusing UnityEngine;
 
 [DisallowMultipleComponent]
 public abstract class SingletonPersistent<T> : MonoBehaviour where T : MonoBehaviour
@@ -62,7 +62,7 @@ public abstract class SceneSingleton<T> : MonoBehaviour where T : MonoBehaviour
                     if (_instance == null)
                     {
                         var go = new GameObject($"{typeof(T).Name} (SceneSingleton)");
-                        _instance = go.AddComponent<T>(); // DontDestroyOnLoad ÇµÇ»Ç¢
+                        _instance = go.AddComponent<T>(); // DontDestroyOnLoad „Åó„Å™„ÅÑ
                     }
                 }
                 return _instance;

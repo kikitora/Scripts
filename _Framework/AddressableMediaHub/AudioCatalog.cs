@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -10,13 +10,13 @@ public class AudioCatalog : ScriptableObject
     [Serializable]
     public class Entry
     {
-        public string id; // —á: "BGM_Exploration", "SE_Click"
+        public string id; // ä¾‹: "BGM_Exploration", "SE_Click"
         public AssetReferenceT<AudioClip> clip;
         public bool isBgm;
-        [Range(0f, 1f)] public float defaultVolume = 1f; // Šù’è=1
+        [Range(0f, 1f)] public float defaultVolume = 1f; // æ—¢å®š=1
         public bool loopForBgm = true;
         public AudioMixerGroup mixerGroup;
-        public string label; // ”CˆÓ: "BGM"/"SE" ‚â "story:ch1" “™
+        public string label; // ä»»æ„: "BGM"/"SE" ã‚„ "story:ch1" ç­‰
     }
 
     public List<Entry> entries = new();
@@ -26,7 +26,7 @@ public class AudioCatalog : ScriptableObject
     void OnEnable() => Rebuild();
     void OnValidate()
     {
-        // List ‚Ì [+] ’Ç‰Á’¼Œã‚Í 0 ‚Å“ü‚é‚Ì‚Å•ÛŒ¯
+        // List ã® [+] è¿½åŠ ç›´å¾Œã¯ 0 ã§å…¥ã‚‹ã®ã§ä¿é™º
         if (entries != null)
         {
             foreach (var e in entries)

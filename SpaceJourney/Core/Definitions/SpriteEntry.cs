@@ -9,7 +9,7 @@ namespace SteraCube.SpaceJourney
     /// （ScriptableObjectは使わない）
     /// </summary>
     [Serializable]
-    public class UniqueFaceIconDefinition
+    public class SpriteEntry
     {
         [SerializeField] private string uniqueIconId;
         [SerializeField] private Sprite iconSprite;

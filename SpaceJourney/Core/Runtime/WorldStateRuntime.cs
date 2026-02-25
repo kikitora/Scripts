@@ -175,7 +175,6 @@ namespace SteraCube.SpaceJourney
                 raceId: "",
                 bodyJobId: "",
                 weaponId: "",
-                weaponCandidateIds: null,
                 maxHp: hpBase,
                 at: otherBase,
                 df: otherBase,

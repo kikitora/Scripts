@@ -11,40 +11,62 @@ namespace SteraCube.SpaceJourney
     /// 追加：
     /// - ランダム顔アイコンを「男/女/不明」の3枠で管理（インスペクター）
     /// - ランダム名前はインスペクターに出さず、コード内の static テーブルで管理（直書き）
+    ///
+    /// ※ WeaponDefinition / SkillDefinition は BodyJobDefinition が直接 SO 参照で持つため、
+    ///    このクラスへの個別登録は不要になりました。
+    ///    GetWeaponById() / GetSkillById() は互換のために残しており、
+    ///    内部で BodyJobDefinitions を横断検索します。
     /// </summary>
     public class MasterDatabase : SceneSingleton<MasterDatabase>
     {
-        [Header("キューブグラウンド定義（ID + Prefab）")]
+        // ════════════════════════════════════════
+        // キューブ定義関係
+        // ════════════════════════════════════════
+
+        [Header("━━━━━━━━━━ キューブ定義 ━━━━━━━━━━")]
         [SerializeField] private PrefabEntry[] cubeGroundEntries;
 
-        [Header("キューブ本体定義（ID + Prefab）")]
         [SerializeField] private PrefabEntry[] cubeEntries;
 
-        [Header("ソウル定義リスト")]
+        [SerializeField] private CubeDefinition[] cubeDefinitions;
+
+        [SerializeField] private EnemyGroupDefinitionSO[] enemyGroupDefinitions;
+
+        // ════════════════════════════════════════
+        // ソウル（キャラクター）定義関係
+        // ════════════════════════════════════════
+
+        [Header("━━━━━━━━━━ ソウル定義 ━━━━━━━━━━")]
+        [SerializeField] private SoulDefinitionSO[] soulDefinitions;
+
         [SerializeField] private SoulJobDefinition[] soulJobDefinitions;
 
-        [Header("種族定義リスト")]
-        [SerializeField] private RaceDefinition[] raceDefinitions;
-
-        [Header("ボディ職定義リスト（BodyJob）")]
-        [SerializeField] private BodyJobDefinition[] bodyJobDefinitions;
-
-        [Header("武器定義リスト")]
-        [SerializeField] private WeaponDefinition[] weaponDefinitions;
-
-        [Header("スキル定義リスト")]
-        [SerializeField] private SkillDefinition[] skillDefinitions;
-        // ------------------------------
-        // ランダム顔アイコン（3分類）
-        // ------------------------------
-        [Header("ランダム顔アイコン：男性（インデックス:int で参照）")]
         [SerializeField] private Sprite[] randomFaceIconsMale;
 
-        [Header("ランダム顔アイコン：女性（インデックス:int で参照）")]
         [SerializeField] private Sprite[] randomFaceIconsFemale;
 
-        [Header("ランダム顔アイコン：不明/中性（インデックス:int で参照）")]
         [SerializeField] private Sprite[] randomFaceIconsUnknown;
+
+        [Tooltip("ソウルのユニーク顔アイコン（IDとSpriteを1セットで登録）")]
+        [SerializeField] private SpriteEntry[] uniqueFaceIcons;
+
+        // ════════════════════════════════════════
+        // ボディ定義関係
+        // ════════════════════════════════════════
+
+        [Header("━━━━━━━━━━ ボディ定義 ━━━━━━━━━━")]
+        [SerializeField] private BodyDefinitionSO[] bodyDefinitions;
+
+        [Tooltip("ボディのユニークアイコン（bodyIconId → Sprite）")]
+        [SerializeField] private SpriteEntry[] bodyIcons;
+
+        [SerializeField] private BodyJobDefinition[] bodyJobDefinitions;
+
+        [SerializeField] private RaceDefinition[] raceDefinitions;
+
+        // ※ WeaponDefinition / SkillDefinition の登録欄はここには不要。
+        //   各 BodyJobDefinition の baseSkills / weaponCandidates に直接 SO を登録すること。
+
 
         // ------------------------------
         // ランダム名前（直書き・インスペクター非表示）
@@ -52,7 +74,6 @@ namespace SteraCube.SpaceJourney
         // ------------------------------
         private static readonly string[] s_randomNamesMale =
         {
-            // ここに男名前（例：200個）を入れる
             "アーロン","アーサー","アーネスト","アイヴァン","アイザック","アイデン","アキレス","アシュラフ","アシム","アダム",
             "アディル","アドリアン","アナトリー","アニル","アブドゥル","アマドゥ","アミル","アヤン","アリ","アリフ",
             "アレクサンダー","アレクス","アレッシオ","アレン","アントン","アンドレ","アンドリュー","アントニオ","イーサン","イーライ",
@@ -77,7 +98,6 @@ namespace SteraCube.SpaceJourney
 
         private static readonly string[] s_randomNamesFemale =
         {
-            // ここに女名前（例：200個）を入れる
             "アイシャ","アイリーン","アイリス","アウローラ","アウレリア","アグネス","アデリーヌ","アデル","アドリアナ","アナ",
             "アナイス","アニカ","アニタ","アヌーシュカ","アミーラ","アマラ","アマンダ","アミナ","アリア","アリアナ",
             "アリエル","アリシア","アリナ","アルマ","アルテミス","アレッサ","アレッシア","アン","アンナ","アンヌ",
@@ -98,17 +118,15 @@ namespace SteraCube.SpaceJourney
         private static readonly string[] s_randomNamesNeutral =
         {
             "アキ","アリ","アレックス","アン","イーリス","エデン","エル","オリオン","カイ","キラ",
-    "クオン","クロ","ケイ","サシャ","シオン","ジュン","スカイ","ソラ","タオ","チヒロ",
-    "ツバサ","テラ","ナオ","ニコ","ノア","ハル","ヒカリ","フウ","ミカ","ユイ",
-    "ユウ","ヨリ","ラピス","リオ","リン","ルー","レイ","レン","ロウ","アオ",
-    "アッシュ","イオ","ウィン","エコー","カナ","キョウ","クレア","コウ","サイ","シエル",
-    "ジン","セイ","ゼン","ソウ","タク","ティル","トワ","ナギ","ネオ","ノヴァ",
-    "ハク","ヒナ","フレイ","ホシ","ミドリ","ムーン","メル","ヤマト","ユズ","ヨナ",
-    "ラル","リュウ","ルミ","レム","ロク","ワカ","アマネ","イズミ","カナタ","マコト"
+            "クオン","クロ","ケイ","サシャ","シオン","ジュン","スカイ","ソラ","タオ","チヒロ",
+            "ツバサ","テラ","ナオ","ニコ","ノア","ハル","ヒカリ","フウ","ミカ","ユイ",
+            "ユウ","ヨリ","ラピス","リオ","リン","ルー","レイ","レン","ロウ","アオ",
+            "アッシュ","イオ","ウィン","エコー","カナ","キョウ","クレア","コウ","サイ","シエル",
+            "ジン","セイ","ゼン","ソウ","タク","ティル","トワ","ナギ","ネオ","ノヴァ",
+            "ハク","ヒナ","フレイ","ホシ","ミドリ","ムーン","メル","ヤマト","ユズ","ヨナ",
+            "ラル","リュウ","ルミ","レム","ロク","ワカ","アマネ","イズミ","カナタ","マコト"
         };
 
-        [Header("ユニーク顔アイコン（ID:string で参照）")]
-        [SerializeField] private UniqueFaceIconDefinition[] uniqueFaceIcons;
 
         // ---- 公開プロパティ（必要なものだけ）----
         public PrefabEntry[] CubeGroundEntries { get => cubeGroundEntries; set => cubeGroundEntries = value; }
@@ -116,12 +134,14 @@ namespace SteraCube.SpaceJourney
 
         public SoulJobDefinition[] SoulJobDefinitions { get => soulJobDefinitions; set => soulJobDefinitions = value; }
         public BodyJobDefinition[] BodyDefinitions { get => bodyJobDefinitions; set => bodyJobDefinitions = value; }
+        public BodyJobDefinition[] BodyJobDefinitions { get => bodyJobDefinitions; }
+        public RaceDefinition[] RaceDefinitions { get => raceDefinitions; }
 
         public Sprite[] RandomFaceIconsMale { get => randomFaceIconsMale; set => randomFaceIconsMale = value; }
         public Sprite[] RandomFaceIconsFemale { get => randomFaceIconsFemale; set => randomFaceIconsFemale = value; }
         public Sprite[] RandomFaceIconsUnknown { get => randomFaceIconsUnknown; set => randomFaceIconsUnknown = value; }
 
-        public UniqueFaceIconDefinition[] UniqueFaceIcons { get => uniqueFaceIcons; set => uniqueFaceIcons = value; }
+        public SpriteEntry[] UniqueFaceIcons { get => uniqueFaceIcons; set => uniqueFaceIcons = value; }
 
         public int RandomFaceIconMaleCount => randomFaceIconsMale != null ? randomFaceIconsMale.Length : 0;
         public int RandomFaceIconFemaleCount => randomFaceIconsFemale != null ? randomFaceIconsFemale.Length : 0;
@@ -221,10 +241,7 @@ namespace SteraCube.SpaceJourney
             }
 
             if (total <= 0)
-            {
-                // 全ジョブの jobEasePercent が 0 以下だった場合は等確率ランダム
                 return list[UnityEngine.Random.Range(0, list.Length)];
-            }
 
             int r = UnityEngine.Random.Range(0, total);
             for (int i = 0; i < list.Length; i++)
@@ -236,10 +253,8 @@ namespace SteraCube.SpaceJourney
                 r -= w;
             }
 
-            // フォールバック（理論上ここには来ないはず）
             return list[UnityEngine.Random.Range(0, list.Length)];
         }
-
 
         public RaceDefinition GetRaceById(string id)
         {
@@ -259,21 +274,77 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public BodyJobDefinition GetBodyById(string bodyId) => GetBodyJobById(bodyId);
 
+        /// <summary>
+        /// WeaponDefinition を weaponId で取得する。
+        /// BodyJobDefinition.weaponCandidates を全職横断で検索する。
+        /// （BodyInstance.ResolveDefinitions など既存の呼び出し元はそのまま動く）
+        /// </summary>
         public WeaponDefinition GetWeaponById(string id)
         {
-            int index = FindIndexById(weaponDefinitions, id, def => def.weaponId);
-            return index >= 0 ? weaponDefinitions[index] : null;
+            if (string.IsNullOrEmpty(id) || bodyJobDefinitions == null) return null;
+            foreach (var job in bodyJobDefinitions)
+            {
+                if (job == null || job.weaponCandidates == null) continue;
+                foreach (var w in job.weaponCandidates)
+                    if (w != null && w.weaponId == id) return w;
+            }
+            return null;
         }
 
+        /// <summary>
+        /// SkillDefinition を skillId で取得する。
+        /// BodyJobDefinition.baseSkills を全職横断で検索する。
+        /// （既存の GetSkillById 呼び出し元はそのまま動く）
+        /// </summary>
         public SkillDefinition GetSkillById(string id)
         {
-            int index = FindIndexById(skillDefinitions, id, def => def.SkillId);
-            return index >= 0 ? skillDefinitions[index] : null;
+            if (string.IsNullOrEmpty(id) || bodyJobDefinitions == null) return null;
+            foreach (var job in bodyJobDefinitions)
+            {
+                if (job == null || job.baseSkills == null) continue;
+                foreach (var s in job.baseSkills)
+                    if (s != null && s.SkillId == id) return s;
+            }
+            return null;
         }
+
+        /// <summary>bodyIconId から Sprite を取得する。</summary>
+        public Sprite GetBodyIconById(string id)
+        {
+            if (string.IsNullOrEmpty(id) || bodyIcons == null) return null;
+            foreach (var e in bodyIcons)
+                if (e != null && e.UniqueIconId == id) return e.IconSprite;
+            return null;
+        }
+
         // ░░░░░░░░░░ Prefab取得 ░░░░░░░░░░
 
         public GameObject GetCubeGroundById(string groundId) => GetPrefabById(cubeGroundEntries, groundId);
         public GameObject GetCubeById(string cubeId) => GetPrefabById(cubeEntries, cubeId);
+
+        public CubeDefinition GetCubeDefinitionById(string id)
+        {
+            int index = FindIndexById(cubeDefinitions, id, def => def.CubeDefId);
+            return index >= 0 ? cubeDefinitions[index] : null;
+        }
+
+        public EnemyGroupDefinitionSO GetEnemyGroupById(string id)
+        {
+            int index = FindIndexById(enemyGroupDefinitions, id, def => def.GroupId);
+            return index >= 0 ? enemyGroupDefinitions[index] : null;
+        }
+
+        public SoulDefinitionSO GetSoulDefinitionById(string id)
+        {
+            int index = FindIndexById(soulDefinitions, id, def => def.DefinitionId);
+            return index >= 0 ? soulDefinitions[index] : null;
+        }
+
+        public BodyDefinitionSO GetBodyDefinitionById(string id)
+        {
+            int index = FindIndexById(bodyDefinitions, id, def => def.DefinitionId);
+            return index >= 0 ? bodyDefinitions[index] : null;
+        }
 
         private GameObject GetPrefabById(PrefabEntry[] entries, string id)
         {
@@ -290,7 +361,6 @@ namespace SteraCube.SpaceJourney
 
         public string GetRandomFaceIconId(FaceSexCategory category)
         {
-            // 指定カテゴリの枠で 0..count-1 のインデックスをランダム選択し、数字文字列として返す。
             if (TryPick(category, out string id)) return id;
 
             // フォールバック（安全）：Unknown → Male → Female
@@ -298,20 +368,13 @@ namespace SteraCube.SpaceJourney
             if (TryPick(FaceSexCategory.Male, out id)) return id;
             if (TryPick(FaceSexCategory.Female, out id)) return id;
 
-            // どれも未登録なら "0" を返す（描画側で null になる可能性はある）
             return "0";
 
             bool TryPick(FaceSexCategory cat, out string result)
             {
                 int count = GetRandomFaceIconCount(cat);
-                if (count <= 0)
-                {
-                    result = null;
-                    return false;
-                }
-
-                int index = UnityEngine.Random.Range(0, count);
-                result = index.ToString();
+                if (count <= 0) { result = null; return false; }
+                result = UnityEngine.Random.Range(0, count).ToString();
                 return true;
             }
         }
@@ -326,7 +389,6 @@ namespace SteraCube.SpaceJourney
             }
         }
 
-
         public string GetRandomName(FaceSexCategory category, int index)
         {
             switch (category)
@@ -339,7 +401,6 @@ namespace SteraCube.SpaceJourney
 
         public Sprite GetFaceIconById(string iconId)
         {
-            // sex 不明の場合は Unknown 枠として扱う（従来互換）。
             return GetFaceIconById(iconId, FaceSexCategory.Unknown);
         }
 
@@ -347,12 +408,11 @@ namespace SteraCube.SpaceJourney
         {
             if (string.IsNullOrEmpty(iconId)) return null;
 
-            // 1) ノーマル顔：数字だけなら、sex 枠のランダム顔配列から index を解決
+            // 1) ノーマル顔：数字だけなら sex 枠のランダム顔配列から index を解決
             if (IsAllDigits(iconId))
             {
                 if (!int.TryParse(iconId, out int index)) return null;
 
-                // sex 枠を優先し、足りない場合は Unknown → Male → Female の順でフォールバック
                 Sprite sprite = GetRandomFaceSpriteBySexAndIndex(sex, index);
                 if (sprite != null) return sprite;
 
@@ -362,11 +422,10 @@ namespace SteraCube.SpaceJourney
                 sprite = GetRandomFaceSpriteBySexAndIndex(FaceSexCategory.Male, index);
                 if (sprite != null) return sprite;
 
-                sprite = GetRandomFaceSpriteBySexAndIndex(FaceSexCategory.Female, index);
-                return sprite;
+                return GetRandomFaceSpriteBySexAndIndex(FaceSexCategory.Female, index);
             }
 
-            // 2) ユニークID：従来どおり UniqueFaceIcons から検索
+            // 2) ユニークID：UniqueFaceIcons から検索
             if (uniqueFaceIcons == null || uniqueFaceIcons.Length == 0) return null;
 
             int uniqueIndex = FindIndexById(uniqueFaceIcons, iconId, def => def.UniqueIconId);
@@ -380,22 +439,17 @@ namespace SteraCube.SpaceJourney
         {
             switch (sex)
             {
-                case FaceSexCategory.Male:
-                    return GetSpriteByIndex(randomFaceIconsMale, index);
-                case FaceSexCategory.Female:
-                    return GetSpriteByIndex(randomFaceIconsFemale, index);
-                default:
-                    return GetSpriteByIndex(randomFaceIconsUnknown, index);
+                case FaceSexCategory.Male: return GetSpriteByIndex(randomFaceIconsMale, index);
+                case FaceSexCategory.Female: return GetSpriteByIndex(randomFaceIconsFemale, index);
+                default: return GetSpriteByIndex(randomFaceIconsUnknown, index);
             }
         }
-
 
         private bool TryParsePrefixedIndex(string iconId, out FaceSexCategory category, out int index)
         {
             category = FaceSexCategory.Unknown;
             index = -1;
 
-            // 形式：X_123
             if (iconId.Length < 3) return false;
             if (iconId[1] != '_') return false;
 
@@ -411,6 +465,5 @@ namespace SteraCube.SpaceJourney
                 default: return false;
             }
         }
-
     }
 }

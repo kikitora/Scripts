@@ -3,8 +3,7 @@
 namespace SteraCube.SpaceJourney
 {
     /// <summary>
-    /// このクラスで何をするか：
-    /// 武器定義。効果スキルは SkillId を1つだけ持つ。
+    /// 武器定義。効果スキルは SkillDefinition を直接参照する。
     /// </summary>
     [CreateAssetMenu(fileName = "WeaponDefinition", menuName = "SteraCube/SpaceJourney/Weapon Definition")]
     public class WeaponDefinition : ScriptableObject
@@ -15,10 +14,16 @@ namespace SteraCube.SpaceJourney
         [TextArea]
         public string description;
 
-        [Header("効果スキル（SkillId / 1つ）")]
-        public string effectSkillId;
+        [Header("効果スキル")]
+        [Tooltip("この武器が付与するスキル。SkillDefinition SO を直接登録する。")]
+        public SkillDefinition effectSkill;
 
         [Header("外見3D ID")]
         public string weaponVisual3dId;
+
+        [Header("出現ランク")]
+        [Tooltip("この武器が候補に入る最低ボディランク。ボディのランクがこれ未満の場合は選ばれない。")]
+        [Min(1)]
+        public int minRank = 1;
     }
 }

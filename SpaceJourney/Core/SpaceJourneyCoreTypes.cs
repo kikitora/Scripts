@@ -91,10 +91,10 @@ namespace SteraCube.SpaceJourney
         // ■各値が与える影響
         // - DamageThroughEqual：
         //     「同格（差=0）」のときの通り率。上げるほど同格同士の等倍攻撃が痛くなる。
-        //     例：0.53 → 同格で“だいたい 0.53 倍”通るイメージ（＋チップ分）
+        //     例：0.53 → 同格で"だいたい 0.53 倍"通るイメージ（＋チップ分）
         //
         // - DamageThroughDeltaScale：
-        //     “差の効きやすさ”。小さいほど少しの差で通り率が大きく動く（格差が出やすい）。
+        //     "差の効きやすさ"。小さいほど少しの差で通り率が大きく動く（格差が出やすい）。
         //     大きいほど差の影響はマイルド（同格寄りの殴り合いが長くなる）。
         //
         // - DamageThroughMin / DamageThroughMax：
@@ -141,7 +141,6 @@ namespace SteraCube.SpaceJourney
 
         public const float TalentFactorMin_E = 0.90f;
         public const float TalentFactorMax_E = 0.99f;
-
     }
 
 
@@ -189,6 +188,7 @@ namespace SteraCube.SpaceJourney
     // どのボディ職向きか
     public enum SoulJobTendency
     {
+        None = 0,
         Warrior, // 戦士向き
         Knight,  // 騎士向き
         Archer,  // 弓兵向き
@@ -197,6 +197,7 @@ namespace SteraCube.SpaceJourney
     }
     public enum FaceSexCategory
     {
+        None = -1,
         Male = 0,
         Female = 1,
         Unknown = 2
@@ -213,12 +214,14 @@ namespace SteraCube.SpaceJourney
 
     public enum SoulType
     {
+        None = 0,
         Normal,
         Unique
     }
 
     public enum TalentRank
     {
+        None = 0,
         A,
         B,
         C,
@@ -228,6 +231,7 @@ namespace SteraCube.SpaceJourney
 
     public enum GrowthType
     {
+        None = 0,
         Early,
         Normal,
         Late,
@@ -413,7 +417,7 @@ namespace SteraCube.SpaceJourney
 
     #endregion
 
-    #region Skill発火イベント（新）
+    #region Skill発火イベント
 
     /// <summary>
     /// 「発火の大分類」だけを少数で用意する。
@@ -442,7 +446,7 @@ namespace SteraCube.SpaceJourney
     }
 
     /// <summary>
-    /// HP増減イベントの“原因種別”。
+    /// HP増減イベントの"原因種別"。
     /// OnHit と DoT を分けたい話をここで吸収する（同じ Hp トリガーでも source で区別）。
     /// </summary>
     public enum HpDeltaSourceType
@@ -455,31 +459,406 @@ namespace SteraCube.SpaceJourney
         SelfCost = 5,  // 自傷コスト/HP支払い
     }
 
-    // SpaceJourneyCoreTypes.cs（どこでもいいが SkillTriggerTiming 付近がおすすめ）
+    /// <summary>
+    /// パッシブスキルの発動条件の種類。
+    /// SkillOccasionCondition.kind に設定し、SkillOccasionEvaluator が評価する。
+    ///
+    /// ■ 番号帯の割り当て
+    ///   0      : None（常に真）
+    ///   10-19  : 自分の状態
+    ///   30-39  : 対象（other）の状態
+    ///   50-59  : 戦況
+    ///   70-79  : 使用されたスキルの性質
+    ///   80-89  : 戦闘中カウント・直前アクション系（武器スキル用）
+    ///   90-    : 将来枠
+    /// </summary>
     public enum SkillConditionKind
     {
         None = 0,
 
-        // 自分
-        SelfHpBelowPercent = 10,
-        SelfHpAbovePercent = 11,
-        SelfMovedThisTime = 12,
-        SelfNotMovedThisTime = 13,
+        // ─── 自分の状態（10番台）───────────────────────────────
+        SelfHpBelowPercent = 10,   // 自分の現在HP% < rateParam
+        SelfHpAbovePercent = 11,   // 自分の現在HP% > rateParam
+        SelfMovedThisTime = 12,   // このタイムに移動した
+        SelfNotMovedThisTime = 13,  // このタイムに移動していない
 
-        // 対象（other/target）
-        TargetHasAnyStatus = 30,
-        TargetHasDebuff = 31,
-        TargetHpBelowPercent = 32,
+        // ─── 対象（other）の状態（30番台）────────────────────────
+        TargetHasAnyStatus = 30,   // 対象が何らかの状態異常を持っている
+        TargetHasDebuff = 31,   // 対象がデバフを持っている
+        TargetHpBelowPercent = 32,  // 対象の現在HP% < rateParam
 
-        // 戦況
-        EnemyCountAtLeast = 50,
-        AllyCountAtLeast = 51,
+        // ─── 戦況（50番台）──────────────────────────────────────
+        EnemyCountAtLeast = 50,   // 残敵数 >= intParam
+        AllyCountAtLeast = 51,   // 隣接味方数 >= intParam
 
-        // 使用されたスキルの性質
-        UsedSkillIsBasic = 70,
-        UsedSkillHasTag = 71,
-        UsedSkillIsBodySkill = 72,
-        UsedSkillIsWeaponSkill = 73,
+        // ─── 使用スキルの性質（70番台）──────────────────────────
+        UsedSkillIsBasic = 70,   // 使用スキルが基本攻撃
+        UsedSkillHasTag = 71,   // 使用スキルが tagParam のタグを持つ
+        UsedSkillIsBodySkill = 72, // 使用スキルがボディスキル
+        UsedSkillIsWeaponSkill = 73,// 使用スキルが武器スキル
+
+        // ─── 戦闘中カウント・直前アクション系（80番台）────────────
+        // SkillTriggerContext に対応フィールドを追加して評価する。
+
+        /// <summary>
+        /// 戦闘中の累計攻撃回数が intParam 回目に達した。
+        /// intParam=1 で「初撃」、intParam=3 で「3回目」。
+        /// useCountLimit=1 と組み合わせて「N回目の1回だけ」を表現する。
+        /// → SkillTriggerContext.selfAttackCount で評価。
+        /// </summary>
+        AttackCountReached = 80,
+
+        /// <summary>
+        /// 前回の自分の行動機会から今回の行動機会までの間に被弾した。
+        /// 「被弾後の次の攻撃」を表現するためのフラグ。
+        /// → SkillTriggerContext.selfWasHitSinceLastAction で評価。
+        /// </summary>
+        SelfWasHitSinceLastAction = 81,
+
+        /// <summary>
+        /// 直前に使ったスキルが「Defend」スキルだった。
+        /// 「Defend後の次の攻撃」を表現するためのフラグ。
+        /// → SkillTriggerContext.selfUsedDefendLastAction で評価。
+        /// </summary>
+        SelfUsedDefendLastAction = 82,
+
+        /// <summary>
+        /// 直前の攻撃で敵を撃破した。
+        /// 「撃破後の次の攻撃」を表現するためのフラグ。
+        /// → SkillTriggerContext.selfKilledEnemyLastAction で評価。
+        /// </summary>
+        SelfKilledEnemyLastAction = 83,
+
+        /// <summary>
+        /// 現在の攻撃が同一対象への intParam 回連続目のヒットである。
+        /// intParam=2 で「同一対象への2回目の連続命中」。
+        /// → SkillTriggerContext.consecutiveHitCount で評価。
+        /// </summary>
+        ConsecutiveHitSameTarget = 84,
+
+        /// <summary>
+        /// このタイムに、敵が自分に新たに隣接してきた。
+        /// 「敵が近づいてきた後の次の攻撃」を表現する。
+        /// → SkillTriggerContext.enemyBecameAdjacentThisTime で評価。
+        /// </summary>
+        EnemyBecameAdjacentThisTime = 85,
+
+        /// <summary>
+        /// 使用スキルが「重スキル」（reuseCycle > baseCost）である。
+        /// 大技・重い技に対してのみ発動するパッシブに使う。
+        /// → SkillTriggerContext.usedSkillIsHeavy で評価。
+        /// </summary>
+        UsedSkillIsHeavy = 86,
+
+        /// <summary>
+        /// 使用スキルが単体対象スキル（PointArea + Unit）である。
+        /// AoEスキルでは発動しないパッシブに使う（薙ぎ広げ・跳弾など）。
+        /// → SkillTriggerContext.targetingIsSingle で評価。
+        /// </summary>
+        TargetingIsSingle = 87,
+
+        /// <summary>
+        /// 戦闘中の累計魔法使用回数が intParam 回目に達した。
+        /// intParam=2 で「2回目の魔法命中」。魔術師専用スキルで使用。
+        /// → SkillTriggerContext.selfMagicCount で評価。
+        /// </summary>
+        MagicCountReached = 88,
+
+        /// <summary>
+        /// 攻撃対象が被ダメ増マーク（DamageMarkApply）を持っている。
+        /// マーク付き対象への攻撃時にのみ発動するパッシブに使う。
+        /// → SkillTriggerContext.targetHasDamageMark で評価。
+        /// </summary>
+        TargetHasDamageMark = 89,
+
+        // 90番以降 : 将来枠
+        // TargetDistanceAtLeast  = 90,  // 対象との距離 >= intParam（Lancer_03「間合い刺し」用）
+    }
+
+    #endregion
+
+    #region 武器スキルパッシブ効果
+
+    /// <summary>
+    /// 武器スキルパッシブ効果の種類。
+    /// SkillDefinition.StatusEffectSpec.weaponEffect に設定する。
+    /// effectType = StatusEffectType.Custom のときのみ有効。
+    ///
+    /// ■ StatusEffectSpec 各フィールドの役割
+    ///   weaponEffect  : 何をするか（このenum）
+    ///   useCountLimit : 戦闘中の発動上限（0 = 無制限）
+    ///   rateParam     : 割合値（回復率・軽減率・マーク率・近接強化倍率）
+    ///   heavySkillOnly: true = reuseCycle &gt; baseCost の重スキル時のみ
+    ///
+    /// ■ 番号帯の割り当て
+    ///    1-  9 : 追撃
+    ///   10- 19 : 与ダメ強化
+    ///   20- 29 : バリア（シールド）
+    ///   30- 39 : 回復
+    ///   40- 49 : 被ダメ軽減
+    ///   50- 59 : マーク
+    ///   60- 69 : 状態異常操作
+    ///   70- 79 : スキルコスト・回転操作
+    ///   80- 89 : 範囲操作
+    ///   90- 99 : 追加ヒット系（巻き込み・跳弾）
+    ///  100-    : 武器・近接特殊強化（常時パッシブ）
+    /// </summary>
+    public enum WeaponSkillEffectKind
+    {
+        None = 0,
+
+        // ─── 追撃（元ヒットとは別の追加ヒット）────────────────────
+        /// <summary>
+        /// 追撃(小)：元ダメージの45%相当の追加ヒット。
+        /// AoEなら各元ヒットで判定し、同一ターゲットへ追撃する。
+        /// useCountLimit: 戦闘中の最大発動回数（0=無制限）。
+        /// heavySkillOnly: true のとき重スキル命中時のみ発動。
+        /// </summary>
+        FollowupSmall = 1,
+
+        /// <summary>
+        /// 追撃(中)：元ダメージの75%相当の追加ヒット。
+        /// useCountLimit: 最大発動回数（複数対象ヒット時はランダム抽選）。
+        /// heavySkillOnly: true のとき重スキル命中時のみ発動。
+        /// </summary>
+        FollowupMedium = 2,
+
+        /// <summary>
+        /// 追撃(大)：元ダメージの87%相当の追加ヒット。
+        /// useCountLimit: 最大発動回数。
+        /// </summary>
+        FollowupLarge = 3,
+
+
+        // ─── 与ダメ強化（元ヒット自体を増幅）──────────────────────
+        // 与ダメ+%は元ヒットの最終ダメージにのみ乗算。
+        // 追撃・巻き込み・跳弾などの派生ヒットには適用しない。
+        // AoEのときは各ターゲットへの元ヒットそれぞれに適用する。
+
+        /// <summary>
+        /// 与ダメ+(小)：元ヒットを +10% 強化。
+        /// useCountLimit: 発動上限（0=無制限）。
+        /// </summary>
+        DamageBoostSmall = 10,
+
+        /// <summary>
+        /// 与ダメ+(中)：元ヒットを +20% 強化。
+        /// useCountLimit: 発動上限（0=無制限）。
+        /// </summary>
+        DamageBoostMedium = 11,
+
+        /// <summary>
+        /// 与ダメ+(大)：元ヒットを +30% 強化。
+        /// useCountLimit: 発動上限（0=無制限）。
+        /// </summary>
+        DamageBoostLarge = 12,
+
+        /// <summary>
+        /// 与ダメ+(カスタム%)：customIntValue の値（%）だけ元ヒットを強化。
+        /// 小/中/大に当てはまらない数値（+25%など）を使いたいときに使う。
+        /// customIntValue: 増加率（例: 25 → +25%）。
+        /// useCountLimit: 発動上限。
+        /// </summary>
+        DamageBoostCustom = 13,
+
+
+        // ─── バリア（シールド）──────────────────────────────────────
+        /// <summary>
+        /// 小バリア：自分に最大HPの10%分のシールドを付与。
+        /// useCountLimit: 付与上限（通常 1）。
+        /// </summary>
+        BarrierSmall = 20,
+
+        /// <summary>
+        /// 中バリア：自分に最大HPの18%分のシールドを付与。
+        /// useCountLimit: 付与上限（通常 1）。
+        /// </summary>
+        BarrierMedium = 21,
+
+        /// <summary>
+        /// 隣接味方バリア(小)：隣接する味方1体に小バリア（HP10%）を付与。
+        /// 複数いる場合は最も近い1体（または先頭）を対象にする。
+        /// useCountLimit: 付与上限（通常 1）。
+        /// </summary>
+        AllyBarrierSmall = 22,
+
+
+        // ─── 回復────────────────────────────────────────────────────
+        /// <summary>
+        /// 自己回復：自分の最大HPの rateParam 分だけ回復。
+        /// rateParam: 回復割合（例: 0.08 → HP8%回復）。
+        /// useCountLimit: 発動上限（0=無制限）。
+        /// </summary>
+        SelfHealRate = 30,
+
+
+        // ─── 被ダメ軽減──────────────────────────────────────────────
+        /// <summary>
+        /// 被ダメ軽減×1回：次に受ける被ダメージを1回だけ軽減。
+        /// 軽減量は WeaponSkillConst.DamageReduceOnce_DefaultRate（デフォルト50%）。
+        /// useCountLimit: 発動上限（通常 1）。
+        /// </summary>
+        DamageReduceOnce = 40,
+
+        /// <summary>
+        /// 被ダメ-% 常時パッシブ：条件を満たしている間、被ダメを rateParam 分軽減し続ける。
+        /// rateParam: 軽減率（例: 0.1 → 被ダメ-10%）。
+        /// timings = [Hp, Board] の両方を購読し、条件変化のたびに再チェックする。
+        /// useCountLimit は使わない（常時適用）。
+        /// </summary>
+        DamageReducePassive = 41,
+
+
+        // ─── マーク（付与者の次の元ヒットへの予約効果）──────────────
+        /// <summary>
+        /// 被ダメ増マーク付与：対象に「マーク」を付与する。
+        ///
+        /// ■ 確定仕様（SteraCube_BattleFlow_ExtraRules_2026-01-25）
+        /// ・マーク系は弓兵（Archer）専用。他職は使わない。
+        /// ・「付与者本人が次にその対象へ行う元ヒット」が命中したとき発動・消費。
+        /// ・追撃/巻き込み/跳弾/派生ヒットでは発動しない・消費しない。
+        /// ・ターン/タイムに依存しない（純粋に"次に当てた時"で発動）。
+        /// ・対象に既にマークがある場合、後からの付与は無視（先着優先、上書き不可）。
+        /// ・発動時：最終被ダメに rateParam を乗算し、マークを1回消費。
+        ///
+        /// rateParam: 被ダメ増加率（例: 0.25 → 被ダメ+25%）。
+        /// </summary>
+        DamageMarkApply = 50,
+
+
+        // ─── 状態異常操作────────────────────────────────────────────
+        /// <summary>
+        /// 状態異常解除：自分が受けた状態異常を即時解除する。
+        /// useCountLimit: 解除上限（通常 1）。
+        /// </summary>
+        StatusCleanse = 60,
+
+
+        // ─── スキルコスト・回転操作──────────────────────────────────
+        /// <summary>
+        /// reuseCycle -1：次に使う攻撃スキルの再使用周期（reuseCycle）を1短縮。
+        /// baseCostは変わらない（周期部分のみ短縮）。
+        /// useCountLimit: 発動上限（通常 1）。
+        /// heavySkillOnly: true のとき「短縮対象が重スキル」のときのみ有効。
+        /// </summary>
+        ReuseCycleReduce = 70,
+
+
+        // ─── 範囲操作────────────────────────────────────────────────
+        /// <summary>
+        /// 効果範囲 +1 マス：次に使う魔法スキルの effectRange を1マス拡張。
+        /// useCountLimit: 発動上限（通常 1）。
+        /// heavySkillOnly: true のとき重スキル（重魔法）のみ対象。
+        /// </summary>
+        RangeExpand = 80,
+
+
+        // ─── 追加ヒット系（範囲波及・跳弾）────────────────────────
+        /// <summary>
+        /// 巻き込み（SplashHit）：対象の隣接敵1体以上にミニ追加ヒット。
+        /// 固定係数の小ダメージ（WeaponSkillConst.SplashHit_DamageRate を参照）。
+        /// 与ダメ+%の適用外（派生ヒット扱い）。
+        /// useCountLimit: 戦闘中の発動上限（0=無制限）。
+        /// </summary>
+        SplashHit = 90,
+
+        /// <summary>
+        /// 跳弾（RicochetHit）：別の敵1体に追加ヒット（近い敵優先、候補なしで不発）。
+        /// 与ダメ+%の適用外（派生ヒット扱い）。
+        /// useCountLimit: 戦闘中の発動上限。
+        /// </summary>
+        RicochetHit = 91,
+
+
+        // ─── 武器・近接特殊強化（常時パッシブ）────────────────────
+        /// <summary>
+        /// 近接攻撃強化：特定の近接基本攻撃スキルの威力係数を上書き（常時）。
+        /// 紋章弓(Archer_10)での「短剣倍率 0.6 → 1.0」強化に使用。
+        /// rateParam: 新しい倍率（例: 1.0 → 等倍）。
+        /// passiveTimings への登録は不要（常時パッシブとして初期化時に適用）。
+        /// </summary>
+        MeleeBoost = 100,
+    }
+
+    /// <summary>
+    /// 武器スキル効果の数値定数。
+    /// バランス調整はここだけ変えれば全スキルに反映される。
+    ///
+    /// 出典: SteraCube_BattleFlow_ExtraRules_2026-01-25（確定値）
+    /// </summary>
+    public static class WeaponSkillConst
+    {
+        // ─── 追撃 amount%（物理/魔法どちらも同じ係数を使う）────────
+        /// <summary>追撃(小)のamount%。基本攻撃の45%相当。</summary>
+        public const int FollowupSmall_Amount = 45;
+
+        /// <summary>追撃(中)のamount%。基本攻撃の75%相当。</summary>
+        public const int FollowupMedium_Amount = 75;
+
+        /// <summary>追撃(大)のamount%。基本攻撃の87%相当。</summary>
+        public const int FollowupLarge_Amount = 87;
+
+
+        // ─── 与ダメ強化%──────────────────────────────────────────
+        /// <summary>与ダメ+(小)：元ヒット +10%。</summary>
+        public const int DamageBoost_Small = 10;
+
+        /// <summary>与ダメ+(中)：元ヒット +20%。</summary>
+        public const int DamageBoost_Medium = 20;
+
+        /// <summary>与ダメ+(大)：元ヒット +30%。</summary>
+        public const int DamageBoost_Large = 30;
+
+        /// <summary>与ダメ+(大 弓専用)：静射など弓特有の +25% ライン。</summary>
+        public const int DamageBoost_ArcherLarge = 25;
+
+
+        // ─── DF弱体（StatusEffectType.DebuffDf の value 値）────────
+        /// <summary>DF弱体(小)：DF -10%。</summary>
+        public const int DebuffDf_Small = 10;
+
+        /// <summary>DF弱体(中)：DF -20%。</summary>
+        public const int DebuffDf_Medium = 20;
+
+
+        // ─── バリア（最大HPに対する割合）───────────────────────────
+        /// <summary>小バリアのシールド量：最大HPの10%。</summary>
+        public const float BarrierSmall_HpRate = 0.10f;
+
+        /// <summary>中バリアのシールド量：最大HPの18%。</summary>
+        public const float BarrierMedium_HpRate = 0.18f;
+
+
+        // ─── 自己回復────────────────────────────────────────────────
+        /// <summary>自己回復(小)の標準回復率：最大HPの8%。</summary>
+        public const float SelfHeal_DefaultRate = 0.08f;
+
+
+        // ─── 被ダメ軽減──────────────────────────────────────────────
+        /// <summary>被ダメ常時軽減（陣形維持）の軽減率：-10%。</summary>
+        public const float DamageReducePassive_Rate = 0.10f;
+
+        /// <summary>被ダメ軽減×1回のデフォルト軽減率（value=0のとき使用）：-50%。</summary>
+        public const float DamageReduceOnce_DefaultRate = 0.50f;
+
+
+        // ─── 被ダメ増マーク──────────────────────────────────────────
+        /// <summary>
+        /// 標的付け・呪印のマーク被ダメ増加率：+25%。
+        /// 弓兵専用。元ヒット命中で発動・消費。先着優先で上書き不可。
+        /// </summary>
+        public const float DamageMark_Rate = 0.25f;
+
+
+        // ─── 巻き込み・跳弾（実装側で参照する係数）─────────────────
+        /// <summary>
+        /// 巻き込み(SplashHit)の固定ダメージ係数。
+        /// 元ヒットの amount に対してこの割合を掛けた値が追加ヒットの amount になる。
+        /// </summary>
+        public const float SplashHit_DamageRate = 0.25f;
+
+        /// <summary>跳弾(RicochetHit)の固定ダメージ係数。</summary>
+        public const float RicochetHit_DamageRate = 0.30f;
     }
 
     #endregion
@@ -496,4 +875,5 @@ namespace SteraCube.SpaceJourney
     #endregion
 
     #endregion
+
 }

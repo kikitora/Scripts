@@ -1,7 +1,7 @@
 ﻿using System;
 using UnityEngine;
 using UnityEngine.Serialization;
-using SCConditionalFields;
+using InspectorToolkit;
 
 namespace SteraCube.SpaceJourney
 {
@@ -93,7 +93,6 @@ namespace SteraCube.SpaceJourney
         [Range(0, 10)]
         public int openingCoolTime = 0;
 
-        // ここはあなたが reuseCycle に変えた前提で残す（CTという名前は使わない）
         [InspectorName("再使用周期 (RC)")]
         [Range(0, 10)]
         public int reuseCycle = 0;
@@ -163,17 +162,74 @@ namespace SteraCube.SpaceJourney
         [Serializable]
         public class StatusEffectSpec
         {
+            // ------------------------------------------------------------------
+            // 共通（effectType が Custom でない場合はこちらだけ使う）
+            // ------------------------------------------------------------------
+            [Tooltip("効果タイプ。\n武器パッシブ効果は Custom を選び、weaponEffect を設定する。")]
             public StatusEffectType effectType = StatusEffectType.None;
-            public int value = 0;
-            public int duration = 0;
-            [Range(0f, 1f)] public float probability = 1f;
 
-            [Header("汎用パラメータ（特殊効果用）")]
-            public int intParam1 = 0;
-            public int intParam2 = 0;
-            public float floatParam1 = 0f;
+            [Tooltip("整数の強さ値。\n" +
+                     "・DebuffDf など標準効果の弱体%はここに入れる（例: 10 → -10%）。\n" +
+                     "・effectType = Custom のときは weaponEffect / customIntValue を使う。")]
+            public int value = 0;
+
+            [Tooltip("状態異常の持続ターン数（DebuffDf 等で使用）。")]
+            public int duration = 0;
+
+            [Tooltip("発動確率（0〜1）。1.0 = 必ず発動。")]
+            [Range(0f, 1f)]
+            public float probability = 1f;
+
+            // ------------------------------------------------------------------
+            // 武器パッシブ専用（effectType = Custom のときのみ使う）
+            // ------------------------------------------------------------------
+            [Header("── 武器パッシブ効果（effectType = Custom のとき）──")]
+
+            [Tooltip("武器パッシブ効果の種類（WeaponSkillEffectKind）。\n" +
+                     "effectType = Custom のときに選ぶ。\n\n" +
+                     "【追撃】FollowupSmall / Medium / Large\n" +
+                     "【与ダメ強化】DamageBoostSmall(+10%) / Medium(+20%) / Large(+30%) / Custom(%)\n" +
+                     "【バリア】BarrierSmall(HP10%) / BarrierMedium(HP18%) / AllyBarrierSmall\n" +
+                     "【回復】SelfHealRate（rateParam に割合を入れる）\n" +
+                     "【被ダメ軽減】DamageReduceOnce / DamageReducePassive\n" +
+                     "【マーク】DamageMarkApply（rateParam に増加率）\n" +
+                     "【状態異常操作】StatusCleanse\n" +
+                     "【コスト操作】ReuseCycleReduce\n" +
+                     "【範囲操作】RangeExpand\n" +
+                     "【追加ヒット】SplashHit / RicochetHit\n" +
+                     "【常時強化】MeleeBoost（rateParam に新倍率）")]
+            // 旧: intParam1（0〜16の数字）をそのまま enum として読み替える
+            [FormerlySerializedAs("intParam1")]
+            public WeaponSkillEffectKind weaponEffect = WeaponSkillEffectKind.None;
+
+            [Tooltip("DamageBoostCustom 専用の%値（例: 25 → +25%）。\n" +
+                     "他の weaponEffect では使用しない（0のまま）。")]
+            public int customIntValue = 0;
+
+            [Tooltip("戦闘中の発動上限回数。0 = 無制限。\n" +
+                     "例: 1 → 戦闘中1回のみ / 3 → 最大3回まで。\n" +
+                     "（旧フィールド名: intParam2）")]
+            [FormerlySerializedAs("intParam2")]
+            [Min(0)]
+            public int useCountLimit = 0;
+
+            [Tooltip("割合パラメータ。weaponEffect に応じて意味が変わる。\n" +
+                     "・SelfHealRate       → 回復割合（例: 0.08 = HP8%回復）\n" +
+                     "・DamageReducePassive → 軽減率（例: 0.10 = 被ダメ-10%）\n" +
+                     "・DamageMarkApply    → 被ダメ増加率（例: 0.25 = +25%）\n" +
+                     "・MeleeBoost         → 新しい威力倍率（例: 1.0 = 等倍）\n" +
+                     "（旧フィールド名: floatParam1）")]
+            [FormerlySerializedAs("floatParam1")]
+            public float rateParam = 0f;
+
+            [Tooltip("将来用の追加割合パラメータ（現在未使用）。")]
             public float floatParam2 = 0f;
-            public bool boolParam1 = false;
+
+            [Tooltip("true にすると、reuseCycle > baseCost の重スキル命中時のみ発動。\n" +
+                     "星喰い・紋章槍・詠唱補助・大魔導 などで使用。\n" +
+                     "（旧フィールド名: boolParam1）")]
+            [FormerlySerializedAs("boolParam1")]
+            public bool heavySkillOnly = false;
         }
 
         // =====================================================================

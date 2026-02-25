@@ -325,12 +325,31 @@ namespace SteraCube.SpaceJourney
             // TODO: implement later
         }
 
-
-
-
         public bool TryGetActorPos(string actorId, out Vector2Int pos)
         {
             return actorPosById.TryGetValue(actorId, out pos);
+        }
+
+        /// <summary>
+        /// Blocker をフィールドから取り除く。
+        /// </summary>
+        public bool RemoveBlocker(string cubeId)
+        {
+            if (string.IsNullOrEmpty(cubeId)) return false;
+
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    var cell = cells[x, y];
+                    if (cell.HasBlocker && cell.BlockerCubeId == cubeId)
+                    {
+                        cell.ClearBlocker();
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 }

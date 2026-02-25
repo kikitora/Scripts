@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2cb8522e2422c464683eaea8ba756d64, type: 3}
+  m_Name: StageDef_
+  m_EditorClassIdentifier: Assembly-CSharp::SteraCube.SpaceJourney.FieldStageDefinitionSO
+  stageId: 
+  description: 
+  stageType: 0
+  fieldWidth: 7
+  fieldHeight: 7
+  waveSpawnTable: {fileID: 11400000, guid: 150e2cf350d2ade44aece24e901d8703, type: 2}
+  turnLimit: 0
+  fixedPlacements: []

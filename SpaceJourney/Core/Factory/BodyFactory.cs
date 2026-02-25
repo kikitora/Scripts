@@ -12,11 +12,16 @@ namespace SteraCube.SpaceJourney
     /// </summary>
     public static class BodyFactory
     {
+        /// <summary>
+        /// BodyInstance をランダム生成する。
+        /// raceId / bodyJobId / weaponId は null で抽選。
+        /// weaponId を直接指定した場合はそれを使う（minRank チェックはスキップ）。
+        /// </summary>
         public static BodyInstance CreateRandom(
-            string raceId,
-            string bodyJobId,
             int rank,
-            List<string> weaponCandidateIds = null,
+            string raceId = null,
+            string bodyJobId = null,
+            string weaponId = null,
             System.Random rng = null)
         {
             var db = MasterDatabase.Instance;
@@ -26,17 +31,35 @@ namespace SteraCube.SpaceJourney
             rank = SpaceJourneyStatMath.ClampRankMin(rank);
             rng ??= new System.Random();
 
+            // raceId 未指定 → ランダム選択（TODO: 本格抽選ロジックは後で）
+            if (string.IsNullOrEmpty(raceId))
+            {
+                var races = db.RaceDefinitions;
+                if (races != null && races.Length > 0)
+                    raceId = races[rng.Next(races.Length)].raceId;
+            }
+
+            // bodyJobId 未指定 → ランダム選択
+            if (string.IsNullOrEmpty(bodyJobId))
+            {
+                var jobs = db.BodyJobDefinitions;
+                if (jobs != null && jobs.Length > 0)
+                    bodyJobId = jobs[rng.Next(jobs.Length)].bodyJobId;
+            }
+
             var race = db.GetRaceById(raceId);
             var job = db.GetBodyJobById(bodyJobId);
 
             if (race == null) throw new Exception($"Race not found: {raceId}");
             if (job == null) throw new Exception($"BodyJob not found: {bodyJobId}");
 
+            // 武器候補は BodyJobDefinition.weaponCandidates（SO直接参照）から取得
+            var weaponCandidates = job.weaponCandidates;
+
             // ランク基礎値（揺れ込み）
             int hpBase = SpaceJourneyStatMath.GenerateBodyHpBase(rank);
 
-            // ここが修正点：
-            // 「その他ステ」は1回だけ抽選すると全ステ同値になるので、ステータスごとに抽選する
+            // ステータスごとに個別抽選（全ステ同値にならないよう）
             int atBase = SpaceJourneyStatMath.GenerateBodyOtherBase(rank);
             int dfBase = SpaceJourneyStatMath.GenerateBodyOtherBase(rank);
             int agiBase = SpaceJourneyStatMath.GenerateBodyOtherBase(rank);
@@ -50,20 +73,21 @@ namespace SteraCube.SpaceJourney
             int mat = ApplyFloatMultipliers(matBase, job.matMul, race.matMul);
             int mdf = ApplyFloatMultipliers(mdfBase, job.mdfMul, race.mdfMul);
 
-            string weaponId = ChooseWeaponId(db, weaponCandidateIds, rng);
+            // weaponId 未指定なら候補から抽選
+            if (string.IsNullOrEmpty(weaponId))
+                weaponId = ChooseWeaponId(weaponCandidates, rank, rng);
 
             var body = new BodyInstance(
-    raceId,
-    bodyJobId,
-    weaponId,
-    weaponCandidateIds,
-    maxHp,
-    at,
-    df,
-    agi,
-    mat,
-    mdf
-);
+                raceId,
+                bodyJobId,
+                weaponId,
+                maxHp,
+                at,
+                df,
+                agi,
+                mat,
+                mdf
+            );
             body.EnsureInstanceId();
             return body;
         }
@@ -77,14 +101,12 @@ namespace SteraCube.SpaceJourney
             int df,
             int agi,
             int mat,
-            int mdf,
-            List<string> weaponCandidateIds = null)
+            int mdf)
         {
             return new BodyInstance(
                 raceId,
                 bodyJobId,
                 weaponId,
-                weaponCandidateIds,
                 Mathf.Max(1, maxHp),
                 Mathf.Max(0, at),
                 Mathf.Max(0, df),
@@ -102,25 +124,31 @@ namespace SteraCube.SpaceJourney
             return Mathf.Max(1, Mathf.RoundToInt(v));
         }
 
+        /// <summary>
+        /// weaponCandidates（SO直接参照リスト）から rank を満たす武器をランダム選択し、
+        /// weaponId（string）を返す。
+        /// </summary>
         private static string ChooseWeaponId(
-            MasterDatabase db,
-            List<string> weaponCandidateIds,
+            List<WeaponDefinition> weaponCandidates,
+            int rank,
             System.Random rng)
         {
-            if (weaponCandidateIds == null || weaponCandidateIds.Count == 0)
+            if (weaponCandidates == null || weaponCandidates.Count == 0)
                 return string.Empty;
 
-            var valid = new List<string>();
-            foreach (var id in weaponCandidateIds)
+            var valid = new List<WeaponDefinition>();
+            foreach (var def in weaponCandidates)
             {
-                if (!string.IsNullOrWhiteSpace(id) && db.GetWeaponById(id) != null)
-                    valid.Add(id);
+                if (def == null) continue;
+                // minRank チェック：ボディのランクが武器の最低ランク未満なら除外
+                if (rank >= def.minRank)
+                    valid.Add(def);
             }
 
             if (valid.Count == 0)
                 return string.Empty;
 
-            return valid[rng.Next(valid.Count)];
+            return valid[rng.Next(valid.Count)].weaponId;
         }
     }
 }

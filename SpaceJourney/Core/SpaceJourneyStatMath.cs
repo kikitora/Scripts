@@ -84,6 +84,21 @@ namespace SteraCube.SpaceJourney
         }
 
 
+        /// <summary>
+        /// baseStat × talentFactor × eventFactors[statIdx] で potentialStat を計算する。
+        /// eventFactors は ReinSimResult から渡される float[5]（AT=0,DF=1,AGI=2,MAT=3,MDF=4）。
+        /// eventFactors が null または範囲外の場合は仮値（TempInitialReincarnationEventFactor）でフォールバック。
+        /// </summary>
+        public static float CalcPotentialStat(float baseStat, float talentFactor, float[] eventFactors, int statIdx)
+        {
+            float ef = (eventFactors != null && statIdx >= 0 && statIdx < eventFactors.Length)
+                ? eventFactors[statIdx]
+                : SpaceJourneyConstants.TempInitialReincarnationEventFactor;
+            return baseStat * talentFactor * ef;
+        }
+
+        /// <summary>旧API互換。転生シミュ未対応箇所が残っている間の互換用。</summary>
+        [System.Obsolete("eventFactors配列版 CalcPotentialStat(baseStat, talentFactor, float[], int) を使ってください。")]
         public static float CalcPotentialStat(float baseStat, float talentFactor, float eventFactor)
         {
             return baseStat * talentFactor * eventFactor;

@@ -1,138 +1,138 @@
-#if UNITY_EDITOR
-using System.Collections.Generic;
-using UnityEditor;
-using UnityEditor.Experimental.GraphView;
-using UnityEngine;
-using UnityEngine.UIElements;
-
-namespace SteraCube.SpaceJourney.Editor
-{
-    /// <summary>
-    /// ReinEventGraphWindow“à‚Å1‚Â‚ÌReinLifeEventSO‚ğƒm[ƒh‚Æ‚µ‚Ä•\¦‚·‚éƒNƒ‰ƒXB
-    ///
-    /// ƒ|[ƒgİŒvF
-    ///   [RequiresIn]  © Âƒ|[ƒgi“ü—ÍjFu‚±‚ÌƒCƒxƒ“ƒg‚ª‹N‚«‚½Œã‚É„‚ªoŒ»‚Å‚«‚év
-    ///   [RequiresOut] ¨ Âƒ|[ƒgio—ÍjFu„‚ª‹N‚«‚½Œã‚É‚ ‚ÌƒCƒxƒ“ƒg‚ªoŒ»‚Å‚«‚év
-    ///   [BlockedIn]   © Ôƒ|[ƒgi“ü—ÍjFu‚±‚ÌƒCƒxƒ“ƒg‚ª‹N‚«‚½‚ç„‚ÍoŒ»‚µ‚È‚¢v
-    ///   [BlockedOut]  ¨ Ôƒ|[ƒgio—ÍjFu„‚ª‹N‚«‚½‚ç‚ ‚ÌƒCƒxƒ“ƒg‚ÍoŒ»‚µ‚È‚¢v
-    /// </summary>
-    public class ReinEventNode : Node
-    {
-        // ƒJƒ‰[’è‹`
-        private static readonly Color ColRequires = new Color(0.3f, 0.6f, 1.0f); // Â
-        private static readonly Color ColBlocked = new Color(1.0f, 0.35f, 0.3f); // Ô
-        private static readonly Color ColHeader = new Color(0.18f, 0.18f, 0.18f);
-
-        public ReinLifeEventSO EventData { get; private set; }
-
-        // ƒ|[ƒgiÚ‘±‚ÌŒûj
-        public Port PortRequiresIn { get; private set; } // ÂE“ü—Í
-        public Port PortRequiresOut { get; private set; } // ÂEo—Í
-        public Port PortBlockedIn { get; private set; } // ÔE“ü—Í
-        public Port PortBlockedOut { get; private set; } // ÔEo—Í
-
-        // ============================================================
-        // ¶¬
-        // ============================================================
-        public static ReinEventNode Create(ReinLifeEventSO data)
-        {
-            var node = new ReinEventNode();
-            node.Init(data);
-            return node;
-        }
-
-        private void Init(ReinLifeEventSO data)
-        {
-            EventData = data;
-
-            // ---- ƒ^ƒCƒgƒ‹ ----
-            title = data.DisplayName;
-            tooltip = data.EditorMemo;
-
-            // ---- ƒwƒbƒ_F ----
-            var headerBg = titleContainer;
-            headerBg.style.backgroundColor = new StyleColor(ColHeader);
-
-            // ---- ”N—îƒoƒbƒW ----
-            var ageBadge = new Label($"Age {data.StartAge}?{data.EndAge}  w:{data.BaseWeight:F1}");
-            ageBadge.style.fontSize = 10;
-            ageBadge.style.color = new StyleColor(new Color(0.75f, 0.75f, 0.75f));
-            ageBadge.style.unityTextAlign = TextAnchor.MiddleCenter;
-            ageBadge.style.paddingBottom = 4;
-            titleContainer.Add(ageBadge);
-
-            // ---- ‘I‘ğˆ‚ÌƒvƒŒƒrƒ…[ ----
-            var optCount = new Label($"‘I‘ğˆ: {data.Options.Count}Œ");
-            optCount.style.fontSize = 10;
-            optCount.style.color = new StyleColor(new Color(0.7f, 0.9f, 0.7f));
-            optCount.style.paddingLeft = 6;
-            optCount.style.paddingBottom = 4;
-            extensionContainer.Add(optCount);
-
-            // ---- ƒ_ƒuƒ‹ƒNƒŠƒbƒN‚ÅInspector ----
-            this.RegisterCallback<MouseDownEvent>(evt =>
-            {
-                if (evt.clickCount == 2)
-                    Selection.activeObject = EventData;
-            });
-
-            // ---- ƒ|[ƒg¶¬ ----
-            BuildPorts();
-
-            // ---- ƒm[ƒhˆÊ’u ----
-            SetPosition(new Rect(data.graphPosition, Vector2.zero));
-
-            RefreshExpandedState();
-            RefreshPorts();
-        }
-
-        private void BuildPorts()
-        {
-            // Âƒ|[ƒgirequiresj
-            PortRequiresIn = CreatePort(
-                "‘O’ñi“ü—Íj", Direction.Input, Port.Capacity.Multi, ColRequires);
-            PortRequiresOut = CreatePort(
-                "‘O’ñio—Íj", Direction.Output, Port.Capacity.Multi, ColRequires);
-
-            // Ôƒ|[ƒgiblockedj
-            PortBlockedIn = CreatePort(
-                "”r‘¼i“ü—Íj", Direction.Input, Port.Capacity.Multi, ColBlocked);
-            PortBlockedOut = CreatePort(
-                "”r‘¼io—Íj", Direction.Output, Port.Capacity.Multi, ColBlocked);
-
-            inputContainer.Add(PortRequiresIn);
-            inputContainer.Add(PortBlockedIn);
-            outputContainer.Add(PortRequiresOut);
-            outputContainer.Add(PortBlockedOut);
-        }
-
-        private Port CreatePort(string portName, Direction dir, Port.Capacity capacity, Color color)
-        {
-            var port = InstantiatePort(Orientation.Horizontal, dir, capacity, typeof(bool));
-            port.portName = portName;
-            port.portColor = color;
-            return port;
-        }
-
-        // ============================================================
-        // ƒm[ƒhˆÊ’u‚Ì•Ï‰»‚ğSO‚É‘‚«–ß‚·
-        // ============================================================
-        public void SavePosition()
-        {
-            if (EventData == null) return;
-            var pos = GetPosition();
-            EventData.graphPosition = pos.position;
-            EditorUtility.SetDirty(EventData);
-        }
-
-        // ============================================================
-        // ƒm[ƒh‚Ìƒ^ƒCƒgƒ‹‚ğÅVƒf[ƒ^‚ÉXV
-        // ============================================================
-        public void Refresh()
-        {
-            if (EventData == null) return;
-            title = EventData.DisplayName;
-        }
-    }
-}
+#if UNITY_EDITOR
+using System.Collections.Generic;
+using UnityEditor;
+using UnityEditor.Experimental.GraphView;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+namespace SteraCube.SpaceJourney.Editor
+{
+    /// <summary>
+    /// ReinEventGraphWindowå†…ã§1ã¤ã®ReinLifeEventSOã‚’ãƒãƒ¼ãƒ‰ã¨ã—ã¦è¡¨ç¤ºã™ã‚‹ã‚¯ãƒ©ã‚¹ã€‚
+    ///
+    /// ãƒãƒ¼ãƒˆè¨­è¨ˆï¼š
+    ///   [RequiresIn]  â† é’ãƒãƒ¼ãƒˆï¼ˆå…¥åŠ›ï¼‰ï¼šã€Œã“ã®ã‚¤ãƒ™ãƒ³ãƒˆãŒèµ·ããŸå¾Œã«ç§ãŒå‡ºç¾ã§ãã‚‹ã€
+    ///   [RequiresOut] â†’ é’ãƒãƒ¼ãƒˆï¼ˆå‡ºåŠ›ï¼‰ï¼šã€Œç§ãŒèµ·ããŸå¾Œã«ã‚ã®ã‚¤ãƒ™ãƒ³ãƒˆãŒå‡ºç¾ã§ãã‚‹ã€
+    ///   [BlockedIn]   â† èµ¤ãƒãƒ¼ãƒˆï¼ˆå…¥åŠ›ï¼‰ï¼šã€Œã“ã®ã‚¤ãƒ™ãƒ³ãƒˆãŒèµ·ããŸã‚‰ç§ã¯å‡ºç¾ã—ãªã„ã€
+    ///   [BlockedOut]  â†’ èµ¤ãƒãƒ¼ãƒˆï¼ˆå‡ºåŠ›ï¼‰ï¼šã€Œç§ãŒèµ·ããŸã‚‰ã‚ã®ã‚¤ãƒ™ãƒ³ãƒˆã¯å‡ºç¾ã—ãªã„ã€
+    /// </summary>
+    public class ReinEventNode : Node
+    {
+        // ã‚«ãƒ©ãƒ¼å®šç¾©
+        private static readonly Color ColRequires = new Color(0.3f, 0.6f, 1.0f); // é’
+        private static readonly Color ColBlocked = new Color(1.0f, 0.35f, 0.3f); // èµ¤
+        private static readonly Color ColHeader = new Color(0.18f, 0.18f, 0.18f);
+
+        public ReinLifeEventSO EventData { get; private set; }
+
+        // ãƒãƒ¼ãƒˆï¼ˆæ¥ç¶šã®å£ï¼‰
+        public Port PortRequiresIn { get; private set; } // é’ãƒ»å…¥åŠ›
+        public Port PortRequiresOut { get; private set; } // é’ãƒ»å‡ºåŠ›
+        public Port PortBlockedIn { get; private set; } // èµ¤ãƒ»å…¥åŠ›
+        public Port PortBlockedOut { get; private set; } // èµ¤ãƒ»å‡ºåŠ›
+
+        // ============================================================
+        // ç”Ÿæˆ
+        // ============================================================
+        public static ReinEventNode Create(ReinLifeEventSO data)
+        {
+            var node = new ReinEventNode();
+            node.Init(data);
+            return node;
+        }
+
+        private void Init(ReinLifeEventSO data)
+        {
+            EventData = data;
+
+            // ---- ã‚¿ã‚¤ãƒˆãƒ« ----
+            title = data.DisplayName;
+            tooltip = data.EditorMemo;
+
+            // ---- ãƒ˜ãƒƒãƒ€è‰² ----
+            var headerBg = titleContainer;
+            headerBg.style.backgroundColor = new StyleColor(ColHeader);
+
+            // ---- å¹´é½¢ãƒãƒƒã‚¸ ----
+            var ageBadge = new Label($"Age {data.StartAge}?{data.EndAge}  w:{data.BaseWeight:F1}");
+            ageBadge.style.fontSize = 10;
+            ageBadge.style.color = new StyleColor(new Color(0.75f, 0.75f, 0.75f));
+            ageBadge.style.unityTextAlign = TextAnchor.MiddleCenter;
+            ageBadge.style.paddingBottom = 4;
+            titleContainer.Add(ageBadge);
+
+            // ---- é¸æŠè‚¢ã®ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ ----
+            var optCount = new Label($"é¸æŠè‚¢: {data.Options.Count}ä»¶");
+            optCount.style.fontSize = 10;
+            optCount.style.color = new StyleColor(new Color(0.7f, 0.9f, 0.7f));
+            optCount.style.paddingLeft = 6;
+            optCount.style.paddingBottom = 4;
+            extensionContainer.Add(optCount);
+
+            // ---- ãƒ€ãƒ–ãƒ«ã‚¯ãƒªãƒƒã‚¯ã§Inspector ----
+            this.RegisterCallback<MouseDownEvent>(evt =>
+            {
+                if (evt.clickCount == 2)
+                    Selection.activeObject = EventData;
+            });
+
+            // ---- ãƒãƒ¼ãƒˆç”Ÿæˆ ----
+            BuildPorts();
+
+            // ---- ãƒãƒ¼ãƒ‰ä½ç½® ----
+            SetPosition(new Rect(data.graphPosition, Vector2.zero));
+
+            RefreshExpandedState();
+            RefreshPorts();
+        }
+
+        private void BuildPorts()
+        {
+            // é’ãƒãƒ¼ãƒˆï¼ˆrequiresï¼‰
+            PortRequiresIn = CreatePort(
+                "å‰æï¼ˆå…¥åŠ›ï¼‰", Direction.Input, Port.Capacity.Multi, ColRequires);
+            PortRequiresOut = CreatePort(
+                "å‰æï¼ˆå‡ºåŠ›ï¼‰", Direction.Output, Port.Capacity.Multi, ColRequires);
+
+            // èµ¤ãƒãƒ¼ãƒˆï¼ˆblockedï¼‰
+            PortBlockedIn = CreatePort(
+                "æ’ä»–ï¼ˆå…¥åŠ›ï¼‰", Direction.Input, Port.Capacity.Multi, ColBlocked);
+            PortBlockedOut = CreatePort(
+                "æ’ä»–ï¼ˆå‡ºåŠ›ï¼‰", Direction.Output, Port.Capacity.Multi, ColBlocked);
+
+            inputContainer.Add(PortRequiresIn);
+            inputContainer.Add(PortBlockedIn);
+            outputContainer.Add(PortRequiresOut);
+            outputContainer.Add(PortBlockedOut);
+        }
+
+        private Port CreatePort(string portName, Direction dir, Port.Capacity capacity, Color color)
+        {
+            var port = InstantiatePort(Orientation.Horizontal, dir, capacity, typeof(bool));
+            port.portName = portName;
+            port.portColor = color;
+            return port;
+        }
+
+        // ============================================================
+        // ãƒãƒ¼ãƒ‰ä½ç½®ã®å¤‰åŒ–ã‚’SOã«æ›¸ãæˆ»ã™
+        // ============================================================
+        public void SavePosition()
+        {
+            if (EventData == null) return;
+            var pos = GetPosition();
+            EventData.graphPosition = pos.position;
+            EditorUtility.SetDirty(EventData);
+        }
+
+        // ============================================================
+        // ãƒãƒ¼ãƒ‰ã®ã‚¿ã‚¤ãƒˆãƒ«ã‚’æœ€æ–°ãƒ‡ãƒ¼ã‚¿ã«æ›´æ–°
+        // ============================================================
+        public void Refresh()
+        {
+            if (EventData == null) return;
+            title = EventData.DisplayName;
+        }
+    }
+}
 #endif

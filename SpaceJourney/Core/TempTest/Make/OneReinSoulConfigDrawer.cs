@@ -1,186 +1,186 @@
-#if UNITY_EDITOR
-using UnityEditor;
-using UnityEngine;
-
-namespace SteraCube.SpaceJourney.DevTools
-{
-    /// <summary>
-    /// OneReinSoulConfig ‚Ì PropertyDrawerB
-    /// jobId ¨ SoulJobDefinition ƒhƒƒbƒvƒ_ƒEƒ“
-    /// learnedSkillIds ¨ SkillDefinition ƒhƒƒbƒvƒ_ƒEƒ“ƒŠƒXƒg
-    /// ‚»‚Ì‘¼‚ÌƒtƒB[ƒ‹ƒh‚Í•W€•`‰æB
-    /// </summary>
-    [CustomPropertyDrawer(typeof(OneReinSoulConfig))]
-    public class OneReinSoulConfigDrawer : PropertyDrawer
-    {
-        // 1s‚Ì‚‚³
-        private const float LineH = 18f;
-        private const float LineP = 2f;   // sŠÔ
-        private const float Step = LineH + LineP;
-        private const float BtnH = 20f;
-
-        // „Ÿ„Ÿ GetPropertyHeight „Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ
-        public override float GetPropertyHeight(SerializedProperty prop, GUIContent label)
-        {
-            if (!prop.isExpanded)
-                return EditorGUI.GetPropertyHeight(prop, label, false); // foldout s‚Ì‚İ
-
-            // ŒÅ’èƒtƒB[ƒ‹ƒh”irank / growthType / jobId / title / level / lv1Statsj
-            int fixedLines = 6;
-
-            // lv1Stats arrayi“WŠJ + 1 line per elementj
-            var lv1StatsProp = prop.FindPropertyRelative("lv1Stats");
-            float lv1StatsH = EditorGUI.GetPropertyHeight(lv1StatsProp, true);
-
-            // learnedSkillIds ƒŠƒXƒg
-            var skillsProp = prop.FindPropertyRelative("learnedSkillIds");
-            int skillCount = skillsProp != null ? skillsProp.arraySize : 0;
-            float skillsH = Step // ƒ‰ƒxƒ‹
-                          + skillCount * Step
-                          + BtnH // {ƒ{ƒ^ƒ“
-                          + LineP * 2;
-
-            return Step                 // foldout ƒwƒbƒ_[
-                 + (fixedLines - 1) * Step // rank?level
-                 + lv1StatsH + LineP    // lv1Stats
-                 + skillsH;             // learnedSkillIds
-        }
-
-        // „Ÿ„Ÿ OnGUI „Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ
-        public override void OnGUI(Rect pos, SerializedProperty prop, GUIContent label)
-        {
-            EditorGUI.BeginProperty(pos, label, prop);
-
-            // Foldout ƒwƒbƒ_[
-            var foldRect = new Rect(pos.x, pos.y, pos.width, LineH);
-            prop.isExpanded = EditorGUI.Foldout(foldRect, prop.isExpanded, label, true);
-
-            if (!prop.isExpanded)
-            {
-                EditorGUI.EndProperty();
-                return;
-            }
-
-            EditorGUI.indentLevel++;
-
-            float y = pos.y + Step;
-
-            // rank
-            y = DrawField(pos, y, prop, "rank");
-            // growthType
-            y = DrawField(pos, y, prop, "growthType");
-            // jobId ¨ ƒhƒƒbƒvƒ_ƒEƒ“
-            y = DrawJobIdDropdown(pos, y, prop);
-            // title
-            y = DrawField(pos, y, prop, "title");
-            // level
-            y = DrawField(pos, y, prop, "level");
-            // lv1Stats
-            y = DrawLv1Stats(pos, y, prop);
-            // learnedSkillIds
-            y = DrawSkillIdList(pos, y, prop);
-
-            EditorGUI.indentLevel--;
-            EditorGUI.EndProperty();
-        }
-
-        // „Ÿ„Ÿ ŠeƒtƒB[ƒ‹ƒh•`‰æƒwƒ‹ƒp[ „Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ
-
-        private float DrawField(Rect pos, float y, SerializedProperty parent, string name)
-        {
-            var child = parent.FindPropertyRelative(name);
-            if (child == null) return y;
-            float h = EditorGUI.GetPropertyHeight(child, true);
-            EditorGUI.PropertyField(Rect(pos, y, h), child, true);
-            return y + h + LineP;
-        }
-
-        private float DrawJobIdDropdown(Rect pos, float y, SerializedProperty parent)
-        {
-            var jobIdProp = parent.FindPropertyRelative("jobId");
-            if (jobIdProp == null) return y;
-
-            CharaDataIdFields.RefreshIfNeeded();
-            var ids = CharaDataIdFields.SoulJobIds;
-            CharaDataIdFields.DrawDropdownGUI(Rect(pos, y, LineH), jobIdProp, ids, new GUIContent("Soul Job ID"));
-            return y + Step;
-        }
-
-        private float DrawLv1Stats(Rect pos, float y, SerializedProperty parent)
-        {
-            var lv1Prop = parent.FindPropertyRelative("lv1Stats");
-            if (lv1Prop == null) return y;
-            float h = EditorGUI.GetPropertyHeight(lv1Prop, true);
-            EditorGUI.PropertyField(Rect(pos, y, h), lv1Prop, true);
-            return y + h + LineP;
-        }
-
-        private float DrawSkillIdList(Rect pos, float y, SerializedProperty parent)
-        {
-            var skillsProp = parent.FindPropertyRelative("learnedSkillIds");
-            if (skillsProp == null) return y;
-
-            CharaDataIdFields.RefreshIfNeeded();
-            var ids = CharaDataIdFields.SkillIds;
-            string[] options = PrependNone(ids);
-
-            // ƒ‰ƒxƒ‹
-            EditorGUI.LabelField(Rect(pos, y, LineH), "Learned Skills", EditorStyles.boldLabel);
-            y += Step;
-
-            EditorGUI.indentLevel++;
-            int count = skillsProp.arraySize;
-            int removeAt = -1;
-
-            for (int i = 0; i < count; i++)
-            {
-                var elem = skillsProp.GetArrayElementAtIndex(i);
-                string cur = elem.stringValue ?? "";
-                int selIdx = CharaDataIdFields.FindIndex(ids, cur);
-
-                var rowRect = Rect(pos, y, LineH);
-                // ?ƒ{ƒ^ƒ“•ª‚ğ‰E’[‚ÉŠm•Û
-                var popRect = new Rect(rowRect.x, rowRect.y, rowRect.width - 24f, rowRect.height);
-                var btnRect = new Rect(rowRect.xMax - 22f, rowRect.y, 20f, rowRect.height);
-
-                int newIdx = EditorGUI.Popup(popRect, $"[{i}]", selIdx, options);
-                if (newIdx != selIdx)
-                    elem.stringValue = newIdx == 0 ? "" : ids[newIdx - 1];
-
-                if (GUI.Button(btnRect, "?"))
-                    removeAt = i;
-
-                y += Step;
-            }
-
-            if (removeAt >= 0)
-                skillsProp.DeleteArrayElementAtIndex(removeAt);
-
-            EditorGUI.indentLevel--;
-
-            // {ƒ{ƒ^ƒ“
-            var addRect = Rect(pos, y, BtnH);
-            if (GUI.Button(addRect, "{ ƒXƒLƒ‹’Ç‰Á"))
-            {
-                skillsProp.InsertArrayElementAtIndex(count);
-                skillsProp.GetArrayElementAtIndex(count).stringValue = "";
-            }
-            y += BtnH + LineP * 2;
-
-            return y;
-        }
-
-        // „Ÿ„Ÿ ƒ†[ƒeƒBƒŠƒeƒB „Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ„Ÿ
-        private static Rect Rect(Rect pos, float y, float h)
-            => new Rect(pos.x, y, pos.width, h);
-
-        private static string[] PrependNone(string[] ids)
-        {
-            var result = new string[ids.Length + 1];
-            result[0] = "„Ÿ (‚È‚µ) „Ÿ";
-            System.Array.Copy(ids, 0, result, 1, ids.Length);
-            return result;
-        }
-    }
-}
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEngine;
+
+namespace SteraCube.SpaceJourney.DevTools
+{
+    /// <summary>
+    /// OneReinSoulConfig ã® PropertyDrawerã€‚
+    /// jobId â†’ SoulJobDefinition ãƒ‰ãƒ­ãƒƒãƒ—ãƒ€ã‚¦ãƒ³
+    /// learnedSkillIds â†’ SkillDefinition ãƒ‰ãƒ­ãƒƒãƒ—ãƒ€ã‚¦ãƒ³ãƒªã‚¹ãƒˆ
+    /// ãã®ä»–ã®ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã¯æ¨™æº–æç”»ã€‚
+    /// </summary>
+    [CustomPropertyDrawer(typeof(OneReinSoulConfig))]
+    public class OneReinSoulConfigDrawer : PropertyDrawer
+    {
+        // 1è¡Œã®é«˜ã•
+        private const float LineH = 18f;
+        private const float LineP = 2f;   // è¡Œé–“
+        private const float Step = LineH + LineP;
+        private const float BtnH = 20f;
+
+        // â”€â”€ GetPropertyHeight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        public override float GetPropertyHeight(SerializedProperty prop, GUIContent label)
+        {
+            if (!prop.isExpanded)
+                return EditorGUI.GetPropertyHeight(prop, label, false); // foldout è¡Œã®ã¿
+
+            // å›ºå®šãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰æ•°ï¼ˆrank / growthType / jobId / title / level / lv1Statsï¼‰
+            int fixedLines = 6;
+
+            // lv1Stats arrayï¼ˆå±•é–‹æ™‚ + 1 line per elementï¼‰
+            var lv1StatsProp = prop.FindPropertyRelative("lv1Stats");
+            float lv1StatsH = EditorGUI.GetPropertyHeight(lv1StatsProp, true);
+
+            // learnedSkillIds ãƒªã‚¹ãƒˆ
+            var skillsProp = prop.FindPropertyRelative("learnedSkillIds");
+            int skillCount = skillsProp != null ? skillsProp.arraySize : 0;
+            float skillsH = Step // ãƒ©ãƒ™ãƒ«
+                          + skillCount * Step
+                          + BtnH // ï¼‹ãƒœã‚¿ãƒ³
+                          + LineP * 2;
+
+            return Step                 // foldout ãƒ˜ãƒƒãƒ€ãƒ¼
+                 + (fixedLines - 1) * Step // rank?level
+                 + lv1StatsH + LineP    // lv1Stats
+                 + skillsH;             // learnedSkillIds
+        }
+
+        // â”€â”€ OnGUI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        public override void OnGUI(Rect pos, SerializedProperty prop, GUIContent label)
+        {
+            EditorGUI.BeginProperty(pos, label, prop);
+
+            // Foldout ãƒ˜ãƒƒãƒ€ãƒ¼
+            var foldRect = new Rect(pos.x, pos.y, pos.width, LineH);
+            prop.isExpanded = EditorGUI.Foldout(foldRect, prop.isExpanded, label, true);
+
+            if (!prop.isExpanded)
+            {
+                EditorGUI.EndProperty();
+                return;
+            }
+
+            EditorGUI.indentLevel++;
+
+            float y = pos.y + Step;
+
+            // rank
+            y = DrawField(pos, y, prop, "rank");
+            // growthType
+            y = DrawField(pos, y, prop, "growthType");
+            // jobId â†’ ãƒ‰ãƒ­ãƒƒãƒ—ãƒ€ã‚¦ãƒ³
+            y = DrawJobIdDropdown(pos, y, prop);
+            // title
+            y = DrawField(pos, y, prop, "title");
+            // level
+            y = DrawField(pos, y, prop, "level");
+            // lv1Stats
+            y = DrawLv1Stats(pos, y, prop);
+            // learnedSkillIds
+            y = DrawSkillIdList(pos, y, prop);
+
+            EditorGUI.indentLevel--;
+            EditorGUI.EndProperty();
+        }
+
+        // â”€â”€ å„ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰æç”»ãƒ˜ãƒ«ãƒ‘ãƒ¼ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+        private float DrawField(Rect pos, float y, SerializedProperty parent, string name)
+        {
+            var child = parent.FindPropertyRelative(name);
+            if (child == null) return y;
+            float h = EditorGUI.GetPropertyHeight(child, true);
+            EditorGUI.PropertyField(Rect(pos, y, h), child, true);
+            return y + h + LineP;
+        }
+
+        private float DrawJobIdDropdown(Rect pos, float y, SerializedProperty parent)
+        {
+            var jobIdProp = parent.FindPropertyRelative("jobId");
+            if (jobIdProp == null) return y;
+
+            CharaDataIdFields.RefreshIfNeeded();
+            var ids = CharaDataIdFields.SoulJobIds;
+            CharaDataIdFields.DrawDropdownGUI(Rect(pos, y, LineH), jobIdProp, ids, new GUIContent("Soul Job ID"));
+            return y + Step;
+        }
+
+        private float DrawLv1Stats(Rect pos, float y, SerializedProperty parent)
+        {
+            var lv1Prop = parent.FindPropertyRelative("lv1Stats");
+            if (lv1Prop == null) return y;
+            float h = EditorGUI.GetPropertyHeight(lv1Prop, true);
+            EditorGUI.PropertyField(Rect(pos, y, h), lv1Prop, true);
+            return y + h + LineP;
+        }
+
+        private float DrawSkillIdList(Rect pos, float y, SerializedProperty parent)
+        {
+            var skillsProp = parent.FindPropertyRelative("learnedSkillIds");
+            if (skillsProp == null) return y;
+
+            CharaDataIdFields.RefreshIfNeeded();
+            var ids = CharaDataIdFields.SkillIds;
+            string[] options = PrependNone(ids);
+
+            // ãƒ©ãƒ™ãƒ«
+            EditorGUI.LabelField(Rect(pos, y, LineH), "Learned Skills", EditorStyles.boldLabel);
+            y += Step;
+
+            EditorGUI.indentLevel++;
+            int count = skillsProp.arraySize;
+            int removeAt = -1;
+
+            for (int i = 0; i < count; i++)
+            {
+                var elem = skillsProp.GetArrayElementAtIndex(i);
+                string cur = elem.stringValue ?? "";
+                int selIdx = CharaDataIdFields.FindIndex(ids, cur);
+
+                var rowRect = Rect(pos, y, LineH);
+                // ?ãƒœã‚¿ãƒ³åˆ†ã‚’å³ç«¯ã«ç¢ºä¿
+                var popRect = new Rect(rowRect.x, rowRect.y, rowRect.width - 24f, rowRect.height);
+                var btnRect = new Rect(rowRect.xMax - 22f, rowRect.y, 20f, rowRect.height);
+
+                int newIdx = EditorGUI.Popup(popRect, $"[{i}]", selIdx, options);
+                if (newIdx != selIdx)
+                    elem.stringValue = newIdx == 0 ? "" : ids[newIdx - 1];
+
+                if (GUI.Button(btnRect, "?"))
+                    removeAt = i;
+
+                y += Step;
+            }
+
+            if (removeAt >= 0)
+                skillsProp.DeleteArrayElementAtIndex(removeAt);
+
+            EditorGUI.indentLevel--;
+
+            // ï¼‹ãƒœã‚¿ãƒ³
+            var addRect = Rect(pos, y, BtnH);
+            if (GUI.Button(addRect, "ï¼‹ ã‚¹ã‚­ãƒ«è¿½åŠ "))
+            {
+                skillsProp.InsertArrayElementAtIndex(count);
+                skillsProp.GetArrayElementAtIndex(count).stringValue = "";
+            }
+            y += BtnH + LineP * 2;
+
+            return y;
+        }
+
+        // â”€â”€ ãƒ¦ãƒ¼ãƒ†ã‚£ãƒªãƒ†ã‚£ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        private static Rect Rect(Rect pos, float y, float h)
+            => new Rect(pos.x, y, pos.width, h);
+
+        private static string[] PrependNone(string[] ids)
+        {
+            var result = new string[ids.Length + 1];
+            result[0] = "â”€ (ãªã—) â”€";
+            System.Array.Copy(ids, 0, result, 1, ids.Length);
+            return result;
+        }
+    }
+}
 #endif

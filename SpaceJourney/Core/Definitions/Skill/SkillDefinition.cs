@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 using InspectorToolkit;
@@ -238,12 +239,29 @@ namespace SteraCube.SpaceJourney
         [Header("アニメーション・演出")]
         [SerializeField] private string animatorTriggerKey;
 
+        [Header("使用可能なBodyJob")]
+        [Tooltip("空リストの場合は全BodyJobで使用可能（ユニバーサルスキル）。\n" +
+                 "登録した場合はそのBodyJobを持つキャラのみ使用可能（職業固有スキル）。\n" +
+                 "ノーマルライフイベントで付与できるのは空リスト（ユニバーサル）のみ。")]
+        public List<BodyJobDefinition> allowedBodyJobs = new();
+
         // 外部参照用
         public string SkillId => skillId;
         public string SkillName => skillName;
         public string Description => description;
         public StatusEffectSpec[] AdditionalEffects => additionalEffects;
         public string AnimatorTriggerKey => animatorTriggerKey;
+
+        /// <summary>allowedBodyJobsが空＝全職業使用可能なユニバーサルスキル</summary>
+        public bool IsUniversal => allowedBodyJobs == null || allowedBodyJobs.Count == 0;
+
+        /// <summary>指定BodyJobがこのスキルを使用可能かチェック</summary>
+        public bool IsAllowedFor(BodyJobDefinition bodyJob)
+        {
+            if (IsUniversal) return true;
+            if (bodyJob == null) return false;
+            return allowedBodyJobs.Contains(bodyJob);
+        }
 
 #if UNITY_EDITOR
         private void OnValidate()

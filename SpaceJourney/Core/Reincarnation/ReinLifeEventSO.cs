@@ -28,6 +28,10 @@ namespace SteraCube.SpaceJourney
         [Tooltip("グラフ・UIで表示する名前")]
         [SerializeField] private string displayName;
 
+        [Tooltip("イベント発生時に画面に表示するテキスト\n例：「近所で火事を目撃する\n衝撃を受けた」")]
+        [TextArea(2, 8)]
+        [SerializeField] private string eventText;
+
         [TextArea(1, 3)]
         [SerializeField] private string editorMemo;
 
@@ -47,12 +51,45 @@ namespace SteraCube.SpaceJourney
         // ============================================================
         // 前提・排他条件（SO参照でグラフの矢印と同期）
         // ============================================================
+        // ============================================================
+        // 職業タグ
+        // ============================================================
+        [Header("職業タグ（空=全員共通イベント）")]
+        [Tooltip("設定したジョブのいずれかが運命のジョブと一致する場合のみ発生する。\n" +
+                 "空リストの場合は全ジョブ共通イベントとして発生しうる。")]
+        [SerializeField] private List<SoulJobDefinition> relatedJobs = new();
+
+        [Tooltip("ジョブが一致した場合に baseWeight に加算するボーナス重み")]
+        [SerializeField, Min(0f)] private float jobMatchBonus = 1f;
+
         [Header("前提・排他条件")]
         [Tooltip("青矢印：これらのイベントが「過去に発生済み」でないと出現しない")]
         [SerializeField] private List<ReinLifeEventSO> requiresEvents = new();
 
         [Tooltip("赤矢印：これらのイベントが「発生済み」なら出現しない")]
         [SerializeField] private List<ReinLifeEventSO> blockedByEvents = new();
+
+        [Header("ライフイベントタグ")]
+        [Tooltip("このイベントが発生したときに付与するタグ\n例：\"婚活経験あり\" \"師匠あり\"")]
+        [SerializeField] private List<string> grantsLifeTags = new();
+
+        [Tooltip("このリストのタグを1つでも持っていれば出現可能（OR条件）\n空リストなら制限なし")]
+        [SerializeField] private List<string> requiresAnyLifeTag = new();
+
+        [Tooltip("このリストのタグをすべて持っていると出現しない（ブロック）\n例：\"結婚済み\"")]
+        [SerializeField] private List<string> blockedByLifeTags = new();
+
+        [Tooltip("このランク以上の場合のみ出現（0=制限なし）")]
+        [SerializeField, Min(0)] private int requireMinRank = 0;
+
+        [Tooltip("このランク以下の場合のみ出現（0=制限なし）")]
+        [SerializeField, Min(0)] private int requireMaxRank = 0;
+
+        [Tooltip("ステータス前提条件（AND：すべて満たす必要あり）")]
+        [SerializeField] private List<StatPrerequisite> requireStatsAnd = new();
+
+        [Tooltip("ステータス前提条件（OR：1つでも満たせば出現）")]
+        [SerializeField] private List<StatPrerequisite> requireStatsOr = new();
 
         // ============================================================
         // イベント結果の選択肢
@@ -65,15 +102,89 @@ namespace SteraCube.SpaceJourney
         // ============================================================
         public string EventId => eventId;
         public string DisplayName => string.IsNullOrEmpty(displayName) ? name : displayName;
+        public string EventText => eventText;
         public string EditorMemo => editorMemo;
 
         public int StartAge => startAge;
         public int EndAge => endAge;
         public float BaseWeight => baseWeight;
 
+        /// <summary>職業タグが1つ以上設定されているか（falseなら全ジョブ共通）</summary>
+        public bool HasJobTag => relatedJobs != null && relatedJobs.Count > 0;
+        public IReadOnlyList<SoulJobDefinition> RelatedJobs => relatedJobs;
+        public float JobMatchBonus => jobMatchBonus;
+
+        /// <summary>
+        /// 指定したジョブがこのイベントのタグと一致するか。
+        /// タグなし（全共通）の場合は常にtrue。
+        /// タグあり＋不一致の場合はfalse（発生しない）。
+        /// </summary>
+        public bool MatchesJob(SoulJobDefinition destinyJob)
+        {
+            if (!HasJobTag) return true;
+            if (destinyJob == null) return false;
+            return relatedJobs.Contains(destinyJob);
+        }
+
         public IReadOnlyList<ReinLifeEventSO> RequiresEvents => requiresEvents;
         public IReadOnlyList<ReinLifeEventSO> BlockedByEvents => blockedByEvents;
+        public IReadOnlyList<string> GrantsLifeTags => grantsLifeTags;
+        public IReadOnlyList<string> RequiresAnyLifeTag => requiresAnyLifeTag;
+        public IReadOnlyList<string> BlockedByLifeTags => blockedByLifeTags;
+        public int RequireMinRank => requireMinRank;
+        public int RequireMaxRank => requireMaxRank;
         public IReadOnlyList<ReinSentenceOption> Options => options;
+
+        /// <summary>
+        /// ランク・ステータス前提条件をすべてチェックする。
+        /// </summary>
+        /// <summary>タグ条件チェック（SimContext側から呼ぶ）</summary>
+        public bool MeetsLifeTagConditions(HashSet<string> acquiredTags)
+        {
+            // requiresAnyLifeTag：1つでも持っていればOK（空なら無条件OK）
+            if (requiresAnyLifeTag != null && requiresAnyLifeTag.Count > 0)
+            {
+                bool anyMet = false;
+                foreach (var tag in requiresAnyLifeTag)
+                    if (acquiredTags.Contains(tag)) { anyMet = true; break; }
+                if (!anyMet) return false;
+            }
+
+            // blockedByLifeTags：1つでも持っていたらNG
+            if (blockedByLifeTags != null)
+                foreach (var tag in blockedByLifeTags)
+                    if (acquiredTags.Contains(tag)) return false;
+
+            return true;
+        }
+
+        public bool MeetsPrerequisites(int currentRank, int[] nowStats)
+        {
+            // ランク下限
+            if (requireMinRank > 0 && currentRank < requireMinRank) return false;
+            // ランク上限
+            if (requireMaxRank > 0 && currentRank > requireMaxRank) return false;
+
+            // AND条件：1つでも満たさなければNG
+            if (requireStatsAnd != null)
+            {
+                foreach (var req in requireStatsAnd)
+                    if (!req.IsMet(nowStats)) return false;
+            }
+
+            // OR条件：1つでも満たせばOK（リストが空なら無条件OK）
+            if (requireStatsOr != null && requireStatsOr.Count > 0)
+            {
+                bool anyMet = false;
+                foreach (var req in requireStatsOr)
+                {
+                    if (req.IsMet(nowStats)) { anyMet = true; break; }
+                }
+                if (!anyMet) return false;
+            }
+
+            return true;
+        }
 
         // ============================================================
         // エディタ用ヘルパー（グラフウィンドウから呼ばれる）
@@ -110,6 +221,31 @@ namespace SteraCube.SpaceJourney
             blockedByEvents.Remove(target);
             UnityEditor.EditorUtility.SetDirty(this);
         }
+
+        /// <summary>
+        /// ノーマルイベントに職業固有スキルが登録されていたら警告。
+        /// Inspector変更時に自動チェック。
+        /// </summary>
+        private void OnValidate()
+        {
+            // ランクアップ選択肢かどうかは選択肢側で判断
+            // ここではgrantSkillsの中にユニバーサルでないスキルが混入していないかチェック
+            if (options == null) return;
+            foreach (var option in options)
+            {
+                if (option == null || option.IsRankUp) continue;
+                if (option.GrantSkills == null) continue;
+                foreach (var skill in option.GrantSkills)
+                {
+                    if (skill != null && !skill.IsUniversal)
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            $"[ReinLifeEventSO] {name} の選択肢にユニバーサルでないスキル {skill.SkillName} が登録されています。ノーマルイベントにはallowedBodyJobs空のスキルのみ登録可能です。",
+                            this);
+                    }
+                }
+            }
+        }
 #endif
     }
 
@@ -136,11 +272,17 @@ namespace SteraCube.SpaceJourney
         [Header("ランクアップ")]
         [SerializeField] private bool isRankUp = false;
 
-        [Tooltip("ランクアップ時に習得するスキル（SoulJobDefinitionから移行）")]
-        [SerializeField] private SkillDefinition rankUpSkill;
+        [Tooltip("ランクアップ時に習得するスキル。職業固有スキルもここに登録可。")]
+        [SerializeField] private List<SkillDefinition> rankUpSkills = new();
 
         [Header("スキル習得（ランクアップ以外）")]
-        [SerializeField] private SkillDefinition grantSkill;
+        [Tooltip("ユニバーサルスキル（allowedBodyJobs空）のみ登録可。\n" +
+                 "職業固有スキルはランクアップ選択肢のrankUpSkillに登録すること。")]
+        [SerializeField] private List<SkillDefinition> grantSkills = new();
+
+        [Header("ライフタグ付与（この選択肢が選ばれたとき）")]
+        [Tooltip("この選択肢が選ばれたときに付与するライフタグ\n例：\"婚活経験あり\" \"結婚済み\"")]
+        [SerializeField] private List<string> grantsLifeTags = new();
 
         // ============================================================
         // プロパティ
@@ -150,8 +292,9 @@ namespace SteraCube.SpaceJourney
         public IReadOnlyList<StatCondition> StatConditions => statConditions;
         public IReadOnlyList<StatEffect> StatEffects => statEffects;
         public bool IsRankUp => isRankUp;
-        public SkillDefinition RankUpSkill => rankUpSkill;
-        public SkillDefinition GrantSkill => grantSkill;
+        public IReadOnlyList<SkillDefinition> RankUpSkills => rankUpSkills;
+        public IReadOnlyList<SkillDefinition> GrantSkills => grantSkills;
+        public IReadOnlyList<string> GrantsLifeTags => grantsLifeTags;
 
         /// <summary>
         /// シミュレーター側から最終的な重みを計算するために呼ぶ。
@@ -164,12 +307,21 @@ namespace SteraCube.SpaceJourney
             if (statConditions == null) return w;
 
             foreach (var cond in statConditions)
-            {
-                if (cond.IsMet(currentStats))
-                    w += cond.WeightBonus;
-            }
+                w += cond.CalcWeightBonus(currentStats);
+
             return Mathf.Max(0f, w);
         }
+    }
+
+    // ================================================================
+    // StatConditionType：条件の判定方式
+    // ================================================================
+    public enum StatConditionType
+    {
+        /// <summary>stat >= threshold なら weightBonus を加算</summary>
+        AtLeast,
+        /// <summary>stat × scalePerStat をそのまま加算（上限なし）</summary>
+        Scales,
     }
 
     // ================================================================
@@ -181,24 +333,46 @@ namespace SteraCube.SpaceJourney
         [Tooltip("チェックするステータス（HPを除くAT?MDF）")]
         [SerializeField] private StatKind stat = StatKind.AT;
 
-        [Tooltip("この値「以上」なら条件を満たす")]
+        [Tooltip("判定方式")]
+        [SerializeField] private StatConditionType conditionType = StatConditionType.AtLeast;
+
+        [Tooltip("[AtLeast] この値以上なら条件を満たす")]
         [SerializeField] private int threshold = 10;
 
-        [Tooltip("条件を満たした場合に加算する重み")]
+        [Tooltip("[AtLeast] 条件を満たした場合に加算する重み")]
         [SerializeField] private float weightBonus = 1f;
 
+        [Tooltip("[Scales] stat × scalePerStat が重みに加算される\n例：0.05 → AT=20なら+1.0、AT=40なら+2.0")]
+        [SerializeField] private float scalePerStat = 0.05f;
+
         public StatKind Stat => stat;
+        public StatConditionType ConditionType => conditionType;
         public int Threshold => threshold;
         public float WeightBonus => weightBonus;
+        public float ScalePerStat => scalePerStat;
 
         /// <summary>
-        /// currentStats: AT=0, DF=1, AGI=2, MAT=3, MDF=4 の配列
+        /// currentStats（AT=0,DF=1,AGI=2,MAT=3,MDF=4）を受け取り、
+        /// この条件が加算する重みを返す。条件を満たさない場合は0。
         /// </summary>
-        public bool IsMet(int[] currentStats)
+        public float CalcWeightBonus(int[] currentStats)
         {
             int idx = StatKindToIndex(stat);
-            if (idx < 0 || currentStats == null || currentStats.Length <= idx) return false;
-            return currentStats[idx] >= threshold;
+            if (idx < 0 || currentStats == null || currentStats.Length <= idx) return 0f;
+
+            int statVal = currentStats[idx];
+
+            switch (conditionType)
+            {
+                case StatConditionType.AtLeast:
+                    return statVal >= threshold ? weightBonus : 0f;
+
+                case StatConditionType.Scales:
+                    return statVal * scalePerStat;
+
+                default:
+                    return 0f;
+            }
         }
 
         private static int StatKindToIndex(StatKind k) => k switch
@@ -221,11 +395,11 @@ namespace SteraCube.SpaceJourney
         [Tooltip("影響するステータス（HPを除くAT?MDF）")]
         [SerializeField] private StatKind stat = StatKind.AT;
 
-        [Tooltip("EventFactorへの加算量（例：0.05 → +5%）")]
-        [SerializeField] private float eventFactorDelta = 0.05f;
+        [Tooltip("EventFactorへの加算ポイント\n小=1 / 中=3 / 大=5 / 特大=10")]
+        [SerializeField] private int eventFactorPt = 1;
 
         public StatKind Stat => stat;
-        public float EventFactorDelta => eventFactorDelta;
+        public int EventFactorDelta => eventFactorPt;  // 名前は互換性のため維持
 
         public int StatIndex => stat switch
         {
@@ -237,4 +411,52 @@ namespace SteraCube.SpaceJourney
             _ => -1
         };
     }
-}
+
+    // ================================================================
+    // StatPrerequisiteType：ステータス前提条件の判定方式
+    // ================================================================
+    public enum StatPrerequisiteType
+    {
+        AtLeast, // stat >= threshold
+        AtMost,  // stat <= threshold
+    }
+
+    // ================================================================
+    // StatPrerequisite：イベント出現のステータス前提条件（AND/OR用）
+    // ================================================================
+    [Serializable]
+    public class StatPrerequisite
+    {
+        [Tooltip("チェックするステータス")]
+        [SerializeField] private StatKind stat = StatKind.AT;
+
+        [Tooltip("AtLeast：この値以上 / AtMost：この値以下")]
+        [SerializeField] private StatPrerequisiteType type = StatPrerequisiteType.AtLeast;
+
+        [Tooltip("閾値")]
+        [SerializeField] private int threshold = 10;
+
+        public StatKind Stat => stat;
+        public StatPrerequisiteType Type => type;
+        public int Threshold => threshold;
+
+        public bool IsMet(int[] nowStats)
+        {
+            if (nowStats == null) return false;
+            int idx = stat switch
+            {
+                StatKind.AT => 0,
+                StatKind.DF => 1,
+                StatKind.AGI => 2,
+                StatKind.MAT => 3,
+                StatKind.MDF => 4,
+                _ => -1
+            };
+            if (idx < 0 || idx >= nowStats.Length) return false;
+
+            return type == StatPrerequisiteType.AtLeast
+                ? nowStats[idx] >= threshold
+                : nowStats[idx] <= threshold;
+        }
+    }
+} // end namespace

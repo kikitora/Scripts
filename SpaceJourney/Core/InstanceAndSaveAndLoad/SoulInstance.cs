@@ -346,6 +346,29 @@ namespace SteraCube.SpaceJourney
 
         public IReadOnlyList<OneReinSoulData> ReinSouls => reinSouls;
 
+        /// <summary>転生データを末尾に追加する。</summary>
+        public void AddReinSoul(OneReinSoulData data)
+        {
+            if (data == null) return;
+            reinSouls ??= new List<OneReinSoulData>();
+            reinSouls.Add(data);
+            selectedReinIndex = reinSouls.Count - 1;
+        }
+
+        /// <summary>指定インデックスの転生データを上書きする。</summary>
+        public void ReplaceReinSoul(int index, OneReinSoulData data)
+        {
+            if (data == null) return;
+            reinSouls ??= new List<OneReinSoulData>();
+            if (index < 0 || index >= reinSouls.Count)
+            {
+                Debug.LogWarning($"[SoulInstance] ReplaceReinSoul: index {index} は範囲外です。末尾に追加します。");
+                AddReinSoul(data);
+                return;
+            }
+            reinSouls[index] = data;
+        }
+
         public int SelectedReinIndex
         {
             get
@@ -453,29 +476,6 @@ namespace SteraCube.SpaceJourney
             rein?.AddExp(amount);
         }
 
-        /// <summary>
-        /// 転生データを末尾に追加し、その転生を選択状態にする。
-        /// ReinSimRunnerから呼ばれる。
-        /// </summary>
-        public void AddReinSoul(OneReinSoulData data)
-        {
-            if (data == null) return;
-            reinSouls.Add(data);
-            selectedReinIndex = reinSouls.Count - 1;
-        }
-
-        /// <summary>
-        /// 指定スロットの転生データを上書きし、そのスロットを選択状態にする。
-        /// ReinSimRunnerから呼ばれる。
-        /// </summary>
-        public void ReplaceReinSoul(int index, OneReinSoulData data)
-        {
-            if (data == null) return;
-            if (index < 0 || index >= reinSouls.Count) return;
-            reinSouls[index] = data;
-            selectedReinIndex = index;
-        }
-
         public void OnBeforeSerialize() { }
 
         public void OnAfterDeserialize()
@@ -510,10 +510,6 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private int[] lv1Stats = new int[5];
         [SerializeField] private int[] permanentBonuses = new int[5];
 
-        [Tooltip("転生シミュのイベント補正係数（AT=0,DF=1,AGI=2,MAT=3,MDF=4）\n" +
-                 "初期値1.0f。上限1.5f / 下限0.8f。転生シミュ未実施時は仮値1.3fで埋める。")]
-        [SerializeField] private float[] eventFactors = new float[5];
-
         [Header("来歴・スキル")]
         [SerializeField] private List<ReinEvent> historyEvents;
         [SerializeField] private List<string> learnedSkillIds;
@@ -532,7 +528,6 @@ namespace SteraCube.SpaceJourney
 
         public IReadOnlyList<ReinEvent> HistoryEvents => historyEvents;
         public IReadOnlyList<string> LearnedSkillIds => learnedSkillIds;
-        public IReadOnlyList<float> EventFactors => eventFactors;
         /// <summary>
         /// ランダム初期化専用の簡易版。
         /// 中身は汎用版 CreateFromArgs に委譲する。
@@ -577,7 +572,7 @@ namespace SteraCube.SpaceJourney
             int[] permanentBonuses,
             List<ReinEvent> historyEvents,
             List<string> learnedSkillIds,
-            float[] eventFactors = null   // ★追加：ReinSimResult.EventFactors を渡す。null時は仮値で埋める
+            float[] eventFactors = null
         )
         {
             var data = new OneReinSoulData();
@@ -613,16 +608,6 @@ namespace SteraCube.SpaceJourney
             // 才能倍率は「転生につき1回」抽選し、全ステ共通で使う
             float talentFactor = SpaceJourneyStatMath.GetTalentFactor(talent);
 
-            // ★変更：eventFactors を配列で受け取る。null時は仮値（1.3f）で全埋め
-            bool hasEventFactors = eventFactors != null && eventFactors.Length >= 5;
-            data.eventFactors = new float[5];
-            for (int i = 0; i < 5; i++)
-            {
-                data.eventFactors[i] = hasEventFactors
-                    ? eventFactors[i]
-                    : SpaceJourneyConstants.TempInitialReincarnationEventFactor;
-            }
-
             // ステータス生成 or 上書き
             for (int i = 0; i < 5; i++)
             {
@@ -638,8 +623,11 @@ namespace SteraCube.SpaceJourney
                 {
                     float jobMul = jobDef != null ? jobDef.GetMultiplier(kind) : 1f;
                     float baseStat = SpaceJourneyStatMath.CalcBaseStat(data.rank, jobMul);
-                    // ★変更：eventFactors配列＋インデックスで呼ぶ
-                    float potential = SpaceJourneyStatMath.CalcPotentialStat(baseStat, talentFactor, data.eventFactors, i);
+                    // eventFactors が渡された場合はそれを使用、なければ仮の定数を使用
+                    float evFactor = (eventFactors != null && eventFactors.Length > i)
+                        ? eventFactors[i]
+                        : SpaceJourneyConstants.TempInitialReincarnationEventFactor;
+                    float potential = SpaceJourneyStatMath.CalcPotentialStat(baseStat, talentFactor, evFactor);
                     int lv1 = SpaceJourneyStatMath.CalcLv1Stat(potential);
                     data.lv1Stats[i] = lv1;
                 }

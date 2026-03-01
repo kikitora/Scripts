@@ -65,10 +65,10 @@ namespace SteraCube.SpaceJourney
         [Header("敵EXP（ランク別・敵種別の係数）")]
 
         [Tooltip("Rank1 ノーマル敵1体が持つ基礎EXP（Exp0）。")]
-        public int baseEnemyExpRank1 = 20;
+        public int baseEnemyExpRank1 = 30;
 
         [Tooltip("ランクが1上がるごとのEXP倍率。3.0なら Rank+1 で約3倍。")]
-        public float enemyRankExpFactor = 3.0f;
+        public float enemyRankExpFactor = 2.0f;
 
         [Tooltip("エリート敵のEXP倍率（同ランクノーマル敵に対して何倍か）。")]
         public float eliteExpMultiplier = 2.0f;
@@ -87,7 +87,7 @@ namespace SteraCube.SpaceJourney
         public int baseLevelUpExp = 100;
 
         [Tooltip("Lv1〜22 で使用する指数的な増加係数。おおよそ 1.4〜1.5 を想定。")]
-        public float levelUpExpFactor = 1.45f;
+        public float levelUpExpFactor = 1.3f;
 
         [Tooltip("Lv23 必要EXPを Lv22 基準に対してどれだけ重くするかの倍率。")]
         public float level23BonusMultiplier = 2.0f;

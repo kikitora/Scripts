@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 namespace SteraCube.SpaceJourney
@@ -7,14 +8,17 @@ namespace SteraCube.SpaceJourney
     /// 転生シミュレーションの実行エントリーポイント。
     ///
     /// 役割：
-    ///   1. 主魂・守護霊のSoulInstanceからReinSimInputを組み立てる
-    ///   2. ReinSimulator.Run() でシミュを走らせる
-    ///   3. 結果をOneReinSoulData.CreateFromArgs() でデータ化
-    ///   4. 主魂のreinSoulsリストに追加（または上書き）する
+    ///   1. 転生前に「運命のジョブ」を事前抽選する
+    ///   2. 主魂・守護霊のSoulInstanceからReinSimInputを組み立てる
+    ///   3. ReinSimulator.Run() でシミュを走らせる
+    ///   4. 結果をOneReinSoulData.CreateFromArgs() でデータ化
+    ///   5. 主魂のreinSoulsリストに追加（または上書き）する
     ///
     /// 使い方：
+    ///   // 通常転生
     ///   var reinData = ReinSimRunner.Run(mainSoul, guardians, allEvents);
-    ///   // mainSoulのCurrentReinSoulが新しい転生データになっている
+    ///   // 特別チケット転生（傾向無視）
+    ///   var reinData = ReinSimRunner.Run(mainSoul, guardians, allEvents, useSpecialTicket: true);
     /// </summary>
     public static class ReinSimRunner
     {
@@ -24,17 +28,20 @@ namespace SteraCube.SpaceJourney
         /// <param name="mainSoul">転生させる主魂</param>
         /// <param name="guardians">守護霊（最大3体、nullや3体未満でも可）</param>
         /// <param name="allEvents">使用するイベントSOの全リスト</param>
-        /// <param name="jobDef">転生後のジョブ定義（nullの場合は主魂の現在ジョブを引き継ぐ）</param>
+        /// <param name="useSpecialTicket">
+        ///   false（デフォルト）：通常転生。soulTendencyの傾向内からjobEasePercentで抽選。
+        ///   true：特別チケット転生。傾向を無視して全ジョブからjobEasePercentで抽選。
+        /// </param>
         /// <param name="replaceIndex">
         ///   -1（デフォルト）：reinSoulsの末尾に追加する。
-        ///   0以上：指定インデックスのOneReinSoulDataを上書きする（転生スロット選択UI用）。
+        ///   0以上：指定インデックスのOneReinSoulDataを上書きする。
         /// </param>
         /// <returns>生成したOneReinSoulData。失敗時はnull。</returns>
         public static OneReinSoulData Run(
             SoulInstance mainSoul,
             SoulInstance[] guardians,
             IReadOnlyList<ReinLifeEventSO> allEvents,
-            SoulJobDefinition jobDef = null,
+            bool useSpecialTicket = false,
             int replaceIndex = -1)
         {
             // --------------------------------------------------
@@ -46,18 +53,36 @@ namespace SteraCube.SpaceJourney
                 return null;
             }
 
-            if (allEvents == null || allEvents.Count == 0)
+            var db = MasterDatabase.Instance;
+            if (db == null)
             {
-                Debug.LogWarning("[ReinSimRunner] allEvents が空です。イベントなしでシミュを実行します。");
+                Debug.LogError("[ReinSimRunner] MasterDatabase が見つかりません。");
+                return null;
             }
 
+            if (allEvents == null || allEvents.Count == 0)
+                Debug.LogWarning("[ReinSimRunner] allEvents が空です。イベントなしでシミュを実行します。");
+
             // --------------------------------------------------
-            // 2) ジョブ決定：引数優先、なければ主魂の現在ジョブ
+            // 2) 運命のジョブを事前抽選
+            //    通常：soulTendency内からjobEasePercentで抽選
+            //    特別：全ジョブからjobEasePercentで抽選（傾向無視）
             // --------------------------------------------------
-            var finalJobDef = jobDef ?? mainSoul.Job;
-            if (finalJobDef == null)
+            SoulJobDefinition destJob;
+            if (useSpecialTicket)
             {
-                Debug.LogError("[ReinSimRunner] ジョブが決定できません。jobDef を指定してください。");
+                destJob = GetRandomJobFromAll(db);
+                Debug.Log($"[ReinSimRunner] 特別チケット転生：全ジョブから抽選 → {destJob?.JobName}");
+            }
+            else
+            {
+                destJob = db.GetRandomSoulJobByTendency(mainSoul.SoulTendency);
+                Debug.Log($"[ReinSimRunner] 通常転生：{mainSoul.SoulTendency}傾向から抽選 → {destJob?.JobName}");
+            }
+
+            if (destJob == null)
+            {
+                Debug.LogError("[ReinSimRunner] ジョブの抽選に失敗しました。");
                 return null;
             }
 
@@ -65,10 +90,10 @@ namespace SteraCube.SpaceJourney
             // 3) ReinSimInput の組み立て
             // --------------------------------------------------
             var input = ReinSimInput.Build(
-                main:      mainSoul,
+                main: mainSoul,
                 guardians: guardians,
-                jobDef:    finalJobDef,
-                talent:    mainSoul.Talent);
+                jobDef: destJob,
+                talent: mainSoul.Talent);
 
             // --------------------------------------------------
             // 4) シミュ実行
@@ -76,7 +101,6 @@ namespace SteraCube.SpaceJourney
             var result = ReinSimulator.Run(input, allEvents ?? new List<ReinLifeEventSO>());
 
             Debug.Log($"[ReinSimRunner] シミュ完了: FinalRank={result.FinalRank}, " +
-                      $"EventFactors=[{string.Join(", ", result.EventFactors):F2}], " +
                       $"Skills={result.LearnedSkillIds.Count}件, " +
                       $"Events={result.HistoryEvents.Count}件");
 
@@ -84,26 +108,113 @@ namespace SteraCube.SpaceJourney
             // 5) OneReinSoulData の生成
             // --------------------------------------------------
             var reinData = OneReinSoulData.CreateFromArgs(
-                rank:             result.FinalRank,
-                growthType:       mainSoul.GrowthType,
-                jobDef:           finalJobDef,
-                talent:           mainSoul.Talent,
-                title:            null,        // jobDefの名前が自動で入る
-                level:            1,
-                lv1Stats:         null,        // eventFactorsから自動計算
-                growthTargets:    null,        // ランダム生成
-                permanentBonuses: null,        // 0クリア
-                historyEvents:    result.HistoryEvents,
-                learnedSkillIds:  result.LearnedSkillIds,
-                eventFactors:     result.EventFactors  // ★シミュ結果を反映
+                rank: result.FinalRank,
+                growthType: mainSoul.GrowthType,
+                jobDef: destJob,
+                talent: mainSoul.Talent,
+                title: null,
+                level: 1,
+                lv1Stats: null,
+                growthTargets: null,
+                permanentBonuses: null,
+                historyEvents: result.HistoryEvents,
+                learnedSkillIds: result.LearnedSkillIds,
+                eventFactors: result.EventFactors
             );
 
             // --------------------------------------------------
-            // 6) 主魂の reinSouls に書き込む
+            // 6) デバッグ出力
+            // --------------------------------------------------
+            DebugPrint(mainSoul, destJob, result, reinData);
+
+            // --------------------------------------------------
+            // 7) 主魂の reinSouls に書き込む
             // --------------------------------------------------
             ApplyToSoul(mainSoul, reinData, replaceIndex);
 
             return reinData;
+        }
+
+        // ============================================================
+        // 内部：全ジョブからjobEasePercentで重み付き抽選
+        // ============================================================
+        private static SoulJobDefinition GetRandomJobFromAll(MasterDatabase db)
+        {
+            var jobs = db.SoulJobDefinitions;
+            if (jobs == null || jobs.Length == 0) return null;
+
+            int total = 0;
+            foreach (var j in jobs)
+            {
+                if (j != null) total += Mathf.Max(0, j.JobEasePercent);
+            }
+
+            if (total <= 0)
+                return jobs[UnityEngine.Random.Range(0, jobs.Length)];
+
+            int r = UnityEngine.Random.Range(0, total);
+            foreach (var j in jobs)
+            {
+                if (j == null) continue;
+                int w = Mathf.Max(0, j.JobEasePercent);
+                if (r < w) return j;
+                r -= w;
+            }
+
+            return jobs[jobs.Length - 1];
+        }
+
+        // ============================================================
+        // 内部：デバッグ出力
+        // ============================================================
+        private static void DebugPrint(
+            SoulInstance soul,
+            SoulJobDefinition job,
+            ReinSimResult simResult,
+            OneReinSoulData reinData)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== 転生シミュレーション結果 ===");
+            sb.AppendLine($"ジョブ    : {job.JobName}（{soul.SoulTendency}系）");
+            sb.AppendLine($"才能      : {soul.Talent}");
+            sb.AppendLine($"到達ランク: {simResult.FinalRank}");
+            sb.AppendLine();
+
+            sb.AppendLine("--- Lv1 ステータス ---");
+            string[] statNames = { "AT ", "DF ", "AGI", "MAT", "MDF" };
+            StatKind[] kinds = { StatKind.AT, StatKind.DF, StatKind.AGI, StatKind.MAT, StatKind.MDF };
+            for (int i = 0; i < 5; i++)
+            {
+                float evFactor = simResult.EventFactors[i];
+                int ptApprox = Mathf.RoundToInt((evFactor - 1.0f) / 0.8f * 40f);
+                int lv1 = reinData.GetSoulStat(kinds[i]);
+                sb.AppendLine($"  {statNames[i]}: {lv1,4}  (eventFactor={evFactor:F3}x / ~{ptApprox}pt)");
+            }
+            sb.AppendLine();
+
+            if (simResult.LearnedSkillIds.Count > 0)
+            {
+                sb.AppendLine("--- 習得スキル ---");
+                foreach (var sk in simResult.LearnedSkillIds)
+                    sb.AppendLine($"  {sk}");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("--- 転生来歴 ---");
+            foreach (var ev in simResult.HistoryEvents)
+            {
+                string tag = ev.EventType switch
+                {
+                    ReinEventType.RankUp => "[↑]",
+                    ReinEventType.Happy => "[★]",
+                    ReinEventType.Sad => "[▼]",
+                    ReinEventType.JobChange => "[J]",
+                    _ => "   "
+                };
+                sb.AppendLine($"  {ev.Age,3}歳 {tag} {ev.Text}");
+            }
+
+            Debug.Log(sb.ToString());
         }
 
         // ============================================================

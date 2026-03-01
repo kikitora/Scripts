@@ -14,14 +14,19 @@ namespace SteraCube.SpaceJourney
     public class ReinSimInput
     {
         // 主魂・守護霊のステータス（AT=0,DF=1,AGI=2,MAT=3,MDF=4）
-        public readonly int[] MainStats   = new int[5]; // 主魂のソウルステ
+        public readonly int[] MainStats = new int[5]; // 主魂のソウルステ
         public readonly int[][] HalfStats = new int[3][]; // 守護霊[0〜2]のソウルステ（nullの枠は不在）
 
         // 転生後のベース情報
-        public readonly int   Rank;
+        public readonly int Rank;
         public readonly GrowthType GrowthType;
         public readonly SoulJobDefinition JobDef;
         public readonly TalentRank Talent;
+
+        /// <summary>
+        /// これまでの転生回数。転生回数ボーナスに使う。
+        /// </summary>
+        public readonly int ReinCount;
 
         /// <summary>
         /// SoulInstanceから直接組み立てるファクトリ。
@@ -41,7 +46,8 @@ namespace SteraCube.SpaceJourney
                 main.Rank,
                 main.GrowthType,
                 jobDef,
-                talent);
+                talent,
+                main.ReinSouls.Count);
             return input;
         }
 
@@ -51,14 +57,16 @@ namespace SteraCube.SpaceJourney
             int rank,
             GrowthType growthType,
             SoulJobDefinition jobDef,
-            TalentRank talent)
+            TalentRank talent,
+            int reinCount)
         {
-            MainStats  = mainStats;
-            HalfStats  = halfStats;
-            Rank       = rank;
+            MainStats = mainStats;
+            HalfStats = halfStats;
+            Rank = rank;
             GrowthType = growthType;
-            JobDef     = jobDef;
-            Talent     = talent;
+            JobDef = jobDef;
+            Talent = talent;
+            ReinCount = reinCount;
         }
 
         private static int[] GetStats(SoulInstance soul)
@@ -102,7 +110,7 @@ namespace SteraCube.SpaceJourney
         /// <summary>0歳時の転生内ステータス割合（20%スタート）</summary>
         private const float AgeStatusStartRate = 0.20f;
         /// <summary>この年齢でmaxに達する</summary>
-        private const int   AgeStatusMaxAge    = 30;
+        private const int AgeStatusMaxAge = 30;
 
         // --------------------------------------------------------
         // 主40%・守護霊各20%の合成最大値（シミュ全期間で固定）
@@ -119,7 +127,9 @@ namespace SteraCube.SpaceJourney
         // eventFactors（最終ソウルステに影響）
         // イベント選択肢のstatEffectsで加算される。初期値1.0f。
         // --------------------------------------------------------
-        public readonly float[] EventFactors = new float[5];
+        // eventFactors：ポイント積み上げ式（int）
+        // 変換：1.0 + points / 40.0 * 0.8 → 上限40pt=1.8x
+        public readonly int[] EventFactors = new int[5];
 
         // --------------------------------------------------------
         // フラグ管理（SO参照で管理するため文字列IDは不要）
@@ -130,17 +140,40 @@ namespace SteraCube.SpaceJourney
         /// <summary>再発不可になったイベントSO（1回起きたら終わり）</summary>
         public readonly HashSet<ReinLifeEventSO> EndedEvents = new();
 
+        /// <summary>取得済みライフタグ（婚活経験あり・結婚済みなど）</summary>
+        public readonly HashSet<string> AcquiredLifeTags = new();
+
         // --------------------------------------------------------
         // 転生内のランク・ジョブ
         // --------------------------------------------------------
-        public int CurrentRank { get; set; } = 1;
+        /// <summary>
+        /// 転生内の現在ランク。
+        /// 初期値：max(1, input.Rank - 1)（前の転生ランクより1下からスタート）
+        /// </summary>
+        public int CurrentRank { get; set; }
+
+        /// <summary>
+        /// この値未満のランクには毎年自動でステップアップする（保証ライン）。
+        /// = input.Rank - 1（主の前転生ランクと同じランクまでは保証）
+        /// </summary>
+        public int GuaranteedRankUpTo { get; private set; }
+
         public SoulJobDefinition CurrentJob { get; private set; }
+
+        /// <summary>
+        /// このソウルの運命のジョブ（転生開始時に確定、シミュ全期間で固定）。
+        /// イベントの職業タグチェックに使う。
+        /// </summary>
+        public SoulJobDefinition DestinyJob { get; private set; }
+
+        /// <summary>転生回数（SpaceJourneyCoreTypesの定数でボーナス計算に使う）</summary>
+        public int ReinCount { get; private set; }
 
         // --------------------------------------------------------
         // 結果の蓄積
         // --------------------------------------------------------
-        public readonly List<string>   LearnedSkillIds = new();
-        public readonly List<ReinEvent> HistoryEvents  = new();
+        public readonly List<string> LearnedSkillIds = new();
+        public readonly List<ReinEvent> HistoryEvents = new();
 
         // --------------------------------------------------------
         // ランクアップ条件（ジョブごとの各ステ閾値 × rank）
@@ -151,8 +184,7 @@ namespace SteraCube.SpaceJourney
         // --------------------------------------------------------
         // EventFactor上限
         // --------------------------------------------------------
-        private const float EventFactorMax = 1.5f;
-        private const float EventFactorMin = 0.8f;
+        private const int EventFactorPtMax = 40; // 40pt = 1.8x
 
         // ============================================================
         // 初期化
@@ -160,6 +192,13 @@ namespace SteraCube.SpaceJourney
         public ReinSimContext(ReinSimInput input)
         {
             CurrentJob = input.JobDef;
+            DestinyJob = input.JobDef;
+            ReinCount = input.ReinCount;
+
+            // workingRankは前の転生ランク-1からスタート（最低1）
+            CurrentRank = Mathf.Max(1, input.Rank - 1);
+            // 主のランク-1まで保証ステップアップ（同ランクまでは確実に上がる）
+            GuaranteedRankUpTo = Mathf.Max(1, input.Rank - 1);
 
             // --------------------------------------------------
             // MaxStats計算：主×40% + 守護霊×20% ずつ
@@ -179,17 +218,12 @@ namespace SteraCube.SpaceJourney
             // EventFactors初期値：1.0f
             // --------------------------------------------------
             for (int i = 0; i < 5; i++)
-                EventFactors[i] = 1.0f;
+                EventFactors[i] = 0; // 0pt = 1.0x（変換はReinSimResultで行う）
 
             // --------------------------------------------------
             // NowStatsを0歳で初期化
             // --------------------------------------------------
             UpdateNowStats(0);
-
-            // --------------------------------------------------
-            // ランクアップ要件をジョブ定義から生成
-            // --------------------------------------------------
-            BuildRankRequirements();
         }
 
         // ============================================================
@@ -214,38 +248,29 @@ namespace SteraCube.SpaceJourney
         }
 
         // ============================================================
-        // ランクアップ判定
-        // 全ステがjob閾値×(rank+1)を超えていればtrue
+        // ランクアップ
         // ============================================================
-        public bool CanRankUp()
-        {
-            if (CurrentRank >= 8) return false; // 旧コードのランク上限
-
-            int nextRank = CurrentRank + 1;
-            for (int i = 0; i < 5; i++)
-            {
-                if (NowStats[i] < _rankRequirements[i] * nextRank)
-                    return false;
-            }
-            return true;
-        }
-
         public void DoRankUp()
         {
-            CurrentRank++;
+            CurrentRank = Mathf.Min(CurrentRank + 1, SpaceJourneyConstants.MaxSoulJobRank);
         }
 
         // ============================================================
         // EventFactorの加算（上下限クランプあり）
         // ============================================================
-        public void AddEventFactor(int statIdx, float delta)
+        /// <summary>イベントポイントを加算（0〜EventFactorPtMax でクランプ）</summary>
+        public void AddEventFactor(int statIdx, int points)
         {
             if (statIdx < 0 || statIdx >= 5) return;
             EventFactors[statIdx] = Mathf.Clamp(
-                EventFactors[statIdx] + delta,
-                EventFactorMin,
-                EventFactorMax);
+                EventFactors[statIdx] + points,
+                0,
+                EventFactorPtMax);
         }
+
+        /// <summary>ポイントを倍率に変換（外部参照用）。0pt=1.0x、40pt=1.8x</summary>
+        public static float PtToMultiplier(int pt)
+            => 1.0f + pt / 40f * 0.8f;
 
         // ============================================================
         // スキル習得（重複なし）
@@ -257,31 +282,7 @@ namespace SteraCube.SpaceJourney
             if (!string.IsNullOrEmpty(id) && !LearnedSkillIds.Contains(id))
                 LearnedSkillIds.Add(id);
         }
-
-        // ============================================================
-        // 内部：ランクアップ要件テーブル構築
-        // jobDefのGetMultiplier × FIRST_STATUSで基本閾値を作る
-        // ============================================================
-        private const int RANK_BASE = 20; // 旧コードのRankStatusの最小値に相当
-
-        private void BuildRankRequirements()
-        {
-            // 旧コードではjobごとに int[5]{AT閾値, MAT閾値, DF閾値, MDF閾値, AGI閾値} を持っていた
-            // 新設計ではSoulJobDefinition.GetMultiplier(kind)×RANK_BASEで近似する
-            if (CurrentJob == null)
-            {
-                for (int i = 0; i < 5; i++) _rankRequirements[i] = RANK_BASE;
-                return;
-            }
-
-            StatKind[] order = { StatKind.AT, StatKind.DF, StatKind.AGI, StatKind.MAT, StatKind.MDF };
-            for (int i = 0; i < 5; i++)
-            {
-                float mul = CurrentJob.GetMultiplier(order[i]);
-                _rankRequirements[i] = Mathf.RoundToInt(RANK_BASE * mul);
-            }
-        }
-    }
+    } // end ReinSimContext
 
     // ================================================================
     // ReinSimResult：シミュレーション結果
@@ -296,6 +297,7 @@ namespace SteraCube.SpaceJourney
         /// 各ステのeventFactor（AT=0,DF=1,AGI=2,MAT=3,MDF=4）。
         /// CalcPotentialStat に渡してLv1ステを決める。
         /// </summary>
+        /// <summary>変換済みEventFactor倍率（1.0〜1.8x）。CalcPotentialStatに渡す。</summary>
         public readonly float[] EventFactors;
 
         /// <summary>転生内で到達したランク</summary>
@@ -309,10 +311,13 @@ namespace SteraCube.SpaceJourney
 
         public ReinSimResult(ReinSimContext ctx)
         {
-            EventFactors    = (float[])ctx.EventFactors.Clone();
-            FinalRank       = ctx.CurrentRank;
+            // int pt → float 倍率に変換してから格納
+            EventFactors = new float[5];
+            for (int i = 0; i < 5; i++)
+                EventFactors[i] = ReinSimContext.PtToMultiplier(ctx.EventFactors[i]);
+            FinalRank = ctx.CurrentRank;
             LearnedSkillIds = new List<string>(ctx.LearnedSkillIds);
-            HistoryEvents   = new List<ReinEvent>(ctx.HistoryEvents);
+            HistoryEvents = new List<ReinEvent>(ctx.HistoryEvents);
         }
     }
 
@@ -330,14 +335,67 @@ namespace SteraCube.SpaceJourney
     /// </summary>
     public static class ReinSimulator
     {
-        private const int MaxAge    = 101; // 0〜101歳
-        private const int RankUpMaxAge = 44; // 旧コード：age < 45でのみランクアップ判定
+        private const int MaxAge = 101; // 0〜101歳
+
+        // ランクアップ閾値計算に使うバランス定数（RankUpEvents.json生成時と同値）
+        private const float RankBaseStatPerRank = 0.4f;  // SoulJobRankExpPerRank相当
+        private const float GrowthNormal = 6.25f;
+        private const float GrowthPower = 1.0f;
+        private const int StatMaxLevel = 25;
+        private static readonly int[] NormalLevels = { 4, 6, 7, 9, 11, 13, 15, 17, 19, 21 };
+        private static readonly float[] RankBaseStats =
+            { 45,55,65,75,85,95,105,115,125,135 };
+        private static readonly float TalentMidMul = (1.10f + 1.24f) / 2f; // C人材中間値
 
         /// <summary>
-        /// シミュレーションを実行し結果を返す。
+        /// ランクアップイベントのrequireStatsを動的に計算する。
+        /// SOには持たせず、ジョブ定義から毎回算出する。
         /// </summary>
-        /// <param name="input">主魂・守護霊のステータス等の入力</param>
-        /// <param name="allEvents">使用するイベントSOの全リスト</param>
+        private static bool MeetsRankUpStatRequirements(
+            ReinSimContext ctx, int rankIndex)
+        {
+            var job = ctx.DestinyJob;
+            if (job == null) return true;
+
+            float[] muls = job.GetStatMultipliers(); // AT,DF,AGI,MAT,MDF
+
+            // 難易度設定
+            int topN;
+            int targetLv;
+            switch (job.RankUpDifficulty)
+            {
+                case RankUpDifficulty.Easy:
+                    topN = 2;
+                    targetLv = NormalLevels[rankIndex];
+                    break;
+                case RankUpDifficulty.Hard:
+                    topN = 4;
+                    targetLv = NormalLevels[rankIndex] + 2;
+                    break;
+                default: // Medium
+                    topN = 4;
+                    targetLv = NormalLevels[rankIndex];
+                    break;
+            }
+
+            // stat倍率の高い上位N個を対象に
+            int[] order = { 0, 1, 2, 3, 4 };
+            System.Array.Sort(order, (a, b) => muls[b].CompareTo(muls[a]));
+
+            // 成長係数
+            float s = (targetLv - 1f) / (StatMaxLevel - 1f);
+            float growthFactor = 1f + (GrowthNormal - 1f) * Mathf.Pow(s, GrowthPower);
+
+            for (int i = 0; i < topN; i++)
+            {
+                int si = order[i];
+                float lv1Stat = RankBaseStats[rankIndex] * muls[si] * TalentMidMul * 0.1f;
+                int threshold = Mathf.RoundToInt(lv1Stat * growthFactor);
+                if (ctx.NowStats[si] < threshold) return false;
+            }
+            return true;
+        }
+
         public static ReinSimResult Run(
             ReinSimInput input,
             IReadOnlyList<ReinLifeEventSO> allEvents)
@@ -349,40 +407,22 @@ namespace SteraCube.SpaceJourney
                 // 1) 転生内ステータスを年齢に応じて更新
                 ctx.UpdateNowStats(age);
 
-                // 2) ランクアップ判定（45歳未満のみ）
-                if (age < RankUpMaxAge)
-                    TryRankUp(ctx, age);
+                // 2) 保証ステップアップ：currentRank < guaranteedRankUpTo なら毎年+1
+                if (ctx.CurrentRank < ctx.GuaranteedRankUpTo)
+                {
+                    ctx.DoRankUp();
+                    ctx.HistoryEvents.Add(new ReinEvent(
+                        age,
+                        $"ランク{ctx.CurrentRank}に到達した。（保証）",
+                        ReinEventType.RankUp));
+                }
 
-                // 3) 各イベントSO処理
+                // 3) 各イベントSO処理（ランクアップイベントもここで処理）
                 foreach (var ev in allEvents)
                     TryOccurEvent(ctx, ev, age);
             }
 
             return new ReinSimResult(ctx);
-        }
-
-        // ============================================================
-        // ランクアップ処理
-        // ============================================================
-        private static void TryRankUp(ReinSimContext ctx, int age)
-        {
-            if (!ctx.CanRankUp()) return;
-
-            // ランクアップ成否の確率（旧コードのRankUpTest参照）
-            float rate;
-            // 旧コードでは条件を全部満たしている場合のみrateが設定された
-            // ここでは簡略化：条件を満たしていれば一定確率でランクアップ
-            rate = Mathf.Clamp01(0.3f + ctx.CurrentRank * 0.05f);
-
-            if (UnityEngine.Random.value > rate) return;
-
-            ctx.DoRankUp();
-
-            // 来歴に記録
-            ctx.HistoryEvents.Add(new ReinEvent(
-                age,
-                $"ランク{ctx.CurrentRank}に到達した。",
-                ReinEventType.RankUp));
         }
 
         // ============================================================
@@ -399,6 +439,31 @@ namespace SteraCube.SpaceJourney
             // 再発不可
             if (ctx.EndedEvents.Contains(ev)) return;
 
+            // 職業タグチェック：タグあり＋不一致なら発生しない
+            if (!ev.MatchesJob(ctx.DestinyJob)) return;
+
+            // ランク・ステータス前提条件チェック
+            if (!ev.MeetsPrerequisites(ctx.CurrentRank, ctx.NowStats)) return;
+            if (!ev.MeetsLifeTagConditions(ctx.AcquiredLifeTags)) return;
+
+            // ランクアップイベントの場合：動的閾値チェック
+            // SOにrequireStatsAndを持たせず、ジョブ定義から毎回計算
+            if (ev.Options != null && ev.Options.Count > 0 && ev.Options[0].IsRankUp)
+            {
+                // ランクアップイベントはrelatedJobが一致している必要がある
+                if (ev.RelatedJobs != null && ev.RelatedJobs.Count > 0)
+                {
+                    bool jobMatch = false;
+                    foreach (var j in ev.RelatedJobs)
+                        if (j == ctx.DestinyJob) { jobMatch = true; break; }
+                    if (!jobMatch) return;
+                }
+
+                // 現在ランク（0始まり）で閾値計算
+                int rankIdx = Mathf.Clamp(ctx.CurrentRank - 1, 0, 8);
+                if (!MeetsRankUpStatRequirements(ctx, rankIdx)) return;
+            }
+
             // requires：前提イベントが全部発生済みでないとダメ
             foreach (var req in ev.RequiresEvents)
             {
@@ -413,8 +478,12 @@ namespace SteraCube.SpaceJourney
                     return;
             }
 
-            // 出現確率判定（baseWeightを確率として扱う。0〜1推奨）
-            if (UnityEngine.Random.value >= ev.BaseWeight) return;
+            // 職業一致ボーナスを加算した出現重みで判定
+            float weight = ev.BaseWeight;
+            if (ev.HasJobTag)
+                weight += ev.JobMatchBonus;
+
+            if (UnityEngine.Random.value >= weight) return;
 
             // 選択肢を重み付き抽選
             var option = ChooseOption(ctx, ev);
@@ -480,8 +549,8 @@ namespace SteraCube.SpaceJourney
             if (option.IsRankUp)
             {
                 ctx.DoRankUp();
-                if (option.RankUpSkill != null)
-                    ctx.LearnSkill(option.RankUpSkill);
+                foreach (var skill in option.RankUpSkills)
+                    if (skill != null) ctx.LearnSkill(skill);
 
                 ctx.HistoryEvents.Add(new ReinEvent(
                     age,
@@ -497,8 +566,16 @@ namespace SteraCube.SpaceJourney
             }
 
             // スキル習得（ランクアップ以外）
-            if (option.GrantSkill != null)
-                ctx.LearnSkill(option.GrantSkill);
+            foreach (var skill in option.GrantSkills)
+                if (skill != null) ctx.LearnSkill(skill);
+
+            // ライフタグ付与（イベントSO側）
+            foreach (var tag in ev.GrantsLifeTags)
+                ctx.AcquiredLifeTags.Add(tag);
+
+            // ライフタグ付与（選択肢側）
+            foreach (var tag in option.GrantsLifeTags)
+                ctx.AcquiredLifeTags.Add(tag);
 
             // 発生済みフラグ登録
             ctx.OccurredEvents.Add(ev);

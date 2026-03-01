@@ -52,6 +52,9 @@ namespace SteraCube.SpaceJourney
         // ソウルレベルの上限（仕様書 8章）
         public const int MaxSoulLevel = 25;
 
+        // ■ソウルジョブランク上限
+        public const int MaxSoulJobRank = 10;
+
         // 「通常カーブ」として指数成長させるレベル帯（Lv1〜22）
         public const int LevelUpExpNormalMaxLevel = 22;
 
@@ -60,7 +63,7 @@ namespace SteraCube.SpaceJourney
 
         // Lvごとの必要EXP増加係数（1〜22用）
         // 実効倍率は 1.4〜1.5 の中間くらいを狙って 1.45f にしている（後でBalance調整可）
-        public const float LevelUpExpFactor = 1.45f;
+        public const float LevelUpExpFactor = 1.3f;
 
         // Lv23〜25 の「同じ指数カーブ＋ボーナス倍率」用
         public const float LevelUpExpBonusLv23 = 2.0f;
@@ -74,7 +77,7 @@ namespace SteraCube.SpaceJourney
         public const float SoulJobExpMultiplierVeryHard = 1.8f;
 
         // ソウルジョブランク1段階ごとの必要EXP増加率（+30%）
-        public const float SoulJobRankExpPerRank = 0.3f;
+        public const float SoulJobRankExpPerRank = 0.4f;
 
         // ダメージ揺れ（±10%）
         public const float DamageRandomMinFactor = 0.90f;
@@ -871,6 +874,18 @@ namespace SteraCube.SpaceJourney
         Sad,
         RankUp,
         JobChange
+    }
+
+
+    /// <summary>
+    /// ランクアップ難易度。SoulJobDefinitionに設定し、
+    /// ReinSimの動的閾値計算で使用する。
+    /// </summary>
+    public enum RankUpDifficulty
+    {
+        Easy,   // jobEasePercent=18：上位2statのみ判定、通常Lv
+        Medium, // jobEasePercent=12：上位4statで判定、通常Lv
+        Hard,   // jobEasePercent= 4：上位4statで判定、目標Lv+2
     }
     #endregion
 

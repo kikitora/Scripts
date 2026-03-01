@@ -64,6 +64,10 @@ namespace SteraCube.SpaceJourney
 
         [SerializeField] private RaceDefinition[] raceDefinitions;
 
+        [Header("━━━━━━━━━━ 転生関係 ━━━━━━━━━━")]
+        [Header("転生イベント定義リスト")]
+        [SerializeField] private ReinLifeEventSO[] reinLifeEvents;
+
         // ※ WeaponDefinition / SkillDefinition の登録欄はここには不要。
         //   各 BodyJobDefinition の baseSkills / weaponCandidates に直接 SO を登録すること。
 
@@ -150,6 +154,7 @@ namespace SteraCube.SpaceJourney
         public int RandomNameMaleCount => s_randomNamesMale != null ? s_randomNamesMale.Length : 0;
         public int RandomNameFemaleCount => s_randomNamesFemale != null ? s_randomNamesFemale.Length : 0;
         public int RandomNameUnknownCount => s_randomNamesNeutral != null ? s_randomNamesNeutral.Length : 0;
+        public ReinLifeEventSO[] ReinLifeEvents => reinLifeEvents;
 
         // ░░░░░░░░░░ 共通ヘルパ ░░░░░░░░░░
 

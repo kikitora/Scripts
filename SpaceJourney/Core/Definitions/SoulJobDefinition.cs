@@ -35,6 +35,12 @@ namespace SteraCube.SpaceJourney
         [SerializeField, Range(0, 100)]
         private int jobEasePercent = 50;
 
+        [Header("ランクアップ難易度")]
+        [Tooltip("Easy=上位2statで判定 / Medium=上位4stat / Hard=上位4stat+目標Lv+2\n" +
+                 "jobEasePercentに合わせて設定（18%→Easy, 12%→Medium, 4%→Hard）")]
+        [SerializeField]
+        private RankUpDifficulty rankUpDifficulty = RankUpDifficulty.Easy;
+
         [Tooltip("このソウルジョブが特定ランクに到達したとき習得するアクティブスキルの一覧（Rank1/4/8 など）")]
         [SerializeField]
         private List<SoulJobSkillSet> skillSets = new List<SoulJobSkillSet>();
@@ -84,6 +90,16 @@ namespace SteraCube.SpaceJourney
         /// 通常は Rank1 / Rank4 / Rank8 の 3 件を登録する。
         /// </summary>
         public IReadOnlyList<SoulJobSkillSet> SkillSets => skillSets;
+
+        /// <summary>ランクアップ難易度（ReinSimの動的閾値計算に使用）</summary>
+        public RankUpDifficulty RankUpDifficulty => rankUpDifficulty;
+
+        /// <summary>
+        /// stat倍率を配列で返す（AT=0, DF=1, AGI=2, MAT=3, MDF=4）。
+        /// ReinSimのランクアップ閾値動的計算に使用。
+        /// </summary>
+        public float[] GetStatMultipliers()
+            => new[] { atMultiplier, dfMultiplier, agiMultiplier, matMultiplier, mdfMultiplier };
 
     }
 }

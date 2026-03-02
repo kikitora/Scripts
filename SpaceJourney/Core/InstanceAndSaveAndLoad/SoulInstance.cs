@@ -82,6 +82,22 @@ namespace SteraCube.SpaceJourney
         /// インスタンスIDが空なら一意なIDを割り当て、WorldStateRuntime が動作していれば
         /// CurrentWorld.ExSouls にこのソウルを登録する。
         /// </summary>
+
+        /// <summary>転生データを末尾に追加する。</summary>
+        public void AddReinSoul(OneReinSoulData data)
+        {
+            if (data == null) return;
+            if (reinSouls == null) reinSouls = new System.Collections.Generic.List<OneReinSoulData>();
+            reinSouls.Add(data);
+        }
+
+        /// <summary>指定インデックスの転生データを上書きする。</summary>
+        public void ReplaceReinSoul(int index, OneReinSoulData data)
+        {
+            if (data == null || reinSouls == null) return;
+            if (index < 0 || index >= reinSouls.Count) return;
+            reinSouls[index] = data;
+        }
         public void EnsureInstanceId()
         {
             // まだ ID が空ならフォールバックとして一意なIDを発行
@@ -143,8 +159,8 @@ namespace SteraCube.SpaceJourney
         /// <summary>
         /// ランク + 傾向だけ指定して Soul を生成する。SoulFactory.Create() に委譲。
         /// </summary>
-        public static SoulInstance CreateRandomInitialSoul(int rank, SoulJobTendency soulTendency)
-            => SoulFactory.Create(rank: rank, soulTendency: soulTendency);
+        public static SoulInstance CreateRandomInitialSoul(int rank, SoulJobTendency soulTendency, bool registerToWorld = true)
+            => SoulFactory.Create(rank: rank, soulTendency: soulTendency, registerToWorld: registerToWorld);
 
         /// <summary>
         /// フル引数版。null / None = ランダム。SoulFactory.Create() に委譲。
@@ -345,29 +361,6 @@ namespace SteraCube.SpaceJourney
         }
 
         public IReadOnlyList<OneReinSoulData> ReinSouls => reinSouls;
-
-        /// <summary>転生データを末尾に追加する。</summary>
-        public void AddReinSoul(OneReinSoulData data)
-        {
-            if (data == null) return;
-            reinSouls ??= new List<OneReinSoulData>();
-            reinSouls.Add(data);
-            selectedReinIndex = reinSouls.Count - 1;
-        }
-
-        /// <summary>指定インデックスの転生データを上書きする。</summary>
-        public void ReplaceReinSoul(int index, OneReinSoulData data)
-        {
-            if (data == null) return;
-            reinSouls ??= new List<OneReinSoulData>();
-            if (index < 0 || index >= reinSouls.Count)
-            {
-                Debug.LogWarning($"[SoulInstance] ReplaceReinSoul: index {index} は範囲外です。末尾に追加します。");
-                AddReinSoul(data);
-                return;
-            }
-            reinSouls[index] = data;
-        }
 
         public int SelectedReinIndex
         {
@@ -614,6 +607,11 @@ namespace SteraCube.SpaceJourney
                 // ★ AT/DF/AGI/MAT/MDF を 0..4 に対応させたいので、+1 してキャスト
                 StatKind kind = (StatKind)(i + 1);
 
+                // 転生イベント補正：eventFactorsが渡されていればstat別倍率、なければ仮定数
+                float eventFactor = (eventFactors != null && eventFactors.Length > i)
+                    ? eventFactors[i]
+                    : SpaceJourneyConstants.TempInitialReincarnationEventFactor;
+
                 // Lv1 ステータス
                 if (hasCustomLv1)
                 {
@@ -623,11 +621,7 @@ namespace SteraCube.SpaceJourney
                 {
                     float jobMul = jobDef != null ? jobDef.GetMultiplier(kind) : 1f;
                     float baseStat = SpaceJourneyStatMath.CalcBaseStat(data.rank, jobMul);
-                    // eventFactors が渡された場合はそれを使用、なければ仮の定数を使用
-                    float evFactor = (eventFactors != null && eventFactors.Length > i)
-                        ? eventFactors[i]
-                        : SpaceJourneyConstants.TempInitialReincarnationEventFactor;
-                    float potential = SpaceJourneyStatMath.CalcPotentialStat(baseStat, talentFactor, evFactor);
+                    float potential = SpaceJourneyStatMath.CalcPotentialStat(baseStat, talentFactor, eventFactor);
                     int lv1 = SpaceJourneyStatMath.CalcLv1Stat(potential);
                     data.lv1Stats[i] = lv1;
                 }

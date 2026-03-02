@@ -135,7 +135,7 @@ namespace SteraCube.SpaceJourney
         // フラグ管理（SO参照で管理するため文字列IDは不要）
         // --------------------------------------------------------
         /// <summary>発生済みイベントSO（requires判定用）</summary>
-        public readonly HashSet<ReinLifeEventSO> OccurredEvents = new();
+        public readonly HashSet<string> OccurredEvents = new(); // eventId で管理
 
         /// <summary>再発不可になったイベントSO（1回起きたら終わり）</summary>
         public readonly HashSet<ReinLifeEventSO> EndedEvents = new();
@@ -443,8 +443,7 @@ namespace SteraCube.SpaceJourney
             if (!ev.MatchesJob(ctx.DestinyJob)) return;
 
             // ランク・ステータス前提条件チェック
-            if (!ev.MeetsPrerequisites(ctx.CurrentRank, ctx.NowStats)) return;
-            if (!ev.MeetsLifeTagConditions(ctx.AcquiredLifeTags)) return;
+            if (!ev.MeetsPrerequisites(ctx.CurrentRank, ctx.NowStats, ctx.AcquiredLifeTags)) return;
 
             // ランクアップイベントの場合：動的閾値チェック
             // SOにrequireStatsAndを持たせず、ジョブ定義から毎回計算
@@ -465,16 +464,16 @@ namespace SteraCube.SpaceJourney
             }
 
             // requires：前提イベントが全部発生済みでないとダメ
-            foreach (var req in ev.RequiresEvents)
+            foreach (var reqId in ev.RequiresEventIds)
             {
-                if (req != null && !ctx.OccurredEvents.Contains(req))
+                if (!string.IsNullOrEmpty(reqId) && !ctx.OccurredEvents.Contains(reqId))
                     return;
             }
 
             // blockedBy：排他イベントが1つでも発生済みならダメ
-            foreach (var blk in ev.BlockedByEvents)
+            foreach (var blkId in ev.BlockedByEventIds)
             {
-                if (blk != null && ctx.OccurredEvents.Contains(blk))
+                if (!string.IsNullOrEmpty(blkId) && ctx.OccurredEvents.Contains(blkId))
                     return;
             }
 
@@ -578,7 +577,7 @@ namespace SteraCube.SpaceJourney
                 ctx.AcquiredLifeTags.Add(tag);
 
             // 発生済みフラグ登録
-            ctx.OccurredEvents.Add(ev);
+            ctx.OccurredEvents.Add(ev.EventId);
 
             // 再発不可登録
             ctx.EndedEvents.Add(ev);

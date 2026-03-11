@@ -443,23 +443,24 @@ namespace SteraCube.SpaceJourney
 
             float[] muls = job.GetStatMultipliers(); // AT,DF,AGI,MAT,MDF
 
-            // 難易度設定
+            // jobTierからランクUP難易度を導出
+            // 50以上→Easy / 20〜49→Medium / 19以下→Hard
             int topN;
             int targetLv;
-            switch (job.RankUpDifficulty)
+            if (job.JobTier >= 50)
             {
-                case RankUpDifficulty.Easy:
-                    topN = 2;
-                    targetLv = NormalLevels[rankIndex];
-                    break;
-                case RankUpDifficulty.Hard:
-                    topN = 4;
-                    targetLv = NormalLevels[rankIndex] + 2;
-                    break;
-                default: // Medium
-                    topN = 4;
-                    targetLv = NormalLevels[rankIndex];
-                    break;
+                topN = 2;
+                targetLv = NormalLevels[rankIndex];
+            }
+            else if (job.JobTier >= 20)
+            {
+                topN = 4;
+                targetLv = NormalLevels[rankIndex];
+            }
+            else
+            {
+                topN = 4;
+                targetLv = NormalLevels[rankIndex] + 2;
             }
 
             // stat倍率の高い上位N個を対象に

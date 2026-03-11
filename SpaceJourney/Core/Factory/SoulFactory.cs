@@ -218,7 +218,7 @@ namespace SteraCube.SpaceJourney
 
             int totalWeight = 0;
             foreach (var def in jobs)
-                if (def != null) totalWeight += Mathf.Max(0, def.JobEasePercent);
+                if (def != null) totalWeight += Mathf.Max(0, def.JobTier);
 
             if (totalWeight <= 0)
                 return jobs[Random.Range(0, jobs.Length)];
@@ -227,7 +227,7 @@ namespace SteraCube.SpaceJourney
             foreach (var def in jobs)
             {
                 if (def == null) continue;
-                int w = Mathf.Max(0, def.JobEasePercent);
+                int w = Mathf.Max(0, def.JobTier);
                 if (r < w) return def;
                 r -= w;
             }

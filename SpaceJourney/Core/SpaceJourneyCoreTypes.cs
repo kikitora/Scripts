@@ -879,17 +879,6 @@ namespace SteraCube.SpaceJourney
         LifeEnd
     }
 
-
-    /// <summary>
-    /// ランクアップ難易度。SoulJobDefinitionに設定し、
-    /// ReinSimの動的閾値計算で使用する。
-    /// </summary>
-    public enum RankUpDifficulty
-    {
-        Easy,   // 上位2statのみ判定、通常Lv
-        Medium, // 上位4statで判定、通常Lv
-        Hard,   // 上位4statで判定、目標Lv+2
-    }
     #endregion
 
     #endregion

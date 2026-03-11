@@ -229,7 +229,7 @@ namespace SteraCube.SpaceJourney
         }
 
         /// <summary>
-        /// 指定された傾向の中から、jobEasePercent を重みとしてランダムに1件返します。
+        /// 指定された傾向の中から、jobTier を重みとしてランダムに1件返します。
         /// </summary>
         public SoulJobDefinition GetRandomSoulJobByTendency(SoulJobTendency tendency)
         {
@@ -241,7 +241,7 @@ namespace SteraCube.SpaceJourney
             {
                 var def = list[i];
                 if (def == null) continue;
-                int w = Mathf.Max(0, def.JobEasePercent);
+                int w = Mathf.Max(0, def.JobTier);
                 total += w;
             }
 
@@ -253,7 +253,7 @@ namespace SteraCube.SpaceJourney
             {
                 var def = list[i];
                 if (def == null) continue;
-                int w = Mathf.Max(0, def.JobEasePercent);
+                int w = Mathf.Max(0, def.JobTier);
                 if (r < w) return def;
                 r -= w;
             }

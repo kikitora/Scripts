@@ -31,14 +31,9 @@ namespace SteraCube.SpaceJourney
         [Range(0.6f, 1.5f)] public float mdfMultiplier = 1.0f;
 
         [Header("ランク・ソウルジョブスキル")]
-        [Tooltip("このソウルジョブの就きやすさ（0〜100）。高いほど選ばれやすい。")]
+        [Tooltip("このソウルジョブの位・格（0〜100）。高いほど就きやすくランクUPしやすい。\n50以上→Easy / 20〜49→Medium / 19以下→Hard")]
         [SerializeField, Range(0, 100)]
-        private int jobEasePercent = 50;
-
-        [Header("ランクアップ難易度")]
-        [Tooltip("Easy=上位2statで判定、通常Lv / Medium=上位4statで判定、通常Lv / Hard=上位4statで判定、目標Lv+2")]
-        [SerializeField]
-        private RankUpDifficulty rankUpDifficulty = RankUpDifficulty.Medium;
+        private int jobTier = 50;
 
         [Tooltip("このソウルジョブが特定ランクに到達したとき習得するアクティブスキルの一覧（Rank1/4/8 など）")]
         [SerializeField]
@@ -82,7 +77,7 @@ namespace SteraCube.SpaceJourney
         /// このソウルジョブの就きやすさ（0〜100）。高いほど出現しやすい。
         /// 実際の抽選では、この値を重みとして扱う想定。
         /// </summary>
-        public int JobEasePercent => jobEasePercent;
+        public int JobTier => jobTier;
 
         /// <summary>
         /// ランク到達時に習得するソウルジョブスキルの一覧。
@@ -90,8 +85,7 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public IReadOnlyList<SoulJobSkillSet> SkillSets => skillSets;
 
-        /// <summary>ランクアップ難易度（ReinSimの動的閾値計算に使用）</summary>
-        public RankUpDifficulty RankUpDifficulty => rankUpDifficulty;
+
 
         /// <summary>
         /// stat倍率を配列で返す（AT=0, DF=1, AGI=2, MAT=3, MDF=4）。

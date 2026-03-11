@@ -87,7 +87,7 @@ namespace SteraCube.SpaceJourney
             var jobTagMap = BuildJobTagMap(db);
 
             // --------------------------------------------------
-            // 3) ジョブ先行抽選（傾向に合ったジョブをjobEasePercentで重み付き選択）
+            // 3) ジョブ先行抽選（傾向に合ったジョブをjobTierで重み付き選択）
             // --------------------------------------------------
             var selectedJob = SelectJobByTendency(db, mainSoul.SoulTendency);
             if (selectedJob == null)
@@ -188,7 +188,7 @@ namespace SteraCube.SpaceJourney
         }
 
         // ============================================================
-        // 内部：傾向に合ったジョブを jobEasePercent で重み付き抽選（先行抽選方式）
+        // 内部：傾向に合ったジョブを jobTier で重み付き抽選（先行抽選方式）
         // ============================================================
         private static SoulJobDefinition SelectJobByTendency(MasterDatabase db, SoulJobTendency tendency)
         {
@@ -204,8 +204,8 @@ namespace SteraCube.SpaceJourney
                 if (j == null) continue;
                 if (j.Tendency != tendency) continue;
                 candidates.Add(j);
-                // jobEasePercent が公開されている想定。なければ均等重み
-                float w = j.JobEasePercent > 0 ? j.JobEasePercent : 1f;
+                // jobTier が公開されている想定。なければ均等重み
+                float w = j.JobTier > 0 ? j.JobTier : 1f;
                 weights.Add(w);
             }
 

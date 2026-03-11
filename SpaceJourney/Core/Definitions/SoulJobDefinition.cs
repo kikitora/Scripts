@@ -36,10 +36,9 @@ namespace SteraCube.SpaceJourney
         private int jobEasePercent = 50;
 
         [Header("ランクアップ難易度")]
-        [Tooltip("Easy=上位2statで判定 / Medium=上位4stat / Hard=上位4stat+目標Lv+2\n" +
-                 "jobEasePercentに合わせて設定（18%→Easy, 12%→Medium, 4%→Hard）")]
+        [Tooltip("Easy=上位2statで判定、通常Lv / Medium=上位4statで判定、通常Lv / Hard=上位4statで判定、目標Lv+2")]
         [SerializeField]
-        private RankUpDifficulty rankUpDifficulty = RankUpDifficulty.Easy;
+        private RankUpDifficulty rankUpDifficulty = RankUpDifficulty.Medium;
 
         [Tooltip("このソウルジョブが特定ランクに到達したとき習得するアクティブスキルの一覧（Rank1/4/8 など）")]
         [SerializeField]

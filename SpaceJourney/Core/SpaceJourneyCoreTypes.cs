@@ -873,7 +873,10 @@ namespace SteraCube.SpaceJourney
         Happy,
         Sad,
         RankUp,
-        JobChange
+        JobChange,
+        Birth,
+        Shock,
+        LifeEnd
     }
 
 
@@ -883,9 +886,9 @@ namespace SteraCube.SpaceJourney
     /// </summary>
     public enum RankUpDifficulty
     {
-        Easy,   // jobEasePercent=18：上位2statのみ判定、通常Lv
-        Medium, // jobEasePercent=12：上位4statで判定、通常Lv
-        Hard,   // jobEasePercent= 4：上位4statで判定、目標Lv+2
+        Easy,   // 上位2statのみ判定、通常Lv
+        Medium, // 上位4statで判定、通常Lv
+        Hard,   // 上位4statで判定、目標Lv+2
     }
     #endregion
 

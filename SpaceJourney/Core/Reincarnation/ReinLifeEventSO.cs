@@ -68,15 +68,27 @@ namespace SteraCube.SpaceJourney
         [SerializeField, Min(0f)] private float jobMatchBonus = 0.5f;
 
         // ============================================================
+        // ライフタグ重みボーナス
+        // ============================================================
+        [Header("ライフタグ重みボーナス（タグ保有時に出現重みが上乗せされる）")]
+        [Tooltip("AcquiredLifeTagsに一致するタグがあると、その分だけ出現重みが加算される")]
+        [SerializeField] private List<LifeTagWeightBonus> lifeTagWeightBonuses = new();
+
+        // ============================================================
         // SO参照による前提・排他条件
         // ============================================================
         [Header("イベント前提・排他（SO参照）")]
         [SerializeField] private List<string> requiresEventIds = new();
+        [SerializeField] private List<string> requiresPrevYearEventIds = new(); // 前年以前に発火済みが必要
         [SerializeField] private List<string> blockedByEventIds = new();
 
         // ランクアップ用：特定ジョブSOに紐づく
         [Header("紐づくジョブSO（ランクアップイベント用）")]
         [SerializeField] private List<SoulJobDefinition> relatedJobs = new();
+
+        // ID参照によるジョブ絞り込み（relatedJobsのID版。destiny_*イベントなどで使用）
+        [Tooltip("jobIdで指定。relatedJobsと同様に機能する。どちらかに一致すれば通過。")]
+        [SerializeField] private List<string> relatedJobIds = new();
 
         // ============================================================
         // 選択肢
@@ -104,13 +116,28 @@ namespace SteraCube.SpaceJourney
 
         public IReadOnlyList<StatPrerequisite> RequireStatsAnd => requireStatsAnd;
         public IReadOnlyList<string> RequiresEventIds => requiresEventIds;
+        public IReadOnlyList<string> RequiresPrevYearEventIds => requiresPrevYearEventIds;
         public IReadOnlyList<string> BlockedByEventIds => blockedByEventIds;
         public IReadOnlyList<SoulJobDefinition> RelatedJobs => relatedJobs;
+        public IReadOnlyList<string> RelatedJobIds => relatedJobIds;
         public IReadOnlyList<ReinSentenceOption> Options => options;
 
         public bool HasJobTag => hasTendency;
         public SoulJobTendency JobTendency => tendency;
         public float JobMatchBonus => jobMatchBonus;
+        public IReadOnlyList<LifeTagWeightBonus> LifeTagWeightBonuses => lifeTagWeightBonuses;
+
+        /// <summary>保有LifeTagに対応するボーナス重みの合計を返す。</summary>
+        public float CalcLifeTagBonus(HashSet<string> acquiredLifeTags)
+        {
+            if (lifeTagWeightBonuses == null || lifeTagWeightBonuses.Count == 0) return 0f;
+            if (acquiredLifeTags == null) return 0f;
+            float bonus = 0f;
+            foreach (var ltb in lifeTagWeightBonuses)
+                if (!string.IsNullOrEmpty(ltb.LifeTag) && acquiredLifeTags.Contains(ltb.LifeTag))
+                    bonus += ltb.WeightBonus;
+            return bonus;
+        }
 
         // ============================================================
         // ランタイムチェックメソッド
@@ -224,7 +251,31 @@ namespace SteraCube.SpaceJourney
             relatedJobs = jobs ?? new List<SoulJobDefinition>();
             UnityEditor.EditorUtility.SetDirty(this);
         }
+        public void Editor_SetRelatedJobIds(List<string> ids)
+        {
+            relatedJobIds = ids ?? new List<string>();
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
+        public void Editor_SetLifeTagWeightBonuses(List<LifeTagWeightBonus> bonuses)
+        {
+            lifeTagWeightBonuses = bonuses ?? new List<LifeTagWeightBonus>();
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
 #endif
+    }
+
+    // ================================================================
+    // LifeTagWeightBonus：LifeTag保有時の出現重みボーナス
+    // ================================================================
+    [Serializable]
+    public class LifeTagWeightBonus
+    {
+        [Tooltip("このタグを保有していると weightBonus が出現重みに加算される")]
+        [SerializeField] private string lifeTag;
+        [SerializeField, Min(0f)] private float weightBonus = 0.1f;
+
+        public string LifeTag => lifeTag;
+        public float WeightBonus => weightBonus;
     }
 
     // ================================================================
@@ -259,6 +310,10 @@ namespace SteraCube.SpaceJourney
         [Header("付与するライフタグ")]
         [SerializeField] private List<string> grantsLifeTags = new();
 
+        [Header("転生内ステータス即時加算")]
+        [Tooltip("このオプション選択時に転生内ステータスを直接加算する")]
+        [SerializeField] private List<StatBonus> grantsStats = new();
+
         // ============================================================
         // プロパティ
         // ============================================================
@@ -271,6 +326,7 @@ namespace SteraCube.SpaceJourney
         public IReadOnlyList<SkillDefinition> RankUpSkills => rankUpSkills;
         public IReadOnlyList<SkillDefinition> GrantSkills => grantSkills;
         public IReadOnlyList<string> GrantsLifeTags => grantsLifeTags;
+        public IReadOnlyList<StatBonus> GrantsStats => grantsStats;
 
         public float CalcFinalWeight(int[] currentStats)
         {
@@ -364,6 +420,29 @@ namespace SteraCube.SpaceJourney
             if (idx < 0 || nowStats == null || nowStats.Length <= idx) return false;
             return nowStats[idx] >= threshold;
         }
+    }
+
+    // ================================================================
+    // StatBonus：転生内ステータスへの即時加算
+    // ================================================================
+    [Serializable]
+    public class StatBonus
+    {
+        [SerializeField] private StatKind stat = StatKind.AT;
+        [SerializeField, Min(0)] private int value = 0;
+
+        public StatKind Stat => stat;
+        public int Value => value;
+
+        public int StatIndex => stat switch
+        {
+            StatKind.AT => 0,
+            StatKind.DF => 1,
+            StatKind.AGI => 2,
+            StatKind.MAT => 3,
+            StatKind.MDF => 4,
+            _ => -1
+        };
     }
 
     // ================================================================

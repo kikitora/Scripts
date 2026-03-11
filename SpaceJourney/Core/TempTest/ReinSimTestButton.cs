@@ -61,7 +61,6 @@ namespace SteraCube.SpaceJourney
                 mainSoul: mainSoul,
                 guardians: guardians,
                 allEvents: allEvents,
-                useSpecialTicket: false,
                 replaceIndex: -1
             );
 

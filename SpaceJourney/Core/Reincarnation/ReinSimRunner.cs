@@ -8,40 +8,58 @@ namespace SteraCube.SpaceJourney
     /// 転生シミュレーションの実行エントリーポイント。
     ///
     /// 役割：
-    ///   1. 転生前に「運命のジョブ」を事前抽選する
-    ///   2. 主魂・守護霊のSoulInstanceからReinSimInputを組み立てる
+    ///   1. job_*タグ → SoulJobDefinitionのマッピングを構築
+    ///   2. 主魂・守護霊のSoulInstanceからReinSimInputを組み立てる（jobDef=null）
     ///   3. ReinSimulator.Run() でシミュを走らせる
-    ///   4. 結果をOneReinSoulData.CreateFromArgs() でデータ化
-    ///   5. 主魂のreinSoulsリストに追加（または上書き）する
+    ///   4. 人生イベントから自然に確定したジョブを結果から取得
+    ///   5. 結果をOneReinSoulData.CreateFromArgs() でデータ化
+    ///   6. 主魂のreinSoulsリストに追加（または上書き）する
     ///
     /// 使い方：
-    ///   // 通常転生
     ///   var reinData = ReinSimRunner.Run(mainSoul, guardians, allEvents);
-    ///   // 特別チケット転生（傾向無視）
-    ///   var reinData = ReinSimRunner.Run(mainSoul, guardians, allEvents, useSpecialTicket: true);
     /// </summary>
     public static class ReinSimRunner
     {
+        // ============================================================
+        // job_*タグ → jobId のマッピング（arc_*_finalが付与するタグに対応）
+        // ============================================================
+        private static readonly Dictionary<string, string> JobTagToId = new()
+        {
+            { "job_yakuza",        "warrior_yakuza"   },
+            { "job_fraud",         "archer_sagishi"   },
+            { "job_collector",     "lancer_tatekiya"  },
+            { "job_cult",          "mage_kult"        },
+            { "job_fighter",       "warrior_kakutou"  },
+            { "job_golfer",        "archer_golfer"    },
+            { "job_rugby",         "lancer_rugby"     },
+            { "job_researcher",    "mage_kenkyusha"   },
+            { "job_surgeon",       "archer_gekai"     },
+            { "job_lawyer",        "knight_bengoshi"  },
+            { "job_prosecutor",    "knight_kensatu"   },
+            { "job_emt",           "knight_kyumei"    },
+            { "job_bodyguard",     "knight_bodyguard" },
+            { "job_detective",     "knight_keiji"     },
+            { "job_entrepreneur",  "lancer_kigyoka"   },
+            { "job_revolutionary", "lancer_kakumeika" },
+            { "job_adventurer",    "lancer_boukenja"  },
+            { "job_jieitai",       "warrior_jieitai"  },
+            { "job_shobo",         "warrior_shobo"    },
+            { "job_yohei",         "warrior_yohei"    },
+            { "job_karyudo",       "archer_karyudo"   },
+            { "job_kanteishi",     "archer_kanteishi" },
+            { "job_sakka",         "mage_sakka"       },
+            { "job_uranai",        "mage_uranai"      },
+            { "job_artist",        "mage_geijutsu"    },
+        };
+
         /// <summary>
         /// 転生シミュを実行し、結果を主魂のOneReinSoulDataとして追加する。
+        /// ジョブは人生イベントの流れから自然に確定する。
         /// </summary>
-        /// <param name="mainSoul">転生させる主魂</param>
-        /// <param name="guardians">守護霊（最大3体、nullや3体未満でも可）</param>
-        /// <param name="allEvents">使用するイベントSOの全リスト</param>
-        /// <param name="useSpecialTicket">
-        ///   false（デフォルト）：通常転生。soulTendencyの傾向内からjobEasePercentで抽選。
-        ///   true：特別チケット転生。傾向を無視して全ジョブからjobEasePercentで抽選。
-        /// </param>
-        /// <param name="replaceIndex">
-        ///   -1（デフォルト）：reinSoulsの末尾に追加する。
-        ///   0以上：指定インデックスのOneReinSoulDataを上書きする。
-        /// </param>
-        /// <returns>生成したOneReinSoulData。失敗時はnull。</returns>
         public static OneReinSoulData Run(
             SoulInstance mainSoul,
             SoulInstance[] guardians,
             IReadOnlyList<ReinLifeEventSO> allEvents,
-            bool useSpecialTicket = false,
             int replaceIndex = -1)
         {
             // --------------------------------------------------
@@ -64,48 +82,59 @@ namespace SteraCube.SpaceJourney
                 Debug.LogWarning("[ReinSimRunner] allEvents が空です。イベントなしでシミュを実行します。");
 
             // --------------------------------------------------
-            // 2) 運命のジョブを事前抽選
-            //    通常：soulTendency内からjobEasePercentで抽選
-            //    特別：全ジョブからjobEasePercentで抽選（傾向無視）
+            // 2) job_*タグ → SoulJobDefinitionのマッピング構築
             // --------------------------------------------------
-            SoulJobDefinition destJob;
-            if (useSpecialTicket)
+            var jobTagMap = BuildJobTagMap(db);
+
+            // --------------------------------------------------
+            // 3) ジョブ先行抽選（傾向に合ったジョブをjobEasePercentで重み付き選択）
+            // --------------------------------------------------
+            var selectedJob = SelectJobByTendency(db, mainSoul.SoulTendency);
+            if (selectedJob == null)
             {
-                destJob = GetRandomJobFromAll(db);
-                Debug.Log($"[ReinSimRunner] 特別チケット転生：全ジョブから抽選 → {destJob?.JobName}");
+                Debug.LogWarning($"[ReinSimRunner] 傾向 {mainSoul.SoulTendency} に対応するジョブが見つかりません。フォールバックを使用します。");
+                selectedJob = GetFallbackJob(db);
             }
             else
             {
-                destJob = db.GetRandomSoulJobByTendency(mainSoul.SoulTendency);
-                Debug.Log($"[ReinSimRunner] 通常転生：{mainSoul.SoulTendency}傾向から抽選 → {destJob?.JobName}");
-            }
-
-            if (destJob == null)
-            {
-                Debug.LogError("[ReinSimRunner] ジョブの抽選に失敗しました。");
-                return null;
+                Debug.Log($"[ReinSimRunner] ジョブ先行抽選: {selectedJob.JobName}（{mainSoul.SoulTendency}系）");
             }
 
             // --------------------------------------------------
-            // 3) ReinSimInput の組み立て
+            // 4) ReinSimInput の組み立て（先行抽選したジョブを渡す）
             // --------------------------------------------------
             var input = ReinSimInput.Build(
                 main: mainSoul,
                 guardians: guardians,
-                jobDef: destJob,
-                talent: mainSoul.Talent);
+                jobDef: selectedJob,
+                talent: mainSoul.Talent,
+                jobTagToJobDef: jobTagMap);
 
             // --------------------------------------------------
-            // 4) シミュ実行
+            // 5) シミュ実行
             // --------------------------------------------------
             var result = ReinSimulator.Run(input, allEvents ?? new List<ReinLifeEventSO>());
+
+            // --------------------------------------------------
+            // 6) 確定したジョブを取得（先行抽選済みなので通常は一致）
+            // --------------------------------------------------
+            var destJob = result.DestinyJob;
+            if (destJob == null)
+            {
+                destJob = GetFallbackJob(db);
+                Debug.LogWarning($"[ReinSimRunner] ジョブが人生から確定しませんでした。フォールバック: {destJob?.JobName}");
+            }
+            else
+            {
+                Debug.Log($"[ReinSimRunner] ジョブ確定: {destJob.JobName}");
+            }
 
             Debug.Log($"[ReinSimRunner] シミュ完了: FinalRank={result.FinalRank}, " +
                       $"Skills={result.LearnedSkillIds.Count}件, " +
                       $"Events={result.HistoryEvents.Count}件");
 
             // --------------------------------------------------
-            // 5) OneReinSoulData の生成
+            // 7) OneReinSoulData の生成
             // --------------------------------------------------
             var reinData = OneReinSoulData.CreateFromArgs(
                 rank: result.FinalRank,
@@ -123,12 +152,12 @@ namespace SteraCube.SpaceJourney
             );
 
             // --------------------------------------------------
-            // 6) デバッグ出力
+            // 8) デバッグ出力
             // --------------------------------------------------
             DebugPrint(mainSoul, destJob, result, reinData);
 
             // --------------------------------------------------
-            // 7) 主魂の reinSouls に書き込む
+            // 9) 主魂の reinSouls に書き込む
             // --------------------------------------------------
             ApplyToSoul(mainSoul, reinData, replaceIndex);
 
@@ -136,32 +165,72 @@ namespace SteraCube.SpaceJourney
         }
 
         // ============================================================
-        // 内部：全ジョブからjobEasePercentで重み付き抽選
+        // 内部：job_*タグ → SoulJobDefinitionのマップを構築
         // ============================================================
-        private static SoulJobDefinition GetRandomJobFromAll(MasterDatabase db)
+        private static IReadOnlyDictionary<string, SoulJobDefinition> BuildJobTagMap(MasterDatabase db)
+        {
+            var map = new Dictionary<string, SoulJobDefinition>();
+            if (db.SoulJobDefinitions == null) return map;
+
+            foreach (var jobDef in db.SoulJobDefinitions)
+            {
+                if (jobDef == null) continue;
+                foreach (var kv in JobTagToId)
+                {
+                    if (kv.Value == jobDef.JobId)
+                    {
+                        map[kv.Key] = jobDef;
+                        break;
+                    }
+                }
+            }
+            return map;
+        }
+
+        // ============================================================
+        // 内部：傾向に合ったジョブを jobEasePercent で重み付き抽選（先行抽選方式）
+        // ============================================================
+        private static SoulJobDefinition SelectJobByTendency(MasterDatabase db, SoulJobTendency tendency)
         {
             var jobs = db.SoulJobDefinitions;
             if (jobs == null || jobs.Length == 0) return null;
 
-            int total = 0;
-            foreach (var j in jobs)
-            {
-                if (j != null) total += Mathf.Max(0, j.JobEasePercent);
-            }
+            // 傾向一致のジョブだけ抽出
+            var candidates = new List<SoulJobDefinition>();
+            var weights = new List<float>();
 
-            if (total <= 0)
-                return jobs[UnityEngine.Random.Range(0, jobs.Length)];
-
-            int r = UnityEngine.Random.Range(0, total);
             foreach (var j in jobs)
             {
                 if (j == null) continue;
-                int w = Mathf.Max(0, j.JobEasePercent);
-                if (r < w) return j;
-                r -= w;
+                if (j.Tendency != tendency) continue;
+                candidates.Add(j);
+                // jobEasePercent が公開されている想定。なければ均等重み
+                float w = j.JobEasePercent > 0 ? j.JobEasePercent : 1f;
+                weights.Add(w);
             }
 
-            return jobs[jobs.Length - 1];
+            if (candidates.Count == 0) return null;
+
+            float total = 0f;
+            foreach (var w in weights) total += w;
+
+            float rnd = UnityEngine.Random.value * total;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                rnd -= weights[i];
+                if (rnd <= 0f) return candidates[i];
+            }
+            return candidates[candidates.Count - 1];
+        }
+
+        // ============================================================
+        // 内部：フォールバック（アークが完走しなかった場合）
+        // ============================================================
+        private static SoulJobDefinition GetFallbackJob(MasterDatabase db)
+        {
+            var jobs = db.SoulJobDefinitions;
+            if (jobs == null || jobs.Length == 0) return null;
+            return jobs[UnityEngine.Random.Range(0, jobs.Length)];
         }
 
         // ============================================================
@@ -175,7 +244,7 @@ namespace SteraCube.SpaceJourney
         {
             var sb = new StringBuilder();
             sb.AppendLine("=== 転生シミュレーション結果 ===");
-            sb.AppendLine($"ジョブ    : {job.JobName}（{soul.SoulTendency}系）");
+            sb.AppendLine($"ジョブ    : {job?.JobName ?? "未確定"}（{soul.SoulTendency}系）");
             sb.AppendLine($"才能      : {soul.Talent}");
             sb.AppendLine($"到達ランク: {simResult.FinalRank}");
             sb.AppendLine();
@@ -205,13 +274,17 @@ namespace SteraCube.SpaceJourney
             {
                 string tag = ev.EventType switch
                 {
-                    ReinEventType.RankUp => "[↑]",
+                    ReinEventType.Birth => "[誕]",
                     ReinEventType.Happy => "[★]",
-                    ReinEventType.Sad => "[▼]",
-                    ReinEventType.JobChange => "[J]",
+                    ReinEventType.Sad => "[涙]",
+                    ReinEventType.Shock => "[!!]",
+                    ReinEventType.RankUp => "[↑]",
+                    ReinEventType.JobChange => "[転]",
+                    ReinEventType.LifeEnd => "[終]",
                     _ => "   "
                 };
-                sb.AppendLine($"  {ev.Age,3}歳 {tag} {ev.Text}");
+                string ageStr = ev.HideAge ? "      " : $"{ev.Age,3}歳 ";
+                sb.AppendLine($"  {ageStr}{tag} {ev.Text}");
             }
 
             Debug.Log(sb.ToString());

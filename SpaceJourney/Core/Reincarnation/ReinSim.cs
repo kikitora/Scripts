@@ -20,8 +20,14 @@ namespace SteraCube.SpaceJourney
         // 転生後のベース情報
         public readonly int Rank;
         public readonly GrowthType GrowthType;
-        public readonly SoulJobDefinition JobDef;
+        public readonly SoulJobDefinition JobDef; // null = 人生イベントから職業を自然決定
         public readonly TalentRank Talent;
+
+        /// <summary>
+        /// job_*タグ → SoulJobDefinition のマッピング。
+        /// 人生イベントから職業を自然決定するために使う。
+        /// </summary>
+        public readonly IReadOnlyDictionary<string, SoulJobDefinition> JobTagToJobDef;
 
         /// <summary>
         /// これまでの転生回数。転生回数ボーナスに使う。
@@ -31,12 +37,14 @@ namespace SteraCube.SpaceJourney
         /// <summary>
         /// SoulInstanceから直接組み立てるファクトリ。
         /// guardians は null や3体未満でも可（不在分は無視）。
+        /// jobDef は null で可（人生イベントから職業を自然決定する新方式）。
         /// </summary>
         public static ReinSimInput Build(
             SoulInstance main,
             SoulInstance[] guardians,
             SoulJobDefinition jobDef,
-            TalentRank talent)
+            TalentRank talent,
+            IReadOnlyDictionary<string, SoulJobDefinition> jobTagToJobDef = null)
         {
             if (main == null) throw new ArgumentNullException(nameof(main));
 
@@ -47,7 +55,8 @@ namespace SteraCube.SpaceJourney
                 main.GrowthType,
                 jobDef,
                 talent,
-                main.ReinSouls.Count);
+                main.ReinSouls.Count,
+                jobTagToJobDef);
             return input;
         }
 
@@ -58,7 +67,8 @@ namespace SteraCube.SpaceJourney
             GrowthType growthType,
             SoulJobDefinition jobDef,
             TalentRank talent,
-            int reinCount)
+            int reinCount,
+            IReadOnlyDictionary<string, SoulJobDefinition> jobTagToJobDef = null)
         {
             MainStats = mainStats;
             HalfStats = halfStats;
@@ -67,6 +77,7 @@ namespace SteraCube.SpaceJourney
             JobDef = jobDef;
             Talent = talent;
             ReinCount = reinCount;
+            JobTagToJobDef = jobTagToJobDef;
         }
 
         private static int[] GetStats(SoulInstance soul)
@@ -134,8 +145,8 @@ namespace SteraCube.SpaceJourney
         // --------------------------------------------------------
         // フラグ管理（SO参照で管理するため文字列IDは不要）
         // --------------------------------------------------------
-        /// <summary>発生済みイベントSO（requires判定用）</summary>
-        public readonly HashSet<string> OccurredEvents = new(); // eventId で管理
+        /// <summary>発生済みイベントSO（requires判定用）key=eventId, value=発火年齢</summary>
+        public readonly Dictionary<string, int> OccurredEvents = new();
 
         /// <summary>再発不可になったイベントSO（1回起きたら終わり）</summary>
         public readonly HashSet<ReinLifeEventSO> EndedEvents = new();
@@ -161,10 +172,28 @@ namespace SteraCube.SpaceJourney
         public SoulJobDefinition CurrentJob { get; private set; }
 
         /// <summary>
-        /// このソウルの運命のジョブ（転生開始時に確定、シミュ全期間で固定）。
-        /// イベントの職業タグチェックに使う。
+        /// このソウルの運命のジョブ。
+        /// 人生イベント方式では arc_*_final が job_*タグを付与した瞬間に確定する。
         /// </summary>
         public SoulJobDefinition DestinyJob { get; private set; }
+
+        /// <summary>job_*タグ → SoulJobDefinitionのマッピング</summary>
+        private readonly IReadOnlyDictionary<string, SoulJobDefinition> _jobTagToJobDef;
+
+        /// <summary>
+        /// life tagが付与された際にjob_*タグならDestinyJobを確定させる。
+        /// </summary>
+        public void TrySetJobFromTag(string lifeTag)
+        {
+            if (DestinyJob != null) return; // 既に確定済み
+            if (_jobTagToJobDef == null) return;
+            if (_jobTagToJobDef.TryGetValue(lifeTag, out var jobDef))
+            {
+                DestinyJob = jobDef;
+                CurrentJob = jobDef;
+                Debug.Log($"[ReinSim] 職業確定: {jobDef.JobName}（タグ: {lifeTag}）");
+            }
+        }
 
         /// <summary>転生回数（SpaceJourneyCoreTypesの定数でボーナス計算に使う）</summary>
         public int ReinCount { get; private set; }
@@ -191,6 +220,8 @@ namespace SteraCube.SpaceJourney
         // ============================================================
         public ReinSimContext(ReinSimInput input)
         {
+            _jobTagToJobDef = input.JobTagToJobDef;
+            // JobDefがあれば事前確定、なければ人生イベントから自然決定
             CurrentJob = input.JobDef;
             DestinyJob = input.JobDef;
             ReinCount = input.ReinCount;
@@ -268,9 +299,31 @@ namespace SteraCube.SpaceJourney
                 EventFactorPtMax);
         }
 
-        /// <summary>ポイントを倍率に変換（外部参照用）。0pt=1.0x、40pt=1.8x</summary>
-        public static float PtToMultiplier(int pt)
-            => 1.0f + pt / 40f * 0.8f;
+        /// <summary>
+        /// ポイントをeventFactor倍率に変換。ランクに応じて上限が変化。
+        /// rank1 → 0pt=1.0x / 40pt=1.1x
+        /// rank10 → 0pt=1.0x / 40pt=1.5x
+        /// 間は比例（rank毎に上限+0.0444x）
+        /// </summary>
+        public static float PtToMultiplier(int pt, int rank = 1)
+        {
+            // rank1=0.10, rank10=0.50、1ランクごとに +0.0444
+            float maxBonus = 0.10f + (Mathf.Clamp(rank, 1, 10) - 1) / 9f * 0.40f;
+            return 1.0f + (pt / 40f) * maxBonus;
+        }
+
+        // ============================================================
+        // 転生内ステータス即時加算（MaxStatsに直接加算 → 以降のNowStat計算に反映）
+        // ============================================================
+        /// <summary>
+        /// grantsStats による転生内ステータス即時加算。
+        /// MaxStats を直接増やすことで UpdateNowStats() の結果にも反映される。
+        /// </summary>
+        public void AddInLifeStat(int statIdx, int value)
+        {
+            if (statIdx < 0 || statIdx >= 5) return;
+            MaxStats[statIdx] = Mathf.Max(0, MaxStats[statIdx] + value);
+        }
 
         // ============================================================
         // スキル習得（重複なし）
@@ -309,15 +362,28 @@ namespace SteraCube.SpaceJourney
         /// <summary>転生の来歴（UI表示・SoulInstanceに保存）</summary>
         public readonly List<ReinEvent> HistoryEvents;
 
+        /// <summary>
+        /// 人生イベントから確定したジョブ。
+        /// 事前抽選方式では input.JobDef と同じ値。
+        /// 人生自然決定方式では arc_*_final 発火時に確定した値。
+        /// </summary>
+        public readonly SoulJobDefinition DestinyJob;
+
+        /// <summary>シミュ全体で取得したライフタグ一覧</summary>
+        public readonly HashSet<string> AcquiredLifeTags;
+
         public ReinSimResult(ReinSimContext ctx)
         {
-            // int pt → float 倍率に変換してから格納
+            // int pt → float 倍率に変換してから格納（ランク依存上限を適用）
             EventFactors = new float[5];
+            int finalRankForFactor = ctx.CurrentRank;
             for (int i = 0; i < 5; i++)
-                EventFactors[i] = ReinSimContext.PtToMultiplier(ctx.EventFactors[i]);
+                EventFactors[i] = ReinSimContext.PtToMultiplier(ctx.EventFactors[i], finalRankForFactor);
             FinalRank = ctx.CurrentRank;
             LearnedSkillIds = new List<string>(ctx.LearnedSkillIds);
             HistoryEvents = new List<ReinEvent>(ctx.HistoryEvents);
+            DestinyJob = ctx.DestinyJob;
+            AcquiredLifeTags = new HashSet<string>(ctx.AcquiredLifeTags);
         }
     }
 
@@ -348,9 +414,27 @@ namespace SteraCube.SpaceJourney
         private static readonly float TalentMidMul = (1.10f + 1.24f) / 2f; // C人材中間値
 
         /// <summary>
-        /// ランクアップイベントのrequireStatsを動的に計算する。
-        /// SOには持たせず、ジョブ定義から毎回算出する。
+        /// relatedJobs（SO参照）またはrelatedJobIds（ID文字列）のいずれかに
+        /// DestinyJobが一致するかチェックする。
         /// </summary>
+        private static bool MatchesRelatedJob(ReinLifeEventSO ev, SoulJobDefinition destinyJob)
+        {
+            if (destinyJob == null) return false;
+
+            // SO参照チェック
+            if (ev.RelatedJobs != null)
+                foreach (var j in ev.RelatedJobs)
+                    if (j == destinyJob) return true;
+
+            // ID文字列チェック
+            if (ev.RelatedJobIds != null)
+                foreach (var id in ev.RelatedJobIds)
+                    if (!string.IsNullOrEmpty(id) && id == destinyJob.JobId) return true;
+
+            return false;
+        }
+
+        /// <summary>ランクアップイベントのrequireStatsを動的に計算する。</summary>
         private static bool MeetsRankUpStatRequirements(
             ReinSimContext ctx, int rankIndex)
         {
@@ -417,9 +501,12 @@ namespace SteraCube.SpaceJourney
                         ReinEventType.RankUp));
                 }
 
-                // 3) 各イベントSO処理（ランクアップイベントもここで処理）
+                // 3) 年初スナップショット：requiresAnyLifeTag の判定に使う
+                var tagsAtYearStart = new HashSet<string>(ctx.AcquiredLifeTags);
+
+                // 4) 各イベントSO処理（ランクアップイベントもここで処理）
                 foreach (var ev in allEvents)
-                    TryOccurEvent(ctx, ev, age);
+                    TryOccurEvent(ctx, ev, age, tagsAtYearStart);
             }
 
             return new ReinSimResult(ctx);
@@ -431,7 +518,8 @@ namespace SteraCube.SpaceJourney
         private static void TryOccurEvent(
             ReinSimContext ctx,
             ReinLifeEventSO ev,
-            int age)
+            int age,
+            HashSet<string> tagsAtYearStart)
         {
             // 年齢レンジ外
             if (age < ev.StartAge || age > ev.EndAge) return;
@@ -439,26 +527,12 @@ namespace SteraCube.SpaceJourney
             // 再発不可
             if (ctx.EndedEvents.Contains(ev)) return;
 
-            // 職業タグチェック：タグあり＋不一致なら発生しない
-            if (!ev.MatchesJob(ctx.DestinyJob)) return;
-
-            // ランク・ステータス前提条件チェック
-            if (!ev.MeetsPrerequisites(ctx.CurrentRank, ctx.NowStats, ctx.AcquiredLifeTags)) return;
+            // ランク・ステータス前提条件チェック（requiresAnyLifeTag / blockedByLifeTags 含む）
+            if (!ev.MeetsPrerequisites(ctx.CurrentRank, ctx.NowStats, tagsAtYearStart)) return;
 
             // ランクアップイベントの場合：動的閾値チェック
-            // SOにrequireStatsAndを持たせず、ジョブ定義から毎回計算
             if (ev.Options != null && ev.Options.Count > 0 && ev.Options[0].IsRankUp)
             {
-                // ランクアップイベントはrelatedJobが一致している必要がある
-                if (ev.RelatedJobs != null && ev.RelatedJobs.Count > 0)
-                {
-                    bool jobMatch = false;
-                    foreach (var j in ev.RelatedJobs)
-                        if (j == ctx.DestinyJob) { jobMatch = true; break; }
-                    if (!jobMatch) return;
-                }
-
-                // 現在ランク（0始まり）で閾値計算
                 int rankIdx = Mathf.Clamp(ctx.CurrentRank - 1, 0, 8);
                 if (!MeetsRankUpStatRequirements(ctx, rankIdx)) return;
             }
@@ -466,21 +540,35 @@ namespace SteraCube.SpaceJourney
             // requires：前提イベントが全部発生済みでないとダメ
             foreach (var reqId in ev.RequiresEventIds)
             {
-                if (!string.IsNullOrEmpty(reqId) && !ctx.OccurredEvents.Contains(reqId))
-                    return;
+                if (string.IsNullOrEmpty(reqId)) continue;
+                if (!ctx.OccurredEvents.ContainsKey(reqId))
+                    return; // 未発生
             }
+
+            // requiresPrevYear：前提イベントが今年と同年なら発火禁止
+            foreach (var reqId in ev.RequiresPrevYearEventIds)
+            {
+                if (string.IsNullOrEmpty(reqId)) continue;
+                if (!ctx.OccurredEvents.TryGetValue(reqId, out int firedAge))
+                    return; // 未発生
+                if (firedAge >= age)
+                    return; // 同年発火禁止
+            }
+
+            // relatedJobIds が設定されている場合、DestinyJobが一致しなければスキップ
+            if (ev.RelatedJobIds != null && ev.RelatedJobIds.Count > 0)
+                if (!MatchesRelatedJob(ev, ctx.DestinyJob)) return;
 
             // blockedBy：排他イベントが1つでも発生済みならダメ
             foreach (var blkId in ev.BlockedByEventIds)
             {
-                if (!string.IsNullOrEmpty(blkId) && ctx.OccurredEvents.Contains(blkId))
+                if (!string.IsNullOrEmpty(blkId) && ctx.OccurredEvents.ContainsKey(blkId))
                     return;
             }
 
-            // 職業一致ボーナスを加算した出現重みで判定
+            // ライフタグボーナスを加算した出現重みで判定
             float weight = ev.BaseWeight;
-            if (ev.HasJobTag)
-                weight += ev.JobMatchBonus;
+            weight += ev.CalcLifeTagBonus(ctx.AcquiredLifeTags);
 
             if (UnityEngine.Random.value >= weight) return;
 
@@ -493,8 +581,81 @@ namespace SteraCube.SpaceJourney
         }
 
         // ============================================================
-        // 選択肢の重み付き抽選
+        // イベントIDからReinEventTypeを判定
+        // 大半はNone。感情が大きく動く瞬間だけ型をつける。
         // ============================================================
+        private static ReinEventType ResolveEventType(string eventId)
+        {
+            if (string.IsNullOrEmpty(eventId)) return ReinEventType.None;
+
+            // 生涯の終わり
+            if (eventId.StartsWith("life_end_")) return ReinEventType.LifeEnd;
+
+            switch (eventId)
+            {
+                // 誕生
+                case "birth_wealthy":
+                case "birth_normal":
+                case "birth_poor":
+                    return ReinEventType.Birth;
+
+                // Happy：おめでとう系（結婚・子供誕生・合格・夢の達成）
+                case "marriage_success":
+                case "child_born":
+                case "grandchild_born":
+                case "elder_grandchild_born2":
+                case "exam_middle_pass":
+                case "exam_high_pass_top":
+                case "exam_high_pass_second":
+                case "exam_univ_pass_top":
+                case "exam_univ_pass":
+                case "exam_univ_pass_ronin":
+                case "love_triangle_win":
+                case "love_longdistance_survive":
+                case "first_love_success":
+                case "mid_achievement":
+                case "midlife_independent":
+                case "talent_overcome":
+                case "betrayal_forgive":
+                case "parent_recover":
+                case "rare_lottery":
+                    return ReinEventType.Happy;
+
+                // Sad：じわっと沈む系（死別・喪失・別れ）
+                case "parent_death":
+                case "old_friend_death":
+                case "friend_death":
+                case "betrayal_start":
+                case "betrayal_distance":
+                case "romance_breakup":
+                case "marriage_decline":
+                case "love_triangle_lose":
+                case "love_longdistance_end":
+                case "first_love_fail":
+                case "midlife_friend_ill":
+                case "old_friend_loss":
+                case "family_violence":
+                case "family_poverty_sudden":
+                case "elder_spouse_ill":
+                    return ReinEventType.Sad;
+
+                // Shock：青天の霹靂系（事故・災害・突然の発覚）
+                case "near_death_accident":
+                case "near_death_change":
+                case "rare_accident":
+                case "rare_disaster":
+                case "rare_illness":
+                case "family_trouble_start":
+                case "family_divorce":
+                case "family_escape":
+                    return ReinEventType.Shock;
+
+                default:
+                    return ReinEventType.None;
+            }
+        }
+
+
         private static ReinSentenceOption ChooseOption(
             ReinSimContext ctx,
             ReinLifeEventSO ev)
@@ -548,36 +709,73 @@ namespace SteraCube.SpaceJourney
             if (option.IsRankUp)
             {
                 ctx.DoRankUp();
-                foreach (var skill in option.RankUpSkills)
-                    if (skill != null) ctx.LearnSkill(skill);
 
                 ctx.HistoryEvents.Add(new ReinEvent(
                     age,
-                    $"{option.Sentence}（ランク{ctx.CurrentRank}）",
+                    $"ランク{ctx.CurrentRank}に上がった。\n{option.Sentence}",
                     ReinEventType.RankUp));
+
+                foreach (var skill in option.RankUpSkills)
+                {
+                    if (skill != null)
+                    {
+                        ctx.LearnSkill(skill);
+                        ctx.HistoryEvents.Add(new ReinEvent(
+                            age,
+                            $"スキル「{skill.SkillName}」を習得した。",
+                            ReinEventType.None,
+                            hideAge: true));
+                    }
+                }
             }
             else
             {
                 ctx.HistoryEvents.Add(new ReinEvent(
                     age,
                     option.Sentence,
-                    ReinEventType.Happy)); // TODO：DecorationTypeからReinEventTypeへの変換
-            }
+                    ResolveEventType(ev.EventId)));
 
-            // スキル習得（ランクアップ以外）
-            foreach (var skill in option.GrantSkills)
-                if (skill != null) ctx.LearnSkill(skill);
+                foreach (var skill in option.GrantSkills)
+                {
+                    if (skill != null)
+                    {
+                        ctx.LearnSkill(skill);
+                        ctx.HistoryEvents.Add(new ReinEvent(
+                            age,
+                            $"スキル「{skill.SkillName}」を習得した。",
+                            ReinEventType.None,
+                            hideAge: true));
+                    }
+                }
+            }
 
             // ライフタグ付与（イベントSO側）
             foreach (var tag in ev.GrantsLifeTags)
+            {
                 ctx.AcquiredLifeTags.Add(tag);
+                ctx.TrySetJobFromTag(tag); // job_*タグなら職業を確定
+            }
 
             // ライフタグ付与（選択肢側）
             foreach (var tag in option.GrantsLifeTags)
+            {
                 ctx.AcquiredLifeTags.Add(tag);
+                ctx.TrySetJobFromTag(tag); // job_*タグなら職業を確定
+            }
 
-            // 発生済みフラグ登録
-            ctx.OccurredEvents.Add(ev.EventId);
+            // 転生内ステータス即時加算（grantsStats）
+            if (option.GrantsStats != null)
+            {
+                foreach (var bonus in option.GrantsStats)
+                {
+                    ctx.AddInLifeStat(bonus.StatIndex, bonus.Value);
+                }
+                // 加算後すぐに NowStats を再計算して次のイベント判定に反映
+                ctx.UpdateNowStats(age);
+            }
+
+            // 発生済みフラグ登録（発火年齢も記録）
+            ctx.OccurredEvents[ev.EventId] = age;
 
             // 再発不可登録
             ctx.EndedEvents.Add(ev);

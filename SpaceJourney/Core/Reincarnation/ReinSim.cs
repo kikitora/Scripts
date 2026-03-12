@@ -346,10 +346,6 @@ namespace SteraCube.SpaceJourney
     /// </summary>
     public class ReinSimResult
     {
-        /// <summary>
-        /// 各ステのeventFactor（AT=0,DF=1,AGI=2,MAT=3,MDF=4）。
-        /// CalcPotentialStat に渡してLv1ステを決める。
-        /// </summary>
         /// <summary>変換済みEventFactor倍率（1.0〜1.8x）。CalcPotentialStatに渡す。</summary>
         public readonly float[] EventFactors;
 
@@ -556,6 +552,16 @@ namespace SteraCube.SpaceJourney
                     return; // 同年発火禁止
             }
 
+            // minYearsAfter：前提イベントからN年以上経過していないと発火禁止
+            foreach (var entry in ev.MinYearsAfterEvents)
+            {
+                if (string.IsNullOrEmpty(entry.EventId)) continue;
+                if (!ctx.OccurredEvents.TryGetValue(entry.EventId, out int firedAge))
+                    return; // 前提イベント未発生
+                if (age - firedAge < entry.MinYears)
+                    return; // 経過年数が足りない
+            }
+
             // relatedJobIds が設定されている場合、DestinyJobが一致しなければスキップ
             if (ev.RelatedJobIds != null && ev.RelatedJobIds.Count > 0)
                 if (!MatchesRelatedJob(ev, ctx.DestinyJob)) return;
@@ -656,7 +662,6 @@ namespace SteraCube.SpaceJourney
             }
         }
 
-
         private static ReinSentenceOption ChooseOption(
             ReinSimContext ctx,
             ReinLifeEventSO ev)
@@ -669,7 +674,6 @@ namespace SteraCube.SpaceJourney
 
             for (int i = 0; i < ev.Options.Count; i++)
             {
-                // statConditionsのチェックにnowStatsを渡す
                 float w = ev.Options[i].CalcFinalWeight(ctx.NowStats);
                 weights[i] = Mathf.Max(0f, w);
                 total += weights[i];

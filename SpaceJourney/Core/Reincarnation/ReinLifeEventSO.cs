@@ -58,6 +58,14 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private List<StatPrerequisite> requireStatsAnd = new();
 
         // ============================================================
+        // 経過年数条件
+        // ============================================================
+        [Header("経過年数条件（前提イベントからN年以上経過していること）")]
+        [Tooltip("指定イベントが発生してから minYears 年以上経過していないと発火しない。\n" +
+                 "0=同年OK / 1=翌年以降 / 2=2年後以降 …")]
+        [SerializeField] private List<MinYearsAfterEntry> minYearsAfterEvents = new();
+
+        // ============================================================
         // 職業タグ（傾向フィルタ）
         // ============================================================
         [Header("職業タグ（空=全職業対象）")]
@@ -115,6 +123,7 @@ namespace SteraCube.SpaceJourney
         public IReadOnlyList<string> GrantsLifeTags => grantsLifeTags;
 
         public IReadOnlyList<StatPrerequisite> RequireStatsAnd => requireStatsAnd;
+        public IReadOnlyList<MinYearsAfterEntry> MinYearsAfterEvents => minYearsAfterEvents;
         public IReadOnlyList<string> RequiresEventIds => requiresEventIds;
         public IReadOnlyList<string> RequiresPrevYearEventIds => requiresPrevYearEventIds;
         public IReadOnlyList<string> BlockedByEventIds => blockedByEventIds;
@@ -218,6 +227,11 @@ namespace SteraCube.SpaceJourney
             requireStatsAnd = reqs ?? new List<StatPrerequisite>();
             UnityEditor.EditorUtility.SetDirty(this);
         }
+        public void Editor_SetMinYearsAfter(List<MinYearsAfterEntry> entries)
+        {
+            minYearsAfterEvents = entries ?? new List<MinYearsAfterEntry>();
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
         public void Editor_SetTendency(bool has, SoulJobTendency tend, float bonus = 0.5f)
         {
             hasTendency = has; tendency = tend; jobMatchBonus = bonus;
@@ -262,6 +276,25 @@ namespace SteraCube.SpaceJourney
             UnityEditor.EditorUtility.SetDirty(this);
         }
 #endif
+    }
+
+    // ================================================================
+    // MinYearsAfterEntry：経過年数条件
+    // ================================================================
+    [Serializable]
+    public class MinYearsAfterEntry
+    {
+        [Tooltip("基準にするイベントのID")]
+        [SerializeField] private string eventId;
+
+        [Tooltip("そのイベントが起きてから最低何年後か\n" +
+                 "0 = 同年OK（requiresEventIdsと同等）\n" +
+                 "1 = 翌年以降\n" +
+                 "2 = 2年後以降 …")]
+        [SerializeField, Min(0)] private int minYears = 1;
+
+        public string EventId => eventId;
+        public int MinYears => minYears;
     }
 
     // ================================================================

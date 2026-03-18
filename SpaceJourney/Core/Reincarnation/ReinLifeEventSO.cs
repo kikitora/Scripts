@@ -24,6 +24,13 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private string editorMemo;
 
         // ============================================================
+        // イベント本文（来歴に表示するメイン文章）
+        // ============================================================
+        [Header("イベント本文")]
+        [TextArea(2, 4)]
+        [SerializeField] private string sentence;
+
+        // ============================================================
         // 出現条件（年齢・重み）
         // ============================================================
         [Header("出現条件")]
@@ -108,6 +115,7 @@ namespace SteraCube.SpaceJourney
         // プロパティ
         // ============================================================
         public string EventId => eventId;
+        public string Sentence => sentence;
         public string DisplayName => string.IsNullOrEmpty(displayName) ? name : displayName;
         public string EditorMemo => editorMemo;
 

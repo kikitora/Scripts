@@ -664,10 +664,10 @@ namespace SteraCube.SpaceJourney
                 {
                     foreach (var set in sets)
                     {
-                        if (set == null || set.skill == null) continue;
+                        if (set == null || string.IsNullOrEmpty(set.skillId)) continue;
                         if (set.unlockRank > data.rank) continue;
 
-                        string skillId = set.skill.SkillId;
+                        string skillId = set.skillId;
                         if (!string.IsNullOrEmpty(skillId) && !learned.Contains(skillId))
                         {
                             learned.Add(skillId);

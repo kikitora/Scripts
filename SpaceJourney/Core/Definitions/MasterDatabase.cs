@@ -68,6 +68,10 @@ namespace SteraCube.SpaceJourney
         [Header("転生イベント定義リスト")]
         [SerializeField] private ReinLifeEventSO[] reinLifeEvents;
 
+        [Header("ソウルジョブスキル定義リスト")]
+        [Tooltip("全ソウルジョブのスキルをIDで引き出すためのマスターテーブル")]
+        [SerializeField] private SkillDefinition[] soulJobSkills;
+
         // ※ WeaponDefinition / SkillDefinition の登録欄はここには不要。
         //   各 BodyJobDefinition の baseSkills / weaponCandidates に直接 SO を登録すること。
 
@@ -155,6 +159,18 @@ namespace SteraCube.SpaceJourney
         public int RandomNameFemaleCount => s_randomNamesFemale != null ? s_randomNamesFemale.Length : 0;
         public int RandomNameUnknownCount => s_randomNamesNeutral != null ? s_randomNamesNeutral.Length : 0;
         public ReinLifeEventSO[] ReinLifeEvents => reinLifeEvents;
+        public SkillDefinition[] SoulJobSkills => soulJobSkills;
+
+        /// <summary>
+        /// skillId から SkillDefinition を取得する（ソウルジョブスキル用）。
+        /// </summary>
+        public SkillDefinition GetSoulJobSkillById(string id)
+        {
+            if (string.IsNullOrEmpty(id) || soulJobSkills == null) return null;
+            foreach (var s in soulJobSkills)
+                if (s != null && s.SkillId == id) return s;
+            return null;
+        }
 
         // ░░░░░░░░░░ 共通ヘルパ ░░░░░░░░░░
 

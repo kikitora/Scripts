@@ -710,6 +710,15 @@ namespace SteraCube.SpaceJourney
                 }
             }
 
+            // イベント本文を記録（空でなければ）
+            if (!string.IsNullOrEmpty(ev.Sentence))
+            {
+                ctx.HistoryEvents.Add(new ReinEvent(
+                    age,
+                    ev.Sentence,
+                    ResolveEventType(ev.EventId)));
+            }
+
             // ランクアップ処理
             if (option.IsRankUp)
             {
@@ -718,7 +727,8 @@ namespace SteraCube.SpaceJourney
                 ctx.HistoryEvents.Add(new ReinEvent(
                     age,
                     $"ランク{ctx.CurrentRank}に上がった。\n{option.Sentence}",
-                    ReinEventType.RankUp));
+                    ReinEventType.RankUp,
+                    hideAge: true));
 
                 foreach (var skill in option.RankUpSkills)
                 {
@@ -735,10 +745,15 @@ namespace SteraCube.SpaceJourney
             }
             else
             {
-                ctx.HistoryEvents.Add(new ReinEvent(
-                    age,
-                    option.Sentence,
-                    ResolveEventType(ev.EventId)));
+                // オプション文を記録（空でなければ）
+                if (!string.IsNullOrEmpty(option.Sentence))
+                {
+                    ctx.HistoryEvents.Add(new ReinEvent(
+                        age,
+                        option.Sentence,
+                        ReinEventType.None,
+                        hideAge: true));
+                }
 
                 foreach (var skill in option.GrantSkills)
                 {

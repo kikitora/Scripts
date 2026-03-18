@@ -45,11 +45,11 @@ namespace SteraCube.SpaceJourney
         [Serializable]
         public class SoulJobSkillSet
         {
-            [Tooltip("このランクに到達したとき習得するソウルジョブスキルのランク（例：1,4,8）")]
+            [Tooltip("このランクに到達したとき習得するスキルのランク（例：1, 5）")]
             public int unlockRank;
 
-            [Tooltip("このソウルジョブでランク到達時に習得するアクティブスキル")]
-            public SkillDefinition skill;   // いつもの SkillDefinition を参照
+            [Tooltip("習得するスキルのID（MasterDatabase.GetSoulJobSkillById()で引き出す）")]
+            public string skillId;
         }
         /// <summary>
         /// StatKind ごとの倍率を取得するヘルパーです。

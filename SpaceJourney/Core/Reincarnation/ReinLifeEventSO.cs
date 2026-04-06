@@ -37,6 +37,8 @@ namespace SteraCube.SpaceJourney
         [SerializeField, Min(0)] private int startAge = 0;
         [SerializeField, Min(0)] private int endAge = 99;
         [SerializeField, Min(0f)] private float baseWeight = 1f;
+        [Tooltip("true=何度でも発生可（epイベント等）/ false=1回発生したら二度と発生しない（デフォルト）")]
+        [SerializeField] private bool isRepeatable = false;
 
         // ============================================================
         // ランク条件（0=制限なし）
@@ -90,6 +92,14 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private List<LifeTagWeightBonus> lifeTagWeightBonuses = new();
 
         // ============================================================
+        // StatWeightConfig（出現重みをstatに応じて変化させる）
+        // ============================================================
+        [Header("StatWeightConfig（statで出現確率が変わる。ep/sフレーバーに設定）")]
+        [Tooltip("設定するとstatの高低によってイベント出現重みが変化する。\n" +
+                 "null=固定重み（ルート系イベントはnullにする）")]
+        [SerializeField] private StatWeightConfig statWeightConfig = null;
+
+        // ============================================================
         // SO参照による前提・排他条件
         // ============================================================
         [Header("イベント前提・排他（SO参照）")]
@@ -122,6 +132,7 @@ namespace SteraCube.SpaceJourney
         public int StartAge => startAge;
         public int EndAge => endAge;
         public float BaseWeight => baseWeight;
+        public bool IsRepeatable => isRepeatable;
 
         public int RequireMinRank => requireMinRank;
         public int RequireMaxRank => requireMaxRank;
@@ -143,6 +154,7 @@ namespace SteraCube.SpaceJourney
         public SoulJobTendency JobTendency => tendency;
         public float JobMatchBonus => jobMatchBonus;
         public IReadOnlyList<LifeTagWeightBonus> LifeTagWeightBonuses => lifeTagWeightBonuses;
+        public StatWeightConfig StatWeightConfig => statWeightConfig;
 
         /// <summary>保有LifeTagに対応するボーナス重みの合計を返す。</summary>
         public float CalcLifeTagBonus(HashSet<string> acquiredLifeTags)
@@ -490,4 +502,33 @@ namespace SteraCube.SpaceJourney
     // StatPrerequisiteType（旧API互換で残す）
     // ================================================================
     public enum StatPrerequisiteType { AtLeast }
+
+    // ================================================================
+    // StatWeightConfig：statに応じてイベント出現重みを変化させる設定
+    // ================================================================
+    /// <summary>
+    /// sign='+' のとき：statが高いほど出やすい（高stat向きフレーバー）
+    /// sign='-' のとき：statが低いほど出やすい（苦労・失敗系フレーバー）
+    /// 計算式は ReinSimulator.CalcStatWeight() を参照。
+    /// </summary>
+    [Serializable]
+    public class StatWeightConfig
+    {
+        [SerializeField] private StatKind stat = StatKind.AT;
+        [Tooltip("'+' = statが高いほど出やすい / '-' = statが低いほど出やすい")]
+        [SerializeField] private string sign = "+"; // "+" or "-"
+
+        public StatKind Stat => stat;
+        public string Sign => sign;
+
+        public int StatIndex => stat switch
+        {
+            StatKind.AT => 0,
+            StatKind.DF => 1,
+            StatKind.AGI => 2,
+            StatKind.MAT => 3,
+            StatKind.MDF => 4,
+            _ => -1
+        };
+    }
 }

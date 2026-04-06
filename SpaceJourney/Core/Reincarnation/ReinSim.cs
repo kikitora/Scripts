@@ -477,36 +477,187 @@ namespace SteraCube.SpaceJourney
             return true;
         }
 
+        // ランクUP来歴挿入の基点から何年以内に収めるか
+        private const int RankUpWindowYears = 30;
+
+        // ランクUP来歴の年齢に加える揺らぎ（±この値でランダム）
+        private const int RankUpAgeJitterMin = 2;
+        private const int RankUpAgeJitterMax = 5;
+
         public static ReinSimResult Run(
             ReinSimInput input,
             IReadOnlyList<ReinLifeEventSO> allEvents)
         {
             var ctx = new ReinSimContext(input);
 
+            // 就職（DestinyJob確定）した年齢を記録する
+            int jobStartAge = -1;
+
             for (int age = 0; age <= MaxAge; age++)
             {
                 // 1) 転生内ステータスを年齢に応じて更新
                 ctx.UpdateNowStats(age);
 
-                // 2) 保証ステップアップ：currentRank < guaranteedRankUpTo なら毎年+1
-                if (ctx.CurrentRank < ctx.GuaranteedRankUpTo)
-                {
-                    ctx.DoRankUp();
-                    ctx.HistoryEvents.Add(new ReinEvent(
-                        age,
-                        $"ランク{ctx.CurrentRank}に到達した。（保証）",
-                        ReinEventType.RankUp));
-                }
-
-                // 3) 年初スナップショット：requiresAnyLifeTag の判定に使う
+                // 2) 年初スナップショット：requiresAnyLifeTag の判定に使う
                 var tagsAtYearStart = new HashSet<string>(ctx.AcquiredLifeTags);
 
-                // 4) 各イベントSO処理（ランクアップイベントもここで処理）
+                // 3) 各イベントSO処理（同年2イベントまで制限）
+                var firedThisAge = new HashSet<string>();
                 foreach (var ev in allEvents)
-                    TryOccurEvent(ctx, ev, age, tagsAtYearStart);
+                    TryOccurEvent(ctx, ev, age, tagsAtYearStart, firedThisAge);
+
+                // 4) 就職年齢の記録（DestinyJobが確定した最初の年）
+                if (jobStartAge < 0 && ctx.DestinyJob != null)
+                    jobStartAge = age;
             }
 
+            // ============================================================
+            // シミュ終了後：ランクUP抽選
+            // ============================================================
+            // NowStats は age30 以降 MaxStats と等しく固定されている。
+            // MaxStats にはシミュ中のGSボーナス（AddInLifeStat）が反映済み。
+            //
+            // 【設計】
+            //   各ランク閾値を下から順に1回ずつ判定する。
+            //   prob = clamp(K × (ratio - offset)^N × RankUpProbMultiplier, 0, 1)
+            //   外れた時点でそのランクが最終ランク。
+            //
+            // 【早晩死亡イベントについて】
+            //   ★ 注意：早晩死亡イベントは FinalRank に到達するまで絶対に発生させないこと。
+            //   　 具体的には、死亡イベントSO側の startAge を「生業確定年齢 + RankUpWindowYears」
+            //   　 以降に設定するか、発火条件に「ランクUP完了タグ」を要求することで制御する。
+            //   　 （早晩死亡イベント実装時に対応すること）
+
+            int finalRank = DetermineRankByStatRoll(ctx);
+            ctx.CurrentRank = finalRank;
+
+            // ランクUP来歴を来歴リストに挿入
+            if (finalRank > 1 && jobStartAge >= 0)
+                InsertRankUpHistory(ctx, jobStartAge, finalRank);
+
             return new ReinSimResult(ctx);
+        }
+
+        /// <summary>
+        /// シミュ終了後のNowStats（=MaxStats）を使って最終ランクを抽選で決定する。
+        /// 各ランク閾値を下から順に判定し、外れた時点で停止。
+        /// </summary>
+        private static int DetermineRankByStatRoll(ReinSimContext ctx)
+        {
+            var job = ctx.DestinyJob;
+            int currentRank = 1; // 生業についた時点でrank1スタート
+
+            if (job == null) return currentRank;
+
+            float[] muls = job.GetStatMultipliers();
+            int tier = job.JobTier;
+
+            for (int rankIdx = 0; rankIdx < NormalLevels.Length; rankIdx++)
+            {
+                // 閾値計算（MeetsRankUpStatRequirements と同じロジック）
+                int topN;
+                int targetLv;
+                if (tier >= 50) { topN = 2; targetLv = NormalLevels[rankIdx]; }
+                else if (tier >= 20) { topN = 4; targetLv = NormalLevels[rankIdx]; }
+                else { topN = 4; targetLv = NormalLevels[rankIdx] + 2; }
+
+                int[] order = { 0, 1, 2, 3, 4 };
+                System.Array.Sort(order, (a, b) => muls[b].CompareTo(muls[a]));
+
+                float s = (targetLv - 1f) / (StatMaxLevel - 1f);
+                float gf = 1f + (GrowthNormal - 1f) * Mathf.Pow(s, GrowthPower);
+
+                // ボトルネックstat（最小ratio）で判定
+                float minRatio = float.MaxValue;
+                for (int i = 0; i < topN; i++)
+                {
+                    int si = order[i];
+                    float lv1Stat = RankBaseStats[rankIdx] * muls[si] * TalentMidMul * 0.1f;
+                    int threshold = Mathf.RoundToInt(lv1Stat * gf);
+                    if (threshold <= 0) continue;
+                    float ratio = (float)ctx.NowStats[si] / threshold;
+                    if (ratio < minRatio) minRatio = ratio;
+                }
+
+                // 確率計算（SpaceJourneyConstants準拠）
+                float prob = 0f;
+                float adjusted = minRatio - SpaceJourneyConstants.RankUpProbOffset;
+                if (adjusted > 0f)
+                {
+                    prob = SpaceJourneyConstants.RankUpProbK
+                         * Mathf.Pow(adjusted, SpaceJourneyConstants.RankUpProbN)
+                         * SpaceJourneyConstants.RankUpProbMultiplier;
+                    prob = Mathf.Clamp01(prob);
+                }
+
+                // 判定：外れたら終了
+                if (UnityEngine.Random.value >= prob)
+                    break;
+
+                currentRank++;
+                if (currentRank >= SpaceJourneyConstants.MaxSoulJobRank)
+                    break;
+            }
+
+            return currentRank;
+        }
+
+        /// <summary>
+        /// 決定したランクUPを来歴に挿入する。
+        /// 就職年齢を起点に30年以内、上のランクほど間隔が長くなるよう均等割り＋揺らぎで年齢を決める。
+        /// </summary>
+        private static void InsertRankUpHistory(ReinSimContext ctx, int jobStartAge, int finalRank)
+        {
+            int rankUpCount = finalRank - 1; // rank1→rank2は1回、rank1→rank4は3回
+            if (rankUpCount <= 0) return;
+
+            // 間隔の重みを計算（上のランクほど長い間隔）
+            // rank1→2: weight=1, rank2→3: weight=2, rank3→4: weight=3 ...
+            float[] weights = new float[rankUpCount];
+            float weightSum = 0f;
+            for (int i = 0; i < rankUpCount; i++)
+            {
+                weights[i] = i + 1;
+                weightSum += weights[i];
+            }
+
+            // 各ランクUPの基本年齢を計算してランダム揺らぎを加える
+            int[] rankUpAges = new int[rankUpCount];
+            float accumulated = 0f;
+            for (int i = 0; i < rankUpCount; i++)
+            {
+                accumulated += weights[i];
+                float baseAge = jobStartAge + (accumulated / weightSum) * RankUpWindowYears;
+                int jitter = UnityEngine.Random.Range(-RankUpAgeJitterMin, RankUpAgeJitterMax + 1);
+                rankUpAges[i] = Mathf.Max(jobStartAge + 1, Mathf.RoundToInt(baseAge) + jitter);
+            }
+
+            // 昇順ソート（揺らぎで逆転しないよう保証）
+            System.Array.Sort(rankUpAges);
+
+            // 来歴の挿入位置を探して挿入（年齢順を保つ）
+            for (int i = 0; i < rankUpCount; i++)
+            {
+                int insertAge = rankUpAges[i];
+                int newRank = i + 2; // rank1→2ならnewRank=2
+
+                var ev = new ReinEvent(
+                    insertAge,
+                    $"ランク{newRank}に上がった。",
+                    ReinEventType.RankUp);
+
+                // 年齢順の正しい位置に挿入
+                int insertIdx = ctx.HistoryEvents.Count;
+                for (int j = 0; j < ctx.HistoryEvents.Count; j++)
+                {
+                    if (ctx.HistoryEvents[j].Age > insertAge)
+                    {
+                        insertIdx = j;
+                        break;
+                    }
+                }
+                ctx.HistoryEvents.Insert(insertIdx, ev);
+            }
         }
 
         // ============================================================
@@ -516,13 +667,17 @@ namespace SteraCube.SpaceJourney
             ReinSimContext ctx,
             ReinLifeEventSO ev,
             int age,
-            HashSet<string> tagsAtYearStart)
+            HashSet<string> tagsAtYearStart,
+            HashSet<string> firedThisAge)
         {
             // 年齢レンジ外
             if (age < ev.StartAge || age > ev.EndAge) return;
 
             // 再発不可
             if (ctx.EndedEvents.Contains(ev)) return;
+
+            // 同年2イベント制限（ルート系w=1.0イベントは除外）
+            if (firedThisAge.Count >= 2 && ev.BaseWeight < 1.0f) return;
 
             // ランク・ステータス前提条件チェック（requiresAnyLifeTag / blockedByLifeTags 含む）
             if (!ev.MeetsPrerequisites(ctx.CurrentRank, ctx.NowStats, tagsAtYearStart)) return;
@@ -573,8 +728,21 @@ namespace SteraCube.SpaceJourney
                     return;
             }
 
-            // ライフタグボーナスを加算した出現重みで判定
-            float weight = ev.BaseWeight;
+            // StatWeightConfigがある場合は年齢範囲で割りstatで重みを変化させる
+            float weight;
+            var swc = ev.StatWeightConfig;
+            if (swc != null && swc.StatIndex >= 0)
+            {
+                int si = swc.StatIndex;
+                float norm = Mathf.Min(ctx.NowStats[si] / 100f, 1f);
+                float period = Mathf.Max(ev.EndAge - ev.StartAge + 1, 1);
+                weight = (ev.BaseWeight / period) * (swc.Sign == "+" ? norm * 3f : (1f - norm) * 3f);
+                weight = Mathf.Clamp(weight, 0.001f, 1f);
+            }
+            else
+            {
+                weight = ev.BaseWeight;
+            }
             weight += ev.CalcLifeTagBonus(ctx.AcquiredLifeTags);
 
             if (UnityEngine.Random.value >= weight) return;
@@ -585,6 +753,9 @@ namespace SteraCube.SpaceJourney
 
             // 結果を適用
             ApplyOption(ctx, ev, option, age);
+
+            // 同年発火済みに登録
+            firedThisAge.Add(ev.EventId);
         }
 
         // ============================================================
@@ -719,53 +890,26 @@ namespace SteraCube.SpaceJourney
                     ResolveEventType(ev.EventId)));
             }
 
-            // ランクアップ処理
-            if (option.IsRankUp)
+            // オプション文を記録（空でなければ）
+            if (!string.IsNullOrEmpty(option.Sentence))
             {
-                ctx.DoRankUp();
-
                 ctx.HistoryEvents.Add(new ReinEvent(
                     age,
-                    $"ランク{ctx.CurrentRank}に上がった。\n{option.Sentence}",
-                    ReinEventType.RankUp,
+                    option.Sentence,
+                    ReinEventType.None,
                     hideAge: true));
-
-                foreach (var skill in option.RankUpSkills)
-                {
-                    if (skill != null)
-                    {
-                        ctx.LearnSkill(skill);
-                        ctx.HistoryEvents.Add(new ReinEvent(
-                            age,
-                            $"スキル「{skill.SkillName}」を習得した。",
-                            ReinEventType.None,
-                            hideAge: true));
-                    }
-                }
             }
-            else
+
+            foreach (var skill in option.GrantSkills)
             {
-                // オプション文を記録（空でなければ）
-                if (!string.IsNullOrEmpty(option.Sentence))
+                if (skill != null)
                 {
+                    ctx.LearnSkill(skill);
                     ctx.HistoryEvents.Add(new ReinEvent(
                         age,
-                        option.Sentence,
+                        $"スキル「{skill.SkillName}」を習得した。",
                         ReinEventType.None,
                         hideAge: true));
-                }
-
-                foreach (var skill in option.GrantSkills)
-                {
-                    if (skill != null)
-                    {
-                        ctx.LearnSkill(skill);
-                        ctx.HistoryEvents.Add(new ReinEvent(
-                            age,
-                            $"スキル「{skill.SkillName}」を習得した。",
-                            ReinEventType.None,
-                            hideAge: true));
-                    }
                 }
             }
 
@@ -774,6 +918,9 @@ namespace SteraCube.SpaceJourney
             {
                 ctx.AcquiredLifeTags.Add(tag);
                 ctx.TrySetJobFromTag(tag); // job_*タグなら職業を確定
+                // minYearsAfterEventsがライフタグ名で参照できるようOccurredEventsにも記録
+                if (!ctx.OccurredEvents.ContainsKey(tag))
+                    ctx.OccurredEvents[tag] = age;
             }
 
             // ライフタグ付与（選択肢側）
@@ -781,6 +928,8 @@ namespace SteraCube.SpaceJourney
             {
                 ctx.AcquiredLifeTags.Add(tag);
                 ctx.TrySetJobFromTag(tag); // job_*タグなら職業を確定
+                if (!ctx.OccurredEvents.ContainsKey(tag))
+                    ctx.OccurredEvents[tag] = age;
             }
 
             // 転生内ステータス即時加算（grantsStats）
@@ -797,8 +946,9 @@ namespace SteraCube.SpaceJourney
             // 発生済みフラグ登録（発火年齢も記録）
             ctx.OccurredEvents[ev.EventId] = age;
 
-            // 再発不可登録
-            ctx.EndedEvents.Add(ev);
+            // 再発不可登録（Repeatableでないイベントのみ）
+            if (!ev.IsRepeatable)
+                ctx.EndedEvents.Add(ev);
         }
     }
 }

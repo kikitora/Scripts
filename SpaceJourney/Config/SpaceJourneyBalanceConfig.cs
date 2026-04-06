@@ -64,10 +64,10 @@ namespace SteraCube.SpaceJourney
 
         [Header("敵EXP（ランク別・敵種別の係数）")]
 
-        [Tooltip("Rank1 ノーマル敵1体が持つ基礎EXP（Exp0）。")]
-        public int baseEnemyExpRank1 = 30;
+        [Tooltip("Rank1 ノーマル敵1体が持つ基礎EXP（Exp0）。\n★ 変更: 30 → 50（2026-03-22）\nRank1エリアで 2体→Lv2 / 5体→Lv3 / 8体→Lv4 / 13体→Lv5 になる設定。")]
+        public int baseEnemyExpRank1 = 50;
 
-        [Tooltip("ランクが1上がるごとのEXP倍率。3.0なら Rank+1 で約3倍。")]
+        [Tooltip("ランクが1上がるごとのEXP倍率。2.0なら Rank+1 で約2倍。\n同ランクエリア vs 1つ下エリアで効率が約2倍変わる設計。")]
         public float enemyRankExpFactor = 2.0f;
 
         [Tooltip("エリート敵のEXP倍率（同ランクノーマル敵に対して何倍か）。")]

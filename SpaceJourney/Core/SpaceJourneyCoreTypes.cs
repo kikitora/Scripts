@@ -59,10 +59,11 @@ namespace SteraCube.SpaceJourney
         public const int LevelUpExpNormalMaxLevel = 22;
 
         // Lv1→2 に必要なEXPの基準値
-        public const float LevelUpBaseExp = 120f;
+        // ★ 変更: 120 → 100（2026-03-22）
+        // Rank1雑魚EXP=50基準で 2体→Lv2 / 5体→Lv3 / 8体→Lv4 / 13体→Lv5 になる設定
+        public const float LevelUpBaseExp = 100f;
 
         // Lvごとの必要EXP増加係数（1〜22用）
-        // 実効倍率は 1.4〜1.5 の中間くらいを狙って 1.45f にしている（後でBalance調整可）
         public const float LevelUpExpFactor = 1.3f;
 
         // Lv23〜25 の「同じ指数カーブ＋ボーナス倍率」用
@@ -76,8 +77,113 @@ namespace SteraCube.SpaceJourney
         public const float SoulJobExpMultiplierHard = 1.3f;
         public const float SoulJobExpMultiplierVeryHard = 1.8f;
 
-        // ソウルジョブランク1段階ごとの必要EXP増加率（+30%）
+        // ソウルジョブランク1段階ごとの必要EXP増加率（+40%）
+        //   Rank1: 1.0 / Rank2: 1.4 / Rank3: 1.8 / Rank5: 2.6 / Rank10: 4.6
         public const float SoulJobRankExpPerRank = 0.4f;
+
+        //============================================================
+        // エリアランク別 敵設定テーブル
+        //============================================================
+        //
+        // index = エリアランク - 1（Rank1エリア = index 0）
+        //
+        // 設計根拠:
+        //   雑魚レベル範囲 = 前エリアの門番Lv 〜 このエリアの門番Lv-1
+        //   門番レベル     = このランクの転生ランクUP合格ラインLv（NormalLevels準拠）
+        //   敵ランク       = エリアランクと同じ
+        //
+        // ※将来的に難易度別バリエーションが必要になった場合は
+        //   SpaceJourneyBalanceConfig 側にオーバーライド配列を追加することを検討。
+
+        // 各エリアに出現する敵のソウルランク（index = エリアランク-1）
+        public static readonly int[] AreaEnemyRank =
+        {
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+        };
+
+        // 各エリアに出現する雑魚の最小レベル（index = エリアランク-1）
+        public static readonly int[] AreaEnemyLevelMin =
+        {
+            1, 5, 7, 9, 11, 13, 15, 17, 19, 21
+        };
+
+        // 各エリアに出現する雑魚の最大レベル（index = エリアランク-1）
+        // = 次エリア門番レベル - 1（Rank10エリアのみLv22を上限とする）
+        public static readonly int[] AreaEnemyLevelMax =
+        {
+            4, 6, 8, 10, 12, 14, 16, 18, 20, 22
+        };
+
+        // 各エリアの門番キューブのレベル（index = エリアランク-1）
+        // = そのランクの転生ランクUP合格ラインLv
+        public static readonly int[] AreaGatekeeperLevel =
+        {
+            5, 7, 9, 11, 13, 15, 17, 19, 21, 23
+        };
+
+        //============================================================
+        // ゲームバランス調整倍率
+        //============================================================
+        //
+        // ★★★ 注意 ★★★
+        // これらの値は現在すべて 1.0（標準）に設定されている。
+        // 将来的に「難易度設定」「周回ボーナス」「イベント効果」など
+        // 用途が明確になった時点で、それぞれ以下への移動を検討すること:
+        //   - プレイヤーが変更する難易度設定   → SpaceJourneyBalanceConfig（SO）
+        //   - コードで動的に変えるもの         → ゲームロジック側の変数
+        //   - 設計上固定にするもの             → このまま Constants に残す
+        //
+        // 現時点では「一箇所で全部把握できること」を優先してここに置く。
+
+        //============================================================
+        // ランクUP確率関数パラメータ
+        //============================================================
+        //
+        // 計算式:
+        //   ratio  = NowStat / threshold
+        //   prob   = clamp(RankUpProbK × (ratio - RankUpProbOffset)^RankUpProbN
+        //                  × RankUpProbMultiplier, 0, 1)
+        //
+        // 設計値の根拠（変更時はセットで調整すること）:
+        //   ratio = 0.8 → 0%
+        //   ratio = 1.0 → 30%
+        //   ratio = 2.0 → 100%
+        //
+        // ランクは下から順に1回ずつ判定し、外れた時点で停止する。
+        // （下のランクが落ちたのに上が受かることはない）
+
+        // 確率関数の係数 k
+        public const float RankUpProbK = 0.885f;
+
+        // 確率関数の指数 n（曲線の形状）
+        public const float RankUpProbN = 0.672f;
+
+        // 確率が0になるratioの下限（これ未満は絶対に上がらない）
+        public const float RankUpProbOffset = 0.8f;
+
+        // ランクUP確率の倍率
+        // 1.0=標準 / 2.0=倍速で上がりやすい / 0.5=上がりにくい
+        // ※ 難易度設定での使用を想定。将来 SpaceJourneyBalanceConfig への移動を検討。
+        public const float RankUpProbMultiplier = 1.0f;
+
+        // 敵レベルの倍率（AreaEnemyLevelMin/Max に乗算）
+        // 1.0=標準 / 1.2=少し強め / 0.8=弱め
+        // ※ 小数点以下は切り捨て。最低レベル1を下回らない。
+        public const float EnemyLevelMultiplier = 1.0f;
+
+        // 敵ステータスの直接倍率（レベルとは独立して強さを調整）
+        // 1.0=標準 / 難易度ハードでの底上げなどに使用する想定
+        // ※ SoulStat 計算後に乗算する。
+        public const float EnemyStatMultiplier = 1.0f;
+
+        // EXP獲得量の倍率（baseEnemyExpRank1 に乗算）
+        // 1.0=標準 / 周回プレイのボーナス・デバッグ加速などに使用
+        public const float ExpGainMultiplier = 1.0f;
+
+        // レベルアップ必要EXPの倍率（CalcBaseRequiredExpForLevel の結果に乗算）
+        // 1.0=標準 / 2.0=重くする / 0.5=軽くする
+        // ※ SoulJobRankExpPerRank や jobExpFactor とは別軸で全体を調整する用途
+        public const float LevelUpExpMultiplier = 1.0f;
 
         // ダメージ揺れ（±10%）
         public const float DamageRandomMinFactor = 0.90f;

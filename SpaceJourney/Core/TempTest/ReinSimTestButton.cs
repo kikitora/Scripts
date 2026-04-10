@@ -1,79 +1,134 @@
+using System.Text;
 using UnityEngine;
 
 namespace SteraCube.SpaceJourney
 {
     /// <summary>
-    /// “]¶ƒVƒ~ƒ…ƒŒ[ƒVƒ‡ƒ“‚ÌƒeƒXƒg—p MonoBehaviourB
-    /// “K“–‚ÈGameObject‚É“\‚èAƒ{ƒ^ƒ“‚ÌOnClick‚É TestReincarnation() ‚ğ“o˜^‚·‚éB
+    /// è»¢ç”Ÿã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã®ãƒ†ã‚¹ãƒˆç”¨ MonoBehaviourã€‚
+    /// é©å½“ãª GameObject ã«è²¼ã‚Šã€UI Buttonã® OnClick ã« TestReincarnation() ã‚’ç™»éŒ²ã™ã‚‹ã€‚
     ///
-    /// ˆ—‚Ì—¬‚êF
-    ///   1. ‰¼ƒ\ƒEƒ‹4‘Ì¶¬iregisterToWorld:false ¨ WorldState–¢“o˜^j
-    ///   2. “]¶ƒVƒ~ƒ…Às ¨ “]¶Ï‚İå°‚ªŠ®¬
-    ///   3. Š®¬‚µ‚½å°‚¾‚¯ EnsureInstanceId() ¨ WorldState“o˜^
+    /// çµŒè·¯:
+    ///   useFixedRankPath = true  â†’ CçµŒè·¯ï¼ˆRunFixedRankï¼‰å›ºå®šãƒ©ãƒ³ã‚¯é‡ç”£
+    ///   useFixedRankPath = false â†’ BçµŒè·¯ï¼ˆRunï¼‰ãƒ—ãƒ¬ã‚¤ãƒ¤ãƒ¼è»¢ç”Ÿ
     /// </summary>
     public class ReinSimTestButton : MonoBehaviour
     {
-        [Header("ƒeƒXƒgİ’è")]
+        [Header("ãƒ†ã‚¹ãƒˆè¨­å®š")]
         [SerializeField, Range(1, 10)] private int testRank = 3;
         [SerializeField] private SoulJobTendency testTendency = SoulJobTendency.Warrior;
+        [SerializeField] private TalentRank testTalent = TalentRank.C;
 
-        /// <summary>ƒ{ƒ^ƒ“‚ÌOnClick‚É“o˜^‚·‚éB</summary>
+        [Header("çµŒè·¯")]
+        [Tooltip("true=CçµŒè·¯(å›ºå®šãƒ©ãƒ³ã‚¯é‡ç”£)ã€false=BçµŒè·¯(ãƒ—ãƒ¬ã‚¤ãƒ¤ãƒ¼è»¢ç”Ÿ)")]
+        [SerializeField] private bool useFixedRankPath = true;
+
+        /// <summary>ãƒœã‚¿ãƒ³ã® OnClick ã‹ã‚‰å‘¼ã¶ã€‚</summary>
         public void TestReincarnation()
-        {
-            var soul = CreateReincarnatedSoul(testRank, testTendency);
-            if (soul != null)
-                Debug.Log($"[ReinSimTest] Š®—¹: {soul.SoulTendency} Rank={soul.Rank}");
-        }
-
-        /// <summary>
-        /// “]¶Ï‚İƒ\ƒEƒ‹‚ğ1‘Ì¶¬‚µ‚ÄWorldState‚É“o˜^‚µ‚Ä•Ô‚·B
-        /// ‰¼‚Ì4‘ÌiƒVƒ~ƒ…“ü—Í—pj‚Í“o˜^‚µ‚È‚¢B
-        /// </summary>
-        public static SoulInstance CreateReincarnatedSoul(int rank, SoulJobTendency tendency)
         {
             var db = MasterDatabase.Instance;
             if (db == null)
             {
-                Debug.LogError("[ReinSimTest] MasterDatabase ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñB");
-                return null;
+                Debug.LogError("[ReinSimTest] MasterDatabase ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã€‚");
+                return;
             }
 
             var allEvents = db.ReinLifeEvents;
-            if (allEvents == null || allEvents.Length == 0)
+            if (allEvents == null || allEvents.Count == 0)
             {
-                Debug.LogError("[ReinSimTest] MasterDatabase.ReinLifeEvents ‚ª‹ó‚Å‚·BSO‚ğ“o˜^‚µ‚Ä‚­‚¾‚³‚¢B");
-                return null;
+                Debug.LogError("[ReinSimTest] MasterDatabase.ReinLifeEvents ãŒç©ºã§ã™ã€‚ReinLifeEventBundle ã‚’ç¢ºèªã—ã¦ãã ã•ã„ã€‚");
+                return;
             }
 
-            // ---- ‰¼ƒ\ƒEƒ‹4‘Ì¶¬iregisterToWorld:false ¨ WorldState–¢“o˜^j----
-            var mainSoul = SoulInstance.CreateRandomInitialSoul(rank, tendency, registerToWorld: false);
+            OneReinSoulData reinData;
 
-            var allTendencies = (SoulJobTendency[])System.Enum.GetValues(typeof(SoulJobTendency));
-            var guardians = new SoulInstance[3];
-            for (int i = 0; i < 3; i++)
+            if (useFixedRankPath)
             {
-                var t = allTendencies[UnityEngine.Random.Range(0, allTendencies.Length)];
-                guardians[i] = SoulInstance.CreateRandomInitialSoul(rank, t, registerToWorld: false);
+                // â”€â”€ CçµŒè·¯ï¼šå›ºå®šãƒ©ãƒ³ã‚¯é‡ç”£ â”€â”€
+                reinData = ReinSimRunner.RunFixedRank(
+                    fixedRank: testRank,
+                    tendency: testTendency,
+                    talentRank: testTalent,
+                    allEvents: allEvents
+                );
             }
+            else
+            {
+                // â”€â”€ BçµŒè·¯ï¼šãƒ—ãƒ¬ã‚¤ãƒ¤ãƒ¼è»¢ç”Ÿï¼ˆå®Ÿåœ¨ã®ä¸»é­‚+å®ˆè­·éœŠï¼‰ â”€â”€
+                var mainSoul = SoulInstance.CreateRandomInitialSoul(testRank, testTendency, registerToWorld: false);
 
-            // ---- “]¶ƒVƒ~ƒ…Às ----
-            var reinData = ReinSimRunner.Run(
-                mainSoul: mainSoul,
-                guardians: guardians,
-                allEvents: allEvents,
-                replaceIndex: -1
-            );
+                var allTendencies = (SoulJobTendency[])System.Enum.GetValues(typeof(SoulJobTendency));
+                var guardians = new SoulInstance[3];
+                for (int i = 0; i < 3; i++)
+                {
+                    var t = allTendencies[UnityEngine.Random.Range(1, allTendencies.Length)]; // 0=Noneé™¤å¤–
+                    guardians[i] = SoulInstance.CreateRandomInitialSoul(testRank, t, registerToWorld: false);
+                }
+
+                reinData = ReinSimRunner.Run(
+                    mainSoul: mainSoul,
+                    guardians: guardians,
+                    allEvents: allEvents,
+                    replaceIndex: -1
+                );
+            }
 
             if (reinData == null)
             {
-                Debug.LogError("[ReinSimTest] ReinSimRunner.Run ‚ª¸”s‚µ‚Ü‚µ‚½B");
-                return null;
+                Debug.LogError("[ReinSimTest] ã‚·ãƒŸãƒ¥å®Ÿè¡Œã«å¤±æ•—ã—ã¾ã—ãŸã€‚");
+                return;
             }
 
-            // ---- Š®¬‚µ‚½å°‚¾‚¯ WorldState ‚É“o˜^ ----
-            mainSoul.EnsureInstanceId();
+            // â”€â”€ çµæœå‡ºåŠ› â”€â”€
+            DebugPrintReinData(reinData, useFixedRankPath ? "CçµŒè·¯ (RunFixedRank)" : "BçµŒè·¯ (Run)");
+        }
 
-            return mainSoul;
+        private static void DebugPrintReinData(OneReinSoulData reinData, string pathLabel)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== è»¢ç”Ÿã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³çµæœ ===");
+            sb.AppendLine($"çµŒè·¯       : {pathLabel}");
+            sb.AppendLine($"ã‚¸ãƒ§ãƒ–     : {reinData.JobDefinition?.JobName ?? "æœªç¢ºå®š"}");
+            sb.AppendLine($"åˆ°é”ãƒ©ãƒ³ã‚¯ : {reinData.Rank}");
+            sb.AppendLine($"æˆé•·ã‚¿ã‚¤ãƒ— : {reinData.GrowthType}");
+            sb.AppendLine();
+
+            sb.AppendLine("--- Lv1 ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹ ---");
+            string[] names = { "AT ", "DF ", "AGI", "MAT", "MDF" };
+            StatKind[] kinds = { StatKind.AT, StatKind.DF, StatKind.AGI, StatKind.MAT, StatKind.MDF };
+            for (int i = 0; i < 5; i++)
+                sb.AppendLine($"  {names[i]}: {reinData.GetSoulStat(kinds[i]),4}");
+            sb.AppendLine();
+
+            if (reinData.LearnedSkillIds != null && reinData.LearnedSkillIds.Count > 0)
+            {
+                sb.AppendLine("--- ç¿’å¾—ã‚¹ã‚­ãƒ« ---");
+                foreach (var sk in reinData.LearnedSkillIds)
+                    sb.AppendLine($"  {sk}");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine($"--- è»¢ç”Ÿæ¥æ­´ ({reinData.HistoryEvents?.Count ?? 0} ä»¶) ---");
+            if (reinData.HistoryEvents != null)
+            {
+                foreach (var ev in reinData.HistoryEvents)
+                {
+                    string tag = ev.EventType switch
+                    {
+                        ReinEventType.Birth => "[èª•]",
+                        ReinEventType.Happy => "[â˜…]",
+                        ReinEventType.Sad => "[æ¶™]",
+                        ReinEventType.Shock => "[!!]",
+                        ReinEventType.RankUp => "[â†‘]",
+                        ReinEventType.JobChange => "[è»¢]",
+                        ReinEventType.LifeEnd => "[çµ‚]",
+                        _ => "   "
+                    };
+                    string ageStr = ev.HideAge ? "      " : $"{ev.Age,3}æ­³ ";
+                    sb.AppendLine($"  {ageStr}{tag} {ev.Text}");
+                }
+            }
+
+            Debug.Log(sb.ToString());
         }
     }
 }

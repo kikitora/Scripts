@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SteraCube.SpaceJourney
@@ -65,8 +66,8 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private RaceDefinition[] raceDefinitions;
 
         [Header("━━━━━━━━━━ 転生関係 ━━━━━━━━━━")]
-        [Header("転生イベント定義リスト")]
-        [SerializeField] private ReinLifeEventSO[] reinLifeEvents;
+        // ライフイベントは ReinLifeEventBundle.All（C#コード集約）から取得する。
+        // インスペクター登録は廃止済み。
 
         [Header("ソウルジョブスキル定義リスト")]
         [Tooltip("全ソウルジョブのスキルをIDで引き出すためのマスターテーブル")]
@@ -158,7 +159,10 @@ namespace SteraCube.SpaceJourney
         public int RandomNameMaleCount => s_randomNamesMale != null ? s_randomNamesMale.Length : 0;
         public int RandomNameFemaleCount => s_randomNamesFemale != null ? s_randomNamesFemale.Length : 0;
         public int RandomNameUnknownCount => s_randomNamesNeutral != null ? s_randomNamesNeutral.Length : 0;
-        public ReinLifeEventSO[] ReinLifeEvents => reinLifeEvents;
+        /// <summary>
+        /// ライフイベント一覧（ReinLifeEventBundle 経由・キャッシュ済み）。
+        /// </summary>
+        public IReadOnlyList<ReinLifeEvent> ReinLifeEvents => ReinLifeEventBundle.All;
         public SkillDefinition[] SoulJobSkills => soulJobSkills;
 
         /// <summary>

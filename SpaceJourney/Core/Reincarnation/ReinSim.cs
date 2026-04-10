@@ -179,6 +179,14 @@ namespace SteraCube.SpaceJourney
         /// <summary>取得済みライフタグ（婚活経験あり・結婚済みなど）</summary>
         public readonly HashSet<string> AcquiredLifeTags = new();
 
+        /// <summary>その年に消費した「通常発火枠」のカウント。各歳の最初に0にリセットされる。
+        /// 強制発火（保証/ルート最終年/rank連鎖）は枠を消費しないので、ここに加算されない。</summary>
+        public int SlotConsumedThisAge = 0;
+
+        /// <summary>死亡フラグ。LifeEnd タイプのイベントが発火したら true になり、
+        /// 以降のシミュループは即座に break する。</summary>
+        public bool IsDead = false;
+
         // --------------------------------------------------------
         // 転生内のランク・ジョブ
         // --------------------------------------------------------
@@ -216,7 +224,8 @@ namespace SteraCube.SpaceJourney
 
         /// <summary>
         /// life tagが付与された際にjob_*タグなら、生業就任を確定させる。
-        /// 事前抽選方式では DestinyJob は既に設定済みなので、ここでは JobConfirmedAge だけを記録する。
+        /// 仕様: DestinyJob は 0歳の時点で input.JobDef により確定済み。
+        /// このメソッドは JobConfirmedAge を記録するだけで、DestinyJob は変更しない。
         /// </summary>
         public void TrySetJobFromTag(string lifeTag, int age)
         {
@@ -224,12 +233,9 @@ namespace SteraCube.SpaceJourney
             if (_jobTagToJobDef == null) return;
             if (!_jobTagToJobDef.TryGetValue(lifeTag, out var jobDef)) return;
 
-            // 事前抽選と人生で確定したジョブが食い違う場合は、後者を優先する
-            if (DestinyJob != jobDef)
-            {
-                DestinyJob = jobDef;
-                CurrentJob = jobDef;
-            }
+            // DestinyJob と一致するタグが付与された場合のみ、就業を確定させる。
+            // 一致しないタグ (= 別ジョブのフレーバー) は無視する (DestinyJob は不変)。
+            if (DestinyJob != jobDef) return;
             JobConfirmedAge = age;
             Debug.Log($"[ReinSim] 生業確定: {jobDef.JobName}（タグ: {lifeTag}, 年齢: {age}）");
         }
@@ -495,6 +501,150 @@ namespace SteraCube.SpaceJourney
             return false;
         }
 
+        // ================================================================
+        // 新仕様: 5段階×ランク発火確率テーブル
+        // ================================================================
+        // 正段階(+1〜+5): rank ↑ ほど発火確率 ↑
+        // 負段階(-1〜-2): baseWeight に対するランク別乗算率（高ランクほど不幸が減る）
+        // ================================================================
+
+        // 正段階テーブル: [stage][rank-1] → percent (0-100)
+        // テーブル値は「人生(イベント範囲全体)で1回でも発火する累積確率(%)」を表す。
+        // CalcStageBasedWeight の中で範囲年数で指数的に逆算して、
+        // 1年あたりの発火率に変換する: per_year = 1 - (1 - P)^(1/period)
+        private static readonly int[][] PositiveStageTable = new int[][]
+        {
+            new int[] { 20, 40, 60, 80, 90, 90, 90, 90, 90, 90 }, // stage 1 (易・日常)
+            new int[] {  5, 20, 40, 60, 80, 80, 80, 80, 80, 80 }, // stage 2 (普通)
+            new int[] {  0,  5, 20, 40, 60, 70, 70, 70, 70, 70 }, // stage 3 (中堅)
+            new int[] {  0,  0,  0, 10, 30, 50, 60, 60, 60, 60 }, // stage 4 (難)
+            new int[] {  0,  0,  0,  0,  0,  0,  0, 10, 30, 50 }, // stage 5 (伝説)
+        };
+
+        // 負段階テーブル: baseWeight 乗算率
+        private static readonly int[][] NegativeStageMultTable = new int[][]
+        {
+            new int[] { 100, 100, 100, 100, 80, 60, 40, 20, 10,  5 }, // stage -1
+            new int[] { 100, 100, 100,  80, 60, 40, 20, 10,  5,  0 }, // stage -2
+        };
+
+        /// <summary>
+        /// 新仕様の発火率を計算する。
+        /// 1) ジョブ statMul 上位 N 個の stat を取得
+        /// 2) 各 stat について MaxStats × ageRate(ev.StartAge) で startAge時点の値を計算
+        /// 3) 各 stat値 を rank (1..10) に変換
+        /// 4) statCompareMode で統合 (min/avg/max)
+        /// 5) eventStage と統合 rank で確率テーブルを引く
+        /// </summary>
+        private static float CalcStageBasedWeight(ReinSimContext ctx, ReinLifeEvent ev)
+        {
+            var job = ctx.DestinyJob;
+            if (job == null) return ev.BaseWeight;
+
+            // 1) ジョブの statMul 上位N stat を取得
+            float[] muls = job.GetStatMultipliers();
+            int n = Mathf.Clamp(ev.statCompareCount, 1, 5);
+            int[] order = { 0, 1, 2, 3, 4 };
+            System.Array.Sort(order, (a, b) => muls[b].CompareTo(muls[a]));
+
+            // 2) startAge での ageRate を計算
+            float startAge = ev.StartAge;
+            float rate;
+            if (startAge >= 30f) rate = 1.0f;
+            else rate = (8.0f / 3.0f * startAge + 20.0f) / 100.0f;
+
+            // 3) 各 stat の rank を計算
+            int[] ranks = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                int statIdx = order[i];
+                int statValue = Mathf.RoundToInt(ctx.MaxStats[statIdx] * rate);
+                ranks[i] = FindRankForStat(statValue, muls[statIdx]);
+            }
+
+            // 4) 統合
+            int currentRank = AggregateRanks(ranks, ev.statCompareMode);
+
+            // 5) テーブル引き
+            // テーブル値は「イベント範囲全体での累積発火確率(%)」を表す。
+            // 1年あたりの発火率に変換するため、範囲年数で指数的に逆算する:
+            //   per_year = 1 - (1 - P)^(1/period)
+            // これにより、累積で P% に収束する per_year を返せる。
+            int stage = ev.eventStage;
+            int period = Mathf.Max(ev.EndAge - ev.StartAge + 1, 1);
+            if (stage > 0)
+            {
+                int idx = Mathf.Clamp(stage - 1, 0, PositiveStageTable.Length - 1);
+                int rankIdx = Mathf.Clamp(currentRank - 1, 0, 9);
+                float lifetimeP = PositiveStageTable[idx][rankIdx] / 100f;
+                if (lifetimeP <= 0f) return 0f;
+                if (lifetimeP >= 1f) return 1f;
+                return 1f - Mathf.Pow(1f - lifetimeP, 1f / period);
+            }
+            else // stage < 0
+            {
+                int idx = Mathf.Clamp(-stage - 1, 0, NegativeStageMultTable.Length - 1);
+                int rankIdx = Mathf.Clamp(currentRank - 1, 0, 9);
+                float mult = NegativeStageMultTable[idx][rankIdx] / 100f;
+                float lifetimeP = ev.BaseWeight * mult;
+                if (lifetimeP <= 0f) return 0f;
+                if (lifetimeP >= 1f) return 1f;
+                return 1f - Mathf.Pow(1f - lifetimeP, 1f / period);
+            }
+        }
+
+        /// <summary>
+        /// stat値が「ランク n の閾値」を満たす最大の n を返す (1..10)。
+        /// 閾値計算は RollRankUpProb と同じ式。
+        /// </summary>
+        private static int FindRankForStat(int statValue, float jobMul)
+        {
+            int rank = 1;
+            for (int i = 0; i < NormalLevels.Length; i++)
+            {
+                int targetLv = NormalLevels[i];
+                float s = (targetLv - 1f) / (StatMaxLevel - 1f);
+                float gf = 1f + (GrowthNormal - 1f) * Mathf.Pow(s, GrowthPower);
+                float lv1 = RankBaseStats[i] * jobMul * TalentMidMul * 0.1f;
+                int threshold = Mathf.Max(1, Mathf.RoundToInt(lv1 * gf));
+                if (statValue >= threshold)
+                    rank = i + 1;
+                else
+                    break;
+            }
+            return rank;
+        }
+
+        /// <summary>
+        /// 複数 stat の rank を統合する (min/avg/max)。
+        /// </summary>
+        private static int AggregateRanks(int[] ranks, string mode)
+        {
+            if (ranks == null || ranks.Length == 0) return 1;
+            switch (mode)
+            {
+                case "max":
+                    {
+                        int m = ranks[0];
+                        for (int i = 1; i < ranks.Length; i++) if (ranks[i] > m) m = ranks[i];
+                        return m;
+                    }
+                case "avg":
+                    {
+                        int sum = 0;
+                        for (int i = 0; i < ranks.Length; i++) sum += ranks[i];
+                        return Mathf.RoundToInt((float)sum / ranks.Length);
+                    }
+                case "min":
+                default:
+                    {
+                        int m = ranks[0];
+                        for (int i = 1; i < ranks.Length; i++) if (ranks[i] < m) m = ranks[i];
+                        return m;
+                    }
+            }
+        }
+
         // ランクUPの「就職年齢起点で何年以内」に収まるか（C経路スケジュール用）
         private const int RankUpWindowYears = 30;
 
@@ -521,17 +671,20 @@ namespace SteraCube.SpaceJourney
 
             for (int age = 0; age <= MaxAge; age++)
             {
+                // 死亡してたら以降のシミュは打ち切り
+                if (ctx.IsDead) break;
+
                 // 1) 転生内ステータスを年齢に応じて更新
                 ctx.UpdateNowStats(age);
 
                 // 2) イベント発火（先に処理 = この年の発火結果がランクUP判定に反映される）
                 //    マルチパスイベント処理（最大6パス・1年あたり最大2イベントの「枠」）
-                //    強制発火（保証 or ルート最終年）は枠を消費しないので、
-                //    生業ルートは詰まらず必ず通る。
+                //    強制発火（保証 or ルート最終年 or rank連鎖）は枠を消費しないので、
+                //    生業ルート/rank連鎖は詰まらず必ず試行される。
                 //    passごとにAcquiredLifeTagsの最新状態を使うことで、
                 //    同年内にタグが付与された後のイベント（宇宙中フレーバー等）も正しく発火する。
                 var firedThisAge = new HashSet<string>();
-                int slotConsumed = 0;
+                ctx.SlotConsumedThisAge = 0;
                 for (int pass = 0; pass < 6; pass++)
                 {
                     // passごとに最新のタグスナップショットを取得
@@ -544,11 +697,10 @@ namespace SteraCube.SpaceJourney
                         if (fired)
                         {
                             firedAny = true;
-                            if (consumes) slotConsumed++;
-                            if (slotConsumed >= 2) break;
+                            if (consumes) ctx.SlotConsumedThisAge++;
                         }
                     }
-                    if (!firedAny || slotConsumed >= 2) break;
+                    if (!firedAny) break;
                 }
 
                 // 3) ランクUP判定（生業確定後・30年枠内のみ）
@@ -735,8 +887,15 @@ namespace SteraCube.SpaceJourney
             // 再発不可
             if (ctx.EndedEvents.Contains(ev)) return (false, false);
 
-            // ランク・ステータス前提条件チェック（requiresAnyLifeTag / blockedByLifeTags 含む）
+            // ランク・ステータス前提条件チェック
+            // requiresAnyLifeTag は同パス内のチェイン抑止のためスナップショット(tagsThisPass)を使い、
+            // blockedByLifeTags は同パス内で先に発火したイベントによる排他を効かせるためライブ状態(ctx.AcquiredLifeTags)で再チェックする。
             if (!ev.MeetsPrerequisites(ctx.CurrentRank, ctx.NowStats, tagsThisPass)) return (false, false);
+            if (ev.blockedByLifeTags != null && ev.blockedByLifeTags.Count > 0)
+            {
+                foreach (var tag in ev.blockedByLifeTags)
+                    if (ctx.AcquiredLifeTags.Contains(tag)) return (false, false);
+            }
 
             // requires：前提イベントが全部発生済みでないとダメ
             foreach (var reqId in ev.RequiresEventIds)
@@ -770,11 +929,22 @@ namespace SteraCube.SpaceJourney
             if (ev.RelatedJobIds != null && ev.RelatedJobIds.Count > 0)
                 if (!MatchesRelatedJob(ev, ctx.DestinyJob)) return (false, false);
 
+            // excludedJobIds に DestinyJob が含まれていればスキップ (高学歴職をブロックなど)
+            if (ev.ExcludedJobIds != null && ev.ExcludedJobIds.Count > 0)
+                if (ev.MatchesExcludedJob(ctx.DestinyJob)) return (false, false);
+
             // blockedBy：排他イベントが1つでも発生済みならダメ
             foreach (var blkId in ev.BlockedByEventIds)
             {
                 if (!string.IsNullOrEmpty(blkId) && ctx.OccurredEvents.ContainsKey(blkId))
                     return (false, false);
+            }
+
+            // requireYearsAfterJob: 生業確定からN年経過必須(死亡など人生後半向け)
+            if (ev.requireYearsAfterJob > 0)
+            {
+                if (ctx.JobConfirmedAge < 0) return (false, false);
+                if (age - ctx.JobConfirmedAge < ev.requireYearsAfterJob) return (false, false);
             }
 
             // ── 強制発火判定 ──
@@ -783,6 +953,8 @@ namespace SteraCube.SpaceJourney
             //    ルート = relatedJobIds が DestinyJob と一致 かつ 就業前イベント
             //    （requiresAnyLifeTag に job_* を含まない = 生業就任前の連鎖イベント）
             //    → 「年齢的ずれはあっても必ず起きる」を実装
+            // 3) rank連鎖系（イベントID に "_r" を含む or requireMinRank > 1）
+            //    → 通常発火枠を消費しない。フレーバーで枠が埋まっても試行される。
             bool isGuaranteed = ev.BaseWeight >= 1.0f;
             bool isRouteForcedFire =
                 !isGuaranteed &&
@@ -790,23 +962,37 @@ namespace SteraCube.SpaceJourney
                 ctx.JobConfirmedAge < 0 &&
                 MatchesRelatedJob(ev, ctx.DestinyJob) &&
                 !RequiresJobLifeTag(ev);
+            bool isRankChain = ev.EventId.Contains("_r") || ev.RequireMinRank > 1;
+
+            // 通常発火（保証/強制/rank連鎖でない）が枠満杯なら早期スキップ
+            bool consumesSlot = !isGuaranteed && !isRouteForcedFire && !isRankChain;
+            if (consumesSlot && ctx.SlotConsumedThisAge >= 2) return (false, false);
 
             if (!isGuaranteed && !isRouteForcedFire)
             {
-                // StatWeightConfigがある場合は年齢範囲で割りstatで重みを変化させる
                 float weight;
-                var swc = ev.StatWeightConfig;
-                if (swc != null && swc.StatIndex >= 0)
+
+                // 新仕様: eventStage が 0 以外なら 5段階×ランクテーブル
+                if (ev.eventStage != 0)
                 {
-                    int si = swc.StatIndex;
-                    float norm = Mathf.Min(ctx.NowStats[si] / 100f, 1f);
-                    float period = Mathf.Max(ev.EndAge - ev.StartAge + 1, 1);
-                    weight = (ev.BaseWeight / period) * (swc.Sign == "+" ? norm * 3f : (1f - norm) * 3f);
-                    weight = Mathf.Clamp(weight, 0.001f, 1f);
+                    weight = CalcStageBasedWeight(ctx, ev);
                 }
                 else
                 {
-                    weight = ev.BaseWeight;
+                    // 旧仕様: StatWeightConfigがある場合は年齢範囲で割りstatで重みを変化させる
+                    var swc = ev.StatWeightConfig;
+                    if (swc != null && swc.StatIndex >= 0)
+                    {
+                        int si = swc.StatIndex;
+                        float norm = Mathf.Min(ctx.NowStats[si] / 100f, 1f);
+                        float period = Mathf.Max(ev.EndAge - ev.StartAge + 1, 1);
+                        weight = (ev.BaseWeight / period) * (swc.Sign == "+" ? norm * 3f : (1f - norm) * 3f);
+                        weight = Mathf.Clamp(weight, 0.001f, 1f);
+                    }
+                    else
+                    {
+                        weight = ev.BaseWeight;
+                    }
                 }
                 weight += ev.CalcLifeTagBonus(ctx.AcquiredLifeTags);
 
@@ -823,9 +1009,7 @@ namespace SteraCube.SpaceJourney
             // 同年発火済みに登録
             firedThisAge.Add(ev.EventId);
 
-            // 強制発火（保証 or ルート最終年）は枠を消費しない
-            bool consumes = !isGuaranteed && !isRouteForcedFire;
-            return (true, consumes);
+            return (true, consumesSlot);
         }
 
         // ============================================================
@@ -838,6 +1022,7 @@ namespace SteraCube.SpaceJourney
 
             // 生涯の終わり
             if (eventId.StartsWith("life_end_")) return ReinEventType.LifeEnd;
+            if (eventId.StartsWith("ev_death_")) return ReinEventType.LifeEnd;
 
             switch (eventId)
             {
@@ -907,7 +1092,10 @@ namespace SteraCube.SpaceJourney
             ReinSimContext ctx,
             ReinLifeEvent ev)
         {
-            if (ev.Options == null || ev.Options.Count == 0) return null;
+            // options が無いイベントは「タグ付与だけ」の単純イベント。
+            // 空の Option を返して発火させる。
+            if (ev.Options == null || ev.Options.Count == 0)
+                return new ReinSentenceOption();
 
             // 各選択肢の最終重みを計算（nowStatsをstatConditionsに渡す）
             float[] weights = new float[ev.Options.Count];
@@ -952,12 +1140,19 @@ namespace SteraCube.SpaceJourney
             }
 
             // イベント本文を記録（空でなければ）
+            var evType = ResolveEventType(ev.EventId);
             if (!string.IsNullOrEmpty(ev.Sentence))
             {
                 ctx.HistoryEvents.Add(new ReinEvent(
                     age,
                     ev.Sentence,
-                    ResolveEventType(ev.EventId)));
+                    evType));
+            }
+
+            // 死亡イベントなら IsDead フラグを立てる(以降のシミュは打ち切り)
+            if (evType == ReinEventType.LifeEnd)
+            {
+                ctx.IsDead = true;
             }
 
             // オプション文を記録（空でなければ）

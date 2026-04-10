@@ -126,6 +126,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -171,6 +174,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -274,6 +280,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_routine" },
+                blockedByLifeTags = new() { "jdf_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -325,6 +333,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_routine" },
+                blockedByLifeTags = new() { "jdf_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -420,6 +430,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -439,6 +452,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_episode" },
+                blockedByLifeTags = new() { "jdf_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -466,6 +484,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_episode" },
+                blockedByLifeTags = new() { "jdf_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -493,6 +516,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "-" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_episode" },
+                blockedByLifeTags = new() { "jdf_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -520,6 +548,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_serious" },
+                blockedByLifeTags = new() { "jdf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -547,6 +580,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_serious" },
+                blockedByLifeTags = new() { "jdf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -574,6 +612,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                grantsLifeTags = new() { "jdf_flav_serious" },
+                blockedByLifeTags = new() { "jdf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -604,6 +647,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -665,6 +711,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -691,6 +740,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -768,6 +820,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_jieitai" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -879,6 +934,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1003,6 +1061,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_routine" },
+                blockedByLifeTags = new() { "fire_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1049,6 +1109,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_routine" },
+                blockedByLifeTags = new() { "fire_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1078,7 +1140,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_fire_06",
-                sentence = "消防学校を修了し、消防署に配属された。",
+                sentence = "消防学校を修了した。",
                 startAge = 24,
                 endAge = 26,
                 baseWeight = 0.85f,
@@ -1119,7 +1181,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_fire_07a",
-                sentence = "消防隊員として現場に出るようになった。出動のたびに経験を積んでいった。",
+                sentence = "初めての火災現場に出動した。煙の中で声を出し続けた。",
                 startAge = 25,
                 endAge = 27,
                 baseWeight = 0.9f,
@@ -1213,7 +1275,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_fire_06b",
-                sentence = "消防隊員として現場に出ることになった。",
+                sentence = "正式に消防隊員として配属が決まった。",
                 startAge = 24,
                 endAge = 26,
                 baseWeight = 1.0f,
@@ -1249,6 +1311,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_episode" },
+                blockedByLifeTags = new() { "fire_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1276,6 +1343,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_episode" },
+                blockedByLifeTags = new() { "fire_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1303,6 +1375,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "-" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_episode" },
+                blockedByLifeTags = new() { "fire_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1330,6 +1407,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_serious" },
+                blockedByLifeTags = new() { "fire_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1357,6 +1439,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_serious" },
+                blockedByLifeTags = new() { "fire_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1384,6 +1471,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                grantsLifeTags = new() { "fire_flav_serious" },
+                blockedByLifeTags = new() { "fire_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1414,6 +1506,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1475,6 +1570,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1501,6 +1599,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1578,11 +1679,14 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_shobo" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_fire_r7b",
-                sentence = "署を出る日、空を見上げた。",
+                sentence = "退官の日、後輩たちに見送られて消防署を後にした。",
                 startAge = 25,
                 endAge = 55,
                 baseWeight = 1.0f,
@@ -1830,6 +1934,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                grantsLifeTags = new() { "emt_flav_routine" },
+                blockedByLifeTags = new() { "emt_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1850,6 +1956,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                grantsLifeTags = new() { "emt_flav_episode" },
+                blockedByLifeTags = new() { "emt_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1877,6 +1988,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                grantsLifeTags = new() { "emt_flav_episode" },
+                blockedByLifeTags = new() { "emt_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1904,6 +2020,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "-" },
                 relatedJobIds = new() { "knight_kyumei" },
+                grantsLifeTags = new() { "emt_flav_episode" },
+                blockedByLifeTags = new() { "emt_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1931,6 +2052,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                grantsLifeTags = new() { "emt_flav_serious" },
+                blockedByLifeTags = new() { "emt_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1958,6 +2084,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                grantsLifeTags = new() { "emt_flav_serious" },
+                blockedByLifeTags = new() { "emt_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1985,6 +2116,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                grantsLifeTags = new() { "emt_flav_serious" },
+                blockedByLifeTags = new() { "emt_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2015,6 +2151,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2076,6 +2215,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2102,6 +2244,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2179,6 +2324,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_kyumei" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2290,6 +2438,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2395,6 +2546,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_routine" },
+                blockedByLifeTags = new() { "guard_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2415,6 +2568,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2458,6 +2614,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_routine" },
+                blockedByLifeTags = new() { "guard_flav_routine" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2477,6 +2638,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_episode" },
+                blockedByLifeTags = new() { "guard_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2504,6 +2670,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_episode" },
+                blockedByLifeTags = new() { "guard_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2531,6 +2702,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "-" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_episode" },
+                blockedByLifeTags = new() { "guard_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2558,6 +2734,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_serious" },
+                blockedByLifeTags = new() { "guard_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2585,6 +2766,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_serious" },
+                blockedByLifeTags = new() { "guard_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2612,6 +2798,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                grantsLifeTags = new() { "guard_flav_serious" },
+                blockedByLifeTags = new() { "guard_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2642,6 +2833,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2703,6 +2897,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2729,6 +2926,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2806,6 +3006,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bodyguard" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2870,9 +3073,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_saiban_02",
-                sentence = "法学部に進み、司法試験を目指して判例と条文を読み込んだ。",
-                startAge = 17,
-                endAge = 19,
+                sentence = "大学の法学部に進んだ後、司法試験を目指して判例と条文を読み込んだ。",
+                startAge = 19,
+                endAge = 22,
                 baseWeight = 0.85f,
                 requiresAnyLifeTag = new() { "saiban_call" },
                 grantsLifeTags = new() { "saiban_train" },
@@ -2909,14 +3112,17 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_saiban_03",
                 sentence = "司法試験を受験した。",
-                startAge = 21,
-                endAge = 26,
+                startAge = 24,
+                endAge = 28,
                 baseWeight = 0.65f,
                 requiresAnyLifeTag = new() { "saiban_train" },
                 blockedByLifeTags = new() { "saiban_pass" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3025,6 +3231,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3076,6 +3285,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3160,6 +3372,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                grantsLifeTags = new() { "saiban_flav_routine" },
+                blockedByLifeTags = new() { "saiban_flav_routine" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3211,6 +3428,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                grantsLifeTags = new() { "saiban_flav_episode" },
+                blockedByLifeTags = new() { "saiban_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3238,6 +3460,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                grantsLifeTags = new() { "saiban_flav_episode" },
+                blockedByLifeTags = new() { "saiban_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3265,6 +3492,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "-" },
                 relatedJobIds = new() { "knight_saiban" },
+                grantsLifeTags = new() { "saiban_flav_episode" },
+                blockedByLifeTags = new() { "saiban_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3292,6 +3524,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                grantsLifeTags = new() { "saiban_flav_serious" },
+                blockedByLifeTags = new() { "saiban_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3319,6 +3556,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                grantsLifeTags = new() { "saiban_flav_serious" },
+                blockedByLifeTags = new() { "saiban_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3346,6 +3588,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                grantsLifeTags = new() { "saiban_flav_serious" },
+                blockedByLifeTags = new() { "saiban_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3376,6 +3623,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3437,6 +3687,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3463,6 +3716,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3540,6 +3796,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_saiban" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3651,6 +3910,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3698,6 +3960,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3763,6 +4028,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3832,6 +4100,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_routine" },
+                blockedByLifeTags = new() { "intl_flav_routine" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3883,6 +4156,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_routine" },
+                blockedByLifeTags = new() { "intl_flav_routine" },
+                eventStage = -1,
+                statCompareCount = 3,
+                statCompareMode = "avg",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3932,6 +4210,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_episode" },
+                blockedByLifeTags = new() { "intl_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3959,6 +4242,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_episode" },
+                blockedByLifeTags = new() { "intl_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3986,6 +4274,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "-" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_episode" },
+                blockedByLifeTags = new() { "intl_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -4013,6 +4306,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_serious" },
+                blockedByLifeTags = new() { "intl_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -4040,6 +4338,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_serious" },
+                blockedByLifeTags = new() { "intl_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -4067,6 +4370,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                grantsLifeTags = new() { "intl_flav_serious" },
+                blockedByLifeTags = new() { "intl_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -4097,6 +4405,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -4158,6 +4469,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -4184,6 +4498,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -4261,6 +4578,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
                 relatedJobIds = new() { "knight_bengoshi" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {

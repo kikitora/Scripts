@@ -116,6 +116,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -221,6 +224,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -260,6 +266,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                grantsLifeTags = new() { "magic_flav_episode" },
+                blockedByLifeTags = new() { "magic_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -287,6 +298,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                grantsLifeTags = new() { "magic_flav_episode" },
+                blockedByLifeTags = new() { "magic_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -314,6 +330,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "-" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                grantsLifeTags = new() { "magic_flav_episode" },
+                blockedByLifeTags = new() { "magic_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -341,6 +362,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                grantsLifeTags = new() { "magic_flav_serious" },
+                blockedByLifeTags = new() { "magic_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -368,6 +394,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                grantsLifeTags = new() { "magic_flav_serious" },
+                blockedByLifeTags = new() { "magic_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -395,6 +426,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                grantsLifeTags = new() { "magic_flav_serious" },
+                blockedByLifeTags = new() { "magic_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -425,6 +461,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -486,6 +525,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -512,6 +554,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -589,6 +634,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_tejinashi" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -744,6 +792,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -822,6 +873,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                grantsLifeTags = new() { "fort_flav_episode" },
+                blockedByLifeTags = new() { "fort_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -849,6 +905,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                grantsLifeTags = new() { "fort_flav_episode" },
+                blockedByLifeTags = new() { "fort_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -876,6 +937,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "-" },
                 relatedJobIds = new() { "mage_uranai" },
+                grantsLifeTags = new() { "fort_flav_episode" },
+                blockedByLifeTags = new() { "fort_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -903,6 +969,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                grantsLifeTags = new() { "fort_flav_serious" },
+                blockedByLifeTags = new() { "fort_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -930,6 +1001,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                grantsLifeTags = new() { "fort_flav_serious" },
+                blockedByLifeTags = new() { "fort_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -957,6 +1033,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                grantsLifeTags = new() { "fort_flav_serious" },
+                blockedByLifeTags = new() { "fort_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -987,6 +1068,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1048,6 +1132,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1074,6 +1161,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1151,6 +1241,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_uranai" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1262,6 +1355,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1350,6 +1446,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                grantsLifeTags = new() { "sou_flav_routine" },
+                blockedByLifeTags = new() { "sou_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1370,6 +1468,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                grantsLifeTags = new() { "sou_flav_episode" },
+                blockedByLifeTags = new() { "sou_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1397,6 +1500,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                grantsLifeTags = new() { "sou_flav_episode" },
+                blockedByLifeTags = new() { "sou_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1424,6 +1532,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "-" },
                 relatedJobIds = new() { "mage_sou" },
+                grantsLifeTags = new() { "sou_flav_episode" },
+                blockedByLifeTags = new() { "sou_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1451,6 +1564,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                grantsLifeTags = new() { "sou_flav_serious" },
+                blockedByLifeTags = new() { "sou_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1478,6 +1596,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                grantsLifeTags = new() { "sou_flav_serious" },
+                blockedByLifeTags = new() { "sou_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1505,6 +1628,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                grantsLifeTags = new() { "sou_flav_serious" },
+                blockedByLifeTags = new() { "sou_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1535,6 +1663,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1596,6 +1727,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1622,6 +1756,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1699,6 +1836,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_sou" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1723,8 +1863,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_ong_01",
                 sentence = "コンサートで聴いた一音が耳に残った。家に帰ってから何時間も同じ音を鼻歌で繰り返していた。",
-                startAge = 8,
-                endAge = 13,
+                startAge = 4,
+                endAge = 6,
                 baseWeight = 0.09f,
                 blockedByLifeTags = new() { "ong_call" },
                 hasStatWeightConfig = true,
@@ -1745,8 +1885,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventId = "ev_ong_01g",
                 editorMemo = "原体験保証",
                 sentence = "コンサートで聴いた一音が耳に残った。家に帰ってから何時間も同じ音を鼻歌で繰り返していた。",
-                startAge = 13,
-                endAge = 13,
+                startAge = 6,
+                endAge = 6,
                 baseWeight = 1.0f,
                 blockedByLifeTags = new() { "ong_call" },
                 blockedByEventIds = new() { "ev_ong_01" },
@@ -1763,9 +1903,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_ong_02",
-                sentence = "楽器を始めた。音楽学校に通い、毎日何時間も練習した。",
-                startAge = 13,
-                endAge = 18,
+                sentence = "楽器を始めた。毎日何時間も練習した。",
+                startAge = 6,
+                endAge = 12,
                 baseWeight = 0.85f,
                 requiresAnyLifeTag = new() { "ong_call" },
                 grantsLifeTags = new() { "ong_train" },
@@ -1810,6 +1950,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1978,6 +2121,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                grantsLifeTags = new() { "ong_flav_routine" },
+                blockedByLifeTags = new() { "ong_flav_routine" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2024,6 +2172,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                grantsLifeTags = new() { "ong_flav_episode" },
+                blockedByLifeTags = new() { "ong_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2051,6 +2204,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                grantsLifeTags = new() { "ong_flav_episode" },
+                blockedByLifeTags = new() { "ong_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2078,6 +2236,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "-" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                grantsLifeTags = new() { "ong_flav_episode" },
+                blockedByLifeTags = new() { "ong_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2105,6 +2268,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                grantsLifeTags = new() { "ong_flav_serious" },
+                blockedByLifeTags = new() { "ong_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2132,6 +2300,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                grantsLifeTags = new() { "ong_flav_serious" },
+                blockedByLifeTags = new() { "ong_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2159,6 +2332,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                grantsLifeTags = new() { "ong_flav_serious" },
+                blockedByLifeTags = new() { "ong_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2189,6 +2367,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2250,6 +2431,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2276,6 +2460,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2353,6 +2540,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_ongakuka" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2464,6 +2654,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2513,6 +2706,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2558,6 +2754,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2621,6 +2820,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                grantsLifeTags = new() { "res_flav_routine" },
+                blockedByLifeTags = new() { "res_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2641,6 +2842,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                grantsLifeTags = new() { "res_flav_episode" },
+                blockedByLifeTags = new() { "res_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2668,6 +2874,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                grantsLifeTags = new() { "res_flav_episode" },
+                blockedByLifeTags = new() { "res_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2695,6 +2906,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "-" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                grantsLifeTags = new() { "res_flav_episode" },
+                blockedByLifeTags = new() { "res_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2722,6 +2938,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                grantsLifeTags = new() { "res_flav_serious" },
+                blockedByLifeTags = new() { "res_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2749,6 +2970,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                grantsLifeTags = new() { "res_flav_serious" },
+                blockedByLifeTags = new() { "res_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2776,6 +3002,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                grantsLifeTags = new() { "res_flav_serious" },
+                blockedByLifeTags = new() { "res_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2806,6 +3037,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2867,6 +3101,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2893,6 +3130,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2970,6 +3210,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kenkyusha" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3087,6 +3330,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3136,6 +3382,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3229,6 +3478,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_routine" },
+                blockedByLifeTags = new() { "cult_flav_routine" },
+                eventStage = -1,
+                statCompareCount = 3,
+                statCompareMode = "avg",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3296,6 +3550,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_episode" },
+                blockedByLifeTags = new() { "cult_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3323,6 +3582,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_episode" },
+                blockedByLifeTags = new() { "cult_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3350,6 +3614,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "-" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_episode" },
+                blockedByLifeTags = new() { "cult_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3377,6 +3646,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_serious" },
+                blockedByLifeTags = new() { "cult_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3404,6 +3678,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MDF, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_serious" },
+                blockedByLifeTags = new() { "cult_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3431,6 +3710,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_serious" },
+                blockedByLifeTags = new() { "cult_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3461,6 +3745,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3522,6 +3809,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3548,6 +3838,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3625,6 +3918,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3735,6 +4031,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "mage_kult" },
+                grantsLifeTags = new() { "cult_flav_episode" },
+                blockedByLifeTags = new() { "cult_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption

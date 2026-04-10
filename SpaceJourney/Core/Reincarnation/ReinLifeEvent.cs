@@ -92,12 +92,48 @@ namespace SteraCube.SpaceJourney
         // ────────────────────────────────────────
         // 紐づくジョブ（ID参照のみ。SO参照は廃止）
         // ────────────────────────────────────────
+        // relatedJobIds: このリストに DestinyJob が含まれる場合のみ発火 (whitelist)
+        // excludedJobIds: このリストに DestinyJob が含まれる場合は発火しない (blacklist)
+        // 両方空の場合はジョブ条件なし。両方指定の場合は relatedJobIds 優先 → 含まれていれば発火、
+        // 次に excludedJobIds → 含まれていれば発火しない。
         public List<string> relatedJobIds = new();
+        public List<string> excludedJobIds = new();
 
         // ────────────────────────────────────────
         // 結果の選択肢
         // ────────────────────────────────────────
         public List<ReinSentenceOption> options = new();
+
+        // ────────────────────────────────────────
+        // 新仕様: 5段階×ランク発火確率
+        // ────────────────────────────────────────
+        // eventStage:
+        //   0 = 旧仕様（baseWeight + statWeightConfig）で発火判定
+        //   +1〜+5 = 新仕様（5段階×ランクテーブル参照、stat値は startAge での値で判定）
+        //     +1=易, +2=普通, +3=中堅, +4=難, +5=伝説
+        //   -1〜-2 = 不幸補正（baseWeight × ランク別乗算率）
+        //     高ランクほど発火率が下がる
+        //
+        // statCompareCount:
+        //   1〜5。比較する stat の数。ジョブの statMul 上位 N 個を取る。
+        //
+        // statCompareMode:
+        //   "min" = 上位 N stat の最低ランクで判定（ボトルネック方式）
+        //   "avg" = 平均
+        //   "max" = 最高
+        //
+        // 「段階0=変更なし」なので既存イベントに何も付けなくても動く。
+        // 段階を付けたい場合のみ初期化子で指定する。
+        public int eventStage = 0;
+        public int statCompareCount = 3;
+        public string statCompareMode = "min";
+
+        // ────────────────────────────────────────
+        // 生業確定からN年経過必須(死亡など人生後半向け)
+        // ────────────────────────────────────────
+        // 例: requireYearsAfterJob = 30 → 生業確定+30年（=ランクUPスケジュール完了後）以降のみ発火
+        // 0 = 制限なし
+        public int requireYearsAfterJob = 0;
 
         // ────────────────────────────────────────
         // 旧SOプロパティ互換（参照側コードを書き換えなくてよいように）
@@ -125,6 +161,7 @@ namespace SteraCube.SpaceJourney
         public IReadOnlyList<string> RequiresPrevYearEventIds => requiresPrevYearEventIds;
         public IReadOnlyList<string> BlockedByEventIds => blockedByEventIds;
         public IReadOnlyList<string> RelatedJobIds => relatedJobIds;
+        public IReadOnlyList<string> ExcludedJobIds => excludedJobIds;
         public IReadOnlyList<ReinSentenceOption> Options => options;
 
         public bool HasJobTag => hasTendency;
@@ -151,6 +188,16 @@ namespace SteraCube.SpaceJourney
             if (destinyJob == null) return false;
             if (relatedJobIds == null) return false;
             foreach (var id in relatedJobIds)
+                if (!string.IsNullOrEmpty(id) && id == destinyJob.JobId) return true;
+            return false;
+        }
+
+        /// <summary>excludedJobIds に DestinyJob が含まれていれば true (ブロック対象)</summary>
+        public bool MatchesExcludedJob(SoulJobDefinition destinyJob)
+        {
+            if (destinyJob == null) return false;
+            if (excludedJobIds == null || excludedJobIds.Count == 0) return false;
+            foreach (var id in excludedJobIds)
                 if (!string.IsNullOrEmpty(id) && id == destinyJob.JobId) return true;
             return false;
         }

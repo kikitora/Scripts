@@ -262,6 +262,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                grantsLifeTags = new() { "hunt_flav_routine" },
+                blockedByLifeTags = new() { "hunt_flav_routine" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -305,6 +310,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                grantsLifeTags = new() { "hunt_flav_episode" },
+                blockedByLifeTags = new() { "hunt_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -332,6 +342,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                grantsLifeTags = new() { "hunt_flav_episode" },
+                blockedByLifeTags = new() { "hunt_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -359,6 +374,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "-" },
                 relatedJobIds = new() { "archer_karyudo" },
+                grantsLifeTags = new() { "hunt_flav_episode" },
+                blockedByLifeTags = new() { "hunt_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -386,6 +406,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                grantsLifeTags = new() { "hunt_flav_serious" },
+                blockedByLifeTags = new() { "hunt_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -413,6 +438,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                grantsLifeTags = new() { "hunt_flav_serious" },
+                blockedByLifeTags = new() { "hunt_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -440,6 +470,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                grantsLifeTags = new() { "hunt_flav_serious" },
+                blockedByLifeTags = new() { "hunt_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -470,6 +505,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -531,6 +569,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -557,6 +598,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -634,6 +678,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_karyudo" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -789,6 +836,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -838,6 +888,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                grantsLifeTags = new() { "scam_flav_routine" },
+                blockedByLifeTags = new() { "scam_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -858,6 +910,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                grantsLifeTags = new() { "scam_flav_episode" },
+                blockedByLifeTags = new() { "scam_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -885,6 +942,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                grantsLifeTags = new() { "scam_flav_episode" },
+                blockedByLifeTags = new() { "scam_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -912,6 +974,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "-" },
                 relatedJobIds = new() { "archer_sagishi" },
+                grantsLifeTags = new() { "scam_flav_episode" },
+                blockedByLifeTags = new() { "scam_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -939,6 +1006,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                grantsLifeTags = new() { "scam_flav_serious" },
+                blockedByLifeTags = new() { "scam_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -966,6 +1038,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                grantsLifeTags = new() { "scam_flav_serious" },
+                blockedByLifeTags = new() { "scam_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -993,6 +1070,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                grantsLifeTags = new() { "scam_flav_serious" },
+                blockedByLifeTags = new() { "scam_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1023,6 +1105,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1084,6 +1169,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1110,6 +1198,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1187,6 +1278,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_sagishi" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1260,6 +1354,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1305,6 +1402,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1454,6 +1554,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                grantsLifeTags = new() { "cam_flav_routine" },
+                blockedByLifeTags = new() { "cam_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1474,6 +1576,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                grantsLifeTags = new() { "cam_flav_episode" },
+                blockedByLifeTags = new() { "cam_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1501,6 +1608,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                grantsLifeTags = new() { "cam_flav_episode" },
+                blockedByLifeTags = new() { "cam_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1528,6 +1640,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "-" },
                 relatedJobIds = new() { "archer_cameraman" },
+                grantsLifeTags = new() { "cam_flav_episode" },
+                blockedByLifeTags = new() { "cam_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1555,6 +1672,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                grantsLifeTags = new() { "cam_flav_serious" },
+                blockedByLifeTags = new() { "cam_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1582,6 +1704,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                grantsLifeTags = new() { "cam_flav_serious" },
+                blockedByLifeTags = new() { "cam_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1609,6 +1736,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                grantsLifeTags = new() { "cam_flav_serious" },
+                blockedByLifeTags = new() { "cam_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1639,6 +1771,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1700,6 +1835,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1726,6 +1864,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -1803,6 +1944,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_cameraman" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -1914,6 +2058,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2020,6 +2167,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2088,6 +2238,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                grantsLifeTags = new() { "kyudo_flav_routine" },
+                blockedByLifeTags = new() { "kyudo_flav_routine" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2136,6 +2291,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                grantsLifeTags = new() { "kyudo_flav_episode" },
+                blockedByLifeTags = new() { "kyudo_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2163,6 +2323,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                grantsLifeTags = new() { "kyudo_flav_episode" },
+                blockedByLifeTags = new() { "kyudo_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2190,6 +2355,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "-" },
                 relatedJobIds = new() { "archer_kyudo" },
+                grantsLifeTags = new() { "kyudo_flav_episode" },
+                blockedByLifeTags = new() { "kyudo_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2217,6 +2387,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                grantsLifeTags = new() { "kyudo_flav_serious" },
+                blockedByLifeTags = new() { "kyudo_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2244,6 +2419,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                grantsLifeTags = new() { "kyudo_flav_serious" },
+                blockedByLifeTags = new() { "kyudo_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2271,6 +2451,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                grantsLifeTags = new() { "kyudo_flav_serious" },
+                blockedByLifeTags = new() { "kyudo_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2301,6 +2486,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2362,6 +2550,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2388,6 +2579,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2465,6 +2659,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_kyudo" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -2576,6 +2773,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2680,6 +2880,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2783,6 +2986,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                grantsLifeTags = new() { "golf_flav_routine" },
+                blockedByLifeTags = new() { "golf_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2803,6 +3008,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                grantsLifeTags = new() { "golf_flav_episode" },
+                blockedByLifeTags = new() { "golf_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2830,6 +3040,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                grantsLifeTags = new() { "golf_flav_episode" },
+                blockedByLifeTags = new() { "golf_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2857,6 +3072,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "-" },
                 relatedJobIds = new() { "archer_golfer" },
+                grantsLifeTags = new() { "golf_flav_episode" },
+                blockedByLifeTags = new() { "golf_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2884,6 +3104,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                grantsLifeTags = new() { "golf_flav_serious" },
+                blockedByLifeTags = new() { "golf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2911,6 +3136,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                grantsLifeTags = new() { "golf_flav_serious" },
+                blockedByLifeTags = new() { "golf_flav_serious" },
+                eventStage = -1,
+                statCompareCount = 3,
+                statCompareMode = "avg",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2938,6 +3168,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                grantsLifeTags = new() { "golf_flav_serious" },
+                blockedByLifeTags = new() { "golf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -2968,6 +3203,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3029,6 +3267,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3055,6 +3296,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3132,6 +3376,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_golfer" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3243,6 +3490,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3337,15 +3587,18 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_msf_04",
-                sentence = "手術の補助に立ちながら、指先の感覚を覚えていった。",
-                startAge = 24,
-                endAge = 30,
+                sentence = "医学部を卒業し、研修医として手術の補助に入った。指先の感覚を覚えていった。",
+                startAge = 28,
+                endAge = 33,
                 baseWeight = 0.75f,
                 requiresAnyLifeTag = new() { "msf_med" },
                 grantsLifeTags = new() { "msf_spec" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3370,7 +3623,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     },
                     new ReinSentenceOption
                     {
-                        sentence = "手術の補助に立ちながら、指先の感覚を覚えていった。",
+                        sentence = "先輩医師の手技を見ながら、少しずつ任される範囲が広がった。",
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -3387,14 +3640,17 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_msf_05",
                 sentence = "国境なき医師団（MSF）の採用試験を受けた。医療技術だけでなく、精神的な耐性も見られた。",
-                startAge = 30,
-                endAge = 35,
+                startAge = 33,
+                endAge = 38,
                 baseWeight = 0.7f,
                 requiresAnyLifeTag = new() { "msf_spec" },
                 blockedByLifeTags = new() { "msf_field" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3482,8 +3738,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 endAge = 38,
                 baseWeight = 1.0f,
                 requiresAnyLifeTag = new() { "msf_wait" },
-                blockedByLifeTags = new() { "msf_field" },
+                blockedByLifeTags = new() { "msf_field", "msf_flav_routine" },
                 relatedJobIds = new() { "archer_msf" },
+                grantsLifeTags = new() { "msf_flav_routine" },
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3524,6 +3781,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3575,6 +3835,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3623,6 +3886,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3642,6 +3908,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                grantsLifeTags = new() { "msf_flav_episode" },
+                blockedByLifeTags = new() { "msf_flav_episode" },
+                eventStage = 1,
+                statCompareCount = 3,
+                statCompareMode = "max",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3669,6 +3940,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                grantsLifeTags = new() { "msf_flav_episode" },
+                blockedByLifeTags = new() { "msf_flav_episode" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3696,6 +3972,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "-" },
                 relatedJobIds = new() { "archer_msf" },
+                grantsLifeTags = new() { "msf_flav_episode" },
+                blockedByLifeTags = new() { "msf_flav_episode" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3723,6 +4004,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                grantsLifeTags = new() { "msf_flav_serious" },
+                blockedByLifeTags = new() { "msf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3750,6 +4036,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.MAT, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                grantsLifeTags = new() { "msf_flav_serious" },
+                blockedByLifeTags = new() { "msf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3777,6 +4068,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AT, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                grantsLifeTags = new() { "msf_flav_serious" },
+                blockedByLifeTags = new() { "msf_flav_serious" },
+                eventStage = 2,
+                statCompareCount = 3,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3807,6 +4103,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 3,
+                statCompareCount = 3,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3868,6 +4167,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {
@@ -3894,6 +4196,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -3971,6 +4276,9 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.AGI, sign = "+" },
                 relatedJobIds = new() { "archer_msf" },
+                eventStage = 5,
+                statCompareCount = 2,
+                statCompareMode = "min",
             };
             yield return new ReinLifeEvent
             {

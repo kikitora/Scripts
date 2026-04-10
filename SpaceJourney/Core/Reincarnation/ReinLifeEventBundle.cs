@@ -50,9 +50,12 @@ namespace SteraCube.SpaceJourney
             list.AddRange(LifeEvents.Mage_Events.All());
             list.AddRange(LifeEvents.Lancer_Events.All());
 
-            // ── 共通イベント（今後追加） ──
-            // list.AddRange(LifeEvents.BirthEvents.All());
-            // list.AddRange(LifeEvents.ChildhoodEvents.All());
+            // ── 共通イベント ──
+            list.AddRange(LifeEvents.BirthEvents.All());
+            list.AddRange(LifeEvents.SchoolEvents.All());
+            list.AddRange(LifeEvents.LoveEvents.All());
+            list.AddRange(LifeEvents.FriendEvents.All());
+            list.AddRange(LifeEvents.LifeEndEvents.All());
 
             return list;
         }

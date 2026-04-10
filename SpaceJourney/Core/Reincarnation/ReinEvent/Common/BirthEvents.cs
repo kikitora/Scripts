@@ -47,6 +47,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_birth",
+                eventType = ReinEventType.Birth,
                 startAge = 0,
                 endAge = 0,
                 baseWeight = 1.0f,
@@ -118,6 +119,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_birth_premium",
+                eventType = ReinEventType.Birth,
                 startAge = 0,
                 endAge = 0,
                 baseWeight = 1.0f,

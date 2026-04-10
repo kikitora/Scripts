@@ -973,16 +973,20 @@ namespace SteraCube.SpaceJourney
     #endregion
 
     #region reincarnation関連enum
+    /// <summary>
+    /// 来歴イベントの感情タイプ。表示エフェクトに影響する。
+    /// イベントデータ (ReinLifeEvent / ReinSentenceOption) の eventType で指定する。
+    /// </summary>
     public enum ReinEventType
     {
-        None,
-        Happy,
-        Sad,
-        RankUp,
-        JobChange,
-        Birth,
-        Shock,
-        LifeEnd
+        None,           // 通常 (エフェクトなし)
+        Birth,          // 誕生
+        Happy,          // 嬉しい出来事 (合格、友人の成果など)
+        SuperHappy,     // 人生最大の喜び (結婚、子供誕生) → 虹色エフェクト
+        Sad,            // 悲しい出来事 (別れ、喪失、失敗、事故)
+        RankUp,         // ランクアップ
+        JobChange,      // 生業確定
+        End,            // 死亡 (人生の終わり)
     }
 
     #endregion

@@ -6,7 +6,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
     // LifeEndEvents (死亡)
     // ================================================================
     // 命名規則: ev_death_* で始まる event は ReinSim 側で
-    //   ReinEventType.LifeEnd 扱いとなり、発火後 ctx.IsDead=true で
+    //   ReinEventType.End 扱いとなり、発火後 ctx.IsDead=true で
     //   シミュループが打ち切られる。
     //
     // ルール:
@@ -23,6 +23,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_death_accident",
+                eventType = ReinEventType.Sad,
                 sentence = "予期せぬ事故に遭った。何も告げる暇もなかった。",
                 startAge = 0,
                 endAge = 99,
@@ -44,6 +45,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_death_disease",
+                eventType = ReinEventType.Sad,
                 sentence = "病に倒れた。短い闘病の末、静かに息を引き取った。",
                 startAge = 0,
                 endAge = 99,

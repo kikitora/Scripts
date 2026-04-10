@@ -92,6 +92,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "恋人と、価値観の違いから別れた。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 4.0f,
                         grantsLifeTags = new() { "rel_1_break" },
                         statEffects = new()
@@ -102,6 +103,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "そのままこの人と結婚することに決めた。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         grantsLifeTags = new() { "married" },
                         statEffects = new()
@@ -131,6 +133,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "恋人の転勤を機に破局した。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         grantsLifeTags = new() { "rel_2_break" },
                         statEffects = new()
@@ -141,6 +144,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "この人と今度こそと決意し、結婚することになった。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 3.0f,
                         grantsLifeTags = new() { "married" },
                         statEffects = new()
@@ -171,6 +175,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "この関係も続かず、恋人と別れた。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         grantsLifeTags = new() { "rel_3_break" },
                         statEffects = new()
@@ -181,6 +186,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "この恋人と生涯を共にすると決め、結婚することになった。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 4.0f,
                         grantsLifeTags = new() { "married" },
                         statEffects = new()
@@ -216,6 +222,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "数回会った末、結婚に至った。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.5f,
                         grantsLifeTags = new() { "married", "married_omiai" },
                         statEffects = new()
@@ -248,6 +255,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_wedding",
+                eventType = ReinEventType.SuperHappy,
                 sentence = "結婚式を挙げ、新婚旅行に出かけた。穏やかな朝を二人で迎えた。",
                 startAge = 22,
                 endAge = 45,
@@ -279,6 +287,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_first_child",
+                eventType = ReinEventType.SuperHappy,
                 sentence = "最初の子供が生まれた。小さな手の温度が忘れられなかった。",
                 startAge = 24,
                 endAge = 45,
@@ -311,6 +320,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_anniversary_silver",
+                eventType = ReinEventType.Happy,
                 sentence = "結婚から二十五年が過ぎた。当時の写真を見返した。",
                 startAge = 43,
                 endAge = 70,
@@ -351,6 +361,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_divorce",
+                eventType = ReinEventType.Sad,
                 sentence = "話し合いの末、離婚届に判を押した。",
                 startAge = 22,
                 endAge = 60,

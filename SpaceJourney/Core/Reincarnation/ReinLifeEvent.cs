@@ -129,6 +129,21 @@ namespace SteraCube.SpaceJourney
         public string statCompareMode = "min";
 
         // ────────────────────────────────────────
+        // 感情タイプ (来歴エフェクト用)
+        // ────────────────────────────────────────
+        // イベント本文の感情タイプ。None のままなら通常表示。
+        // オプション側にも eventType があり、そちらが優先される。
+        // (同じイベントでも合格=Happy、不合格=Sad のように分岐できる)
+        public ReinEventType eventType = ReinEventType.None;
+
+        // ────────────────────────────────────────
+        // スキル習得 (イベント発火時にスキルを覚える)
+        // ────────────────────────────────────────
+        // 空文字 or null ならスキル習得なし。
+        // ランクUP後イベント (r*b) や共通レアイベントで設定する。
+        public string learnsSkillId = "";
+
+        // ────────────────────────────────────────
         // 生業確定からN年経過必須(死亡など人生後半向け)
         // ────────────────────────────────────────
         // 例: requireYearsAfterJob = 30 → 生業確定+30年（=ランクUPスケジュール完了後）以降のみ発火
@@ -258,6 +273,8 @@ namespace SteraCube.SpaceJourney
     {
         public string sentence;
         public float baseWeight = 1f;
+        /// <summary>このオプションの感情タイプ。指定されていれば event.eventType より優先。</summary>
+        public ReinEventType eventType = ReinEventType.None;
         public List<StatCondition> statConditions = new();
         public List<StatEffect> statEffects = new();
         public List<string> grantsLifeTags = new();

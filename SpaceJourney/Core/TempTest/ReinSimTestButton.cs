@@ -117,10 +117,9 @@ namespace SteraCube.SpaceJourney
                         ReinEventType.Birth => "[誕]",
                         ReinEventType.Happy => "[★]",
                         ReinEventType.Sad => "[涙]",
-                        ReinEventType.Shock => "[!!]",
                         ReinEventType.RankUp => "[↑]",
                         ReinEventType.JobChange => "[転]",
-                        ReinEventType.LifeEnd => "[終]",
+                        ReinEventType.End => "[終]",
                         _ => "   "
                     };
                     string ageStr = ev.HideAge ? "      " : $"{ev.Age,3}歳 ";

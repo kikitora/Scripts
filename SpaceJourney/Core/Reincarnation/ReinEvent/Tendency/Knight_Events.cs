@@ -134,6 +134,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格通知が届いた。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statConditions = new()
                         {
@@ -153,6 +154,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "不合格だった。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -182,6 +184,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "今度は合格した。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statConditions = new()
                         {
@@ -200,6 +203,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "また落ちた。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -253,6 +257,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_jdf_07",
                 sentence = "生業が自衛官になった。",
+                eventType = ReinEventType.JobChange,
                 startAge = 25,
                 endAge = 26,
                 baseWeight = 0.9f,
@@ -639,26 +644,23 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "班長を任された。部下が7人ついた。",
                 startAge = 25,
                 endAge = 55,
-                baseWeight = 0.55f,
-                requireMinRank = 1,
+                baseWeight = 1.0f,
+                requireMinRank = 2,
                 requiresAnyLifeTag = new() { "job_jieitai" },
                 blockedByLifeTags = new() { "jdf_r1a" },
                 grantsLifeTags = new() { "jdf_r1a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_jieitai" },
-                eventStage = 3,
-                statCompareCount = 3,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_jieitai" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_jdf_r1b",
+                learnsSkillId = "knight_jieitai_s1",
                 sentence = "演習で班を率いた。",
                 startAge = 25,
                 endAge = 55,
                 baseWeight = 1.0f,
-                requireMinRank = 1,
+                requireMinRank = 2,
                 requiresAnyLifeTag = new() { "jdf_r1a" },
                 blockedByLifeTags = new() { "jdf_r1b" },
                 grantsLifeTags = new() { "jdf_r1b" },
@@ -703,26 +705,23 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "幹部候補生として選抜された。",
                 startAge = 25,
                 endAge = 55,
-                baseWeight = 0.5f,
-                requireMinRank = 3,
+                baseWeight = 1.0f,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "jdf_r1b" },
                 blockedByLifeTags = new() { "jdf_r3a" },
                 grantsLifeTags = new() { "jdf_r3a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_jieitai" },
-                eventStage = 4,
-                statCompareCount = 2,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_jieitai" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_jdf_r3b",
+                learnsSkillId = "knight_jieitai_s2",
                 sentence = "幹部としての初任務を終えた。責任の重さが変わった。",
                 startAge = 25,
                 endAge = 55,
                 baseWeight = 1.0f,
-                requireMinRank = 3,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "jdf_r3a" },
                 blockedByLifeTags = new() { "jdf_r3b" },
                 grantsLifeTags = new() { "jdf_r3b" },
@@ -942,6 +941,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格通知が届いた。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statConditions = new()
                         {
@@ -961,6 +961,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "不合格だった。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -987,6 +988,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "今度は合格した。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -1001,6 +1003,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "また落ちた。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -1162,6 +1165,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_fire_07",
                 sentence = "生業が消防士になった。",
+                eventType = ReinEventType.JobChange,
                 startAge = 24,
                 endAge = 26,
                 baseWeight = 0.9f,
@@ -1498,26 +1502,23 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "初めて現場指揮を任された。部隊全体を見る立場になった。",
                 startAge = 25,
                 endAge = 55,
-                baseWeight = 0.55f,
-                requireMinRank = 1,
+                baseWeight = 1.0f,
+                requireMinRank = 2,
                 requiresAnyLifeTag = new() { "job_shobo" },
                 blockedByLifeTags = new() { "fire_r1a" },
                 grantsLifeTags = new() { "fire_r1a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_shobo" },
-                eventStage = 3,
-                statCompareCount = 3,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_shobo" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_fire_r1b",
+                learnsSkillId = "knight_shobo_s1",
                 sentence = "複雑な現場で判断を迫られた。",
                 startAge = 25,
                 endAge = 55,
                 baseWeight = 1.0f,
-                requireMinRank = 1,
+                requireMinRank = 2,
                 requiresAnyLifeTag = new() { "fire_r1a" },
                 blockedByLifeTags = new() { "fire_r1b" },
                 grantsLifeTags = new() { "fire_r1b" },
@@ -1562,26 +1563,23 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "主任に昇格した。",
                 startAge = 25,
                 endAge = 55,
-                baseWeight = 0.5f,
-                requireMinRank = 3,
+                baseWeight = 1.0f,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "fire_r1b" },
                 blockedByLifeTags = new() { "fire_r3a" },
                 grantsLifeTags = new() { "fire_r3a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_shobo" },
-                eventStage = 4,
-                statCompareCount = 2,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_shobo" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_fire_r3b",
+                learnsSkillId = "knight_shobo_s2",
                 sentence = "大規模火災の対応で指揮を執った。",
                 startAge = 25,
                 endAge = 55,
                 baseWeight = 1.0f,
-                requireMinRank = 3,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "fire_r3a" },
                 blockedByLifeTags = new() { "fire_r3b" },
                 grantsLifeTags = new() { "fire_r3b" },
@@ -1798,6 +1796,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格した。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -1812,6 +1811,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "不合格だった。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -1838,6 +1838,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格した。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -1852,6 +1853,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "また落ちた。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -1927,6 +1929,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_emt_05",
                 sentence = "生業が救急救命士になった。",
+                eventType = ReinEventType.JobChange,
                 startAge = 24,
                 endAge = 26,
                 baseWeight = 0.85f,
@@ -2143,26 +2146,23 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "後輩の指導担当になった。",
                 startAge = 25,
                 endAge = 55,
-                baseWeight = 0.55f,
-                requireMinRank = 1,
+                baseWeight = 1.0f,
+                requireMinRank = 2,
                 requiresAnyLifeTag = new() { "job_kyumei" },
                 blockedByLifeTags = new() { "emt_r1a" },
                 grantsLifeTags = new() { "emt_r1a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_kyumei" },
-                eventStage = 3,
-                statCompareCount = 3,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_kyumei" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_emt_r1b",
+                learnsSkillId = "knight_kyumei_s1",
                 sentence = "後輩が初めて一人で対応した現場で、後ろから見ていた。",
                 startAge = 25,
                 endAge = 55,
                 baseWeight = 1.0f,
-                requireMinRank = 1,
+                requireMinRank = 2,
                 requiresAnyLifeTag = new() { "emt_r1a" },
                 blockedByLifeTags = new() { "emt_r1b" },
                 grantsLifeTags = new() { "emt_r1b" },
@@ -2207,26 +2207,23 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "高度救命救急センターへの配属が決まった。",
                 startAge = 25,
                 endAge = 55,
-                baseWeight = 0.5f,
-                requireMinRank = 3,
+                baseWeight = 1.0f,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "emt_r1b" },
                 blockedByLifeTags = new() { "emt_r3a" },
                 grantsLifeTags = new() { "emt_r3a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_kyumei" },
-                eventStage = 4,
-                statCompareCount = 2,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_kyumei" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_emt_r3b",
+                learnsSkillId = "knight_kyumei_s2",
                 sentence = "難易度の高い搬送案件が続いた。一件一件やり切った。",
                 startAge = 25,
                 endAge = 55,
                 baseWeight = 1.0f,
-                requireMinRank = 3,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "emt_r3a" },
                 blockedByLifeTags = new() { "emt_r3b" },
                 grantsLifeTags = new() { "emt_r3b" },
@@ -2507,6 +2504,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "落ちた。また次を探した。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -2539,6 +2537,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_guard_05",
                 sentence = "生業がボディガードになった。",
+                eventType = ReinEventType.JobChange,
                 startAge = 25,
                 endAge = 28,
                 baseWeight = 0.9f,
@@ -2825,18 +2824,14 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "高リスクの要人警護を初めて担当した。",
                 startAge = 26,
                 endAge = 56,
-                baseWeight = 0.55f,
+                baseWeight = 1.0f,
                 requireMinRank = 1,
                 requiresAnyLifeTag = new() { "job_bodyguard" },
                 blockedByLifeTags = new() { "guard_r1a" },
                 grantsLifeTags = new() { "guard_r1a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_bodyguard" },
-                eventStage = 3,
-                statCompareCount = 3,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_bodyguard" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_guard_r1b",
@@ -2889,21 +2884,18 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "海外要人の警護を任された。",
                 startAge = 26,
                 endAge = 56,
-                baseWeight = 0.5f,
+                baseWeight = 1.0f,
                 requireMinRank = 3,
                 requiresAnyLifeTag = new() { "guard_r1b" },
                 blockedByLifeTags = new() { "guard_r3a" },
                 grantsLifeTags = new() { "guard_r3a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_bodyguard" },
-                eventStage = 4,
-                statCompareCount = 2,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_bodyguard" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_guard_r3b",
+                learnsSkillId = "knight_bodyguard_s1",
                 sentence = "同業者から信頼できる名前として紹介されるようになった。",
                 startAge = 26,
                 endAge = 56,
@@ -2921,7 +2913,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 startAge = 26,
                 endAge = 56,
                 baseWeight = 0.5f,
-                requireMinRank = 5,
+                requireMinRank = 6,
                 requiresAnyLifeTag = new() { "guard_r3b" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
@@ -2969,12 +2961,13 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_guard_r5b_a",
+                learnsSkillId = "knight_bodyguard_s2",
                 sentence = "会社を育てながら、警護の質を守り続けた。",
                 startAge = 26,
                 endAge = 56,
                 baseWeight = 1.0f,
-                requireMinRank = 5,
-                requiresAnyLifeTag = new() { "guard_r5a_co" },
+                requireMinRank = 6,
+                requiresAnyLifeTag = new() { "guard_r3b" },
                 blockedByLifeTags = new() { "guard_r5b" },
                 grantsLifeTags = new() { "guard_r5b" },
                 relatedJobIds = new() { "knight_bodyguard" },
@@ -2985,9 +2978,12 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "フリーとして、自分の基準だけで仕事を選んだ。",
                 startAge = 26,
                 endAge = 56,
-                baseWeight = 1.0f,
-                requireMinRank = 5,
-                requiresAnyLifeTag = new() { "guard_r5a_free" },
+                baseWeight = 0.4f,
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
+                requireMinRank = 6,
+                requiresAnyLifeTag = new() { "guard_r3b" },
                 blockedByLifeTags = new() { "guard_r5b" },
                 grantsLifeTags = new() { "guard_r5b" },
                 relatedJobIds = new() { "knight_bodyguard" },
@@ -3128,6 +3124,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格した。合格者一覧で自分の番号を見つけた。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statConditions = new()
                         {
@@ -3150,6 +3147,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "不合格だった。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -3176,6 +3174,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格した。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -3191,6 +3190,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "また落ちた。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -3345,6 +3345,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_saiban_06",
                 sentence = "生業が裁判官になった。",
+                eventType = ReinEventType.JobChange,
                 startAge = 30,
                 endAge = 38,
                 baseWeight = 0.85f,
@@ -3615,18 +3616,14 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "初めて合議体の主任裁判官になった。",
                 startAge = 30,
                 endAge = 60,
-                baseWeight = 0.55f,
+                baseWeight = 1.0f,
                 requireMinRank = 1,
                 requiresAnyLifeTag = new() { "job_saiban" },
                 blockedByLifeTags = new() { "saiban_r1a" },
                 grantsLifeTags = new() { "saiban_r1a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_saiban" },
-                eventStage = 3,
-                statCompareCount = 3,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_saiban" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_saiban_r1b",
@@ -3679,21 +3676,18 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "重大事件を担当するようになった。",
                 startAge = 30,
                 endAge = 60,
-                baseWeight = 0.5f,
+                baseWeight = 1.0f,
                 requireMinRank = 3,
                 requiresAnyLifeTag = new() { "saiban_r1b" },
                 blockedByLifeTags = new() { "saiban_r3a" },
                 grantsLifeTags = new() { "saiban_r3a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_saiban" },
-                eventStage = 4,
-                statCompareCount = 2,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_saiban" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_saiban_r3b",
+                learnsSkillId = "knight_saiban_s1",
                 sentence = "長期裁判が結審した。判決文を読み上げた。",
                 startAge = 30,
                 endAge = 60,
@@ -3711,7 +3705,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 startAge = 30,
                 endAge = 60,
                 baseWeight = 0.5f,
-                requireMinRank = 5,
+                requireMinRank = 6,
                 requiresAnyLifeTag = new() { "saiban_r3b" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
@@ -3759,12 +3753,13 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_saiban_r5b_a",
+                learnsSkillId = "knight_saiban_s2",
                 sentence = "法の解釈という場所から、判例の形成に関わるようになった。",
                 startAge = 30,
                 endAge = 60,
                 baseWeight = 1.0f,
-                requireMinRank = 5,
-                requiresAnyLifeTag = new() { "saiban_r5a_high" },
+                requireMinRank = 6,
+                requiresAnyLifeTag = new() { "saiban_r3b" },
                 blockedByLifeTags = new() { "saiban_r5b" },
                 grantsLifeTags = new() { "saiban_r5b" },
                 relatedJobIds = new() { "knight_saiban" },
@@ -3775,9 +3770,12 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "地裁で一件一件の事実に向き合い続けた。",
                 startAge = 30,
                 endAge = 60,
-                baseWeight = 1.0f,
-                requireMinRank = 5,
-                requiresAnyLifeTag = new() { "saiban_r5a_local" },
+                baseWeight = 0.4f,
+                eventStage = 4,
+                statCompareCount = 2,
+                statCompareMode = "min",
+                requireMinRank = 6,
+                requiresAnyLifeTag = new() { "saiban_r3b" },
                 blockedByLifeTags = new() { "saiban_r5b" },
                 grantsLifeTags = new() { "saiban_r5b" },
                 relatedJobIds = new() { "knight_saiban" },
@@ -3918,6 +3916,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格した。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statConditions = new()
                         {
@@ -3939,6 +3938,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "不合格だった。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -3968,6 +3968,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "合格した。",
+                        eventType = ReinEventType.Happy,
                         baseWeight = 1.0f,
                         statConditions = new()
                         {
@@ -3988,6 +3989,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                     new ReinSentenceOption
                     {
                         sentence = "また落ちた。",
+                        eventType = ReinEventType.Sad,
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
@@ -4073,6 +4075,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             {
                 eventId = "ev_intl_06",
                 sentence = "生業が国際弁護人になった。",
+                eventType = ReinEventType.JobChange,
                 startAge = 32,
                 endAge = 35,
                 baseWeight = 0.85f,
@@ -4397,18 +4400,14 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "初めて独立した弁護チームを率いた。",
                 startAge = 33,
                 endAge = 63,
-                baseWeight = 0.55f,
+                baseWeight = 1.0f,
                 requireMinRank = 1,
                 requiresAnyLifeTag = new() { "job_bengoshi" },
                 blockedByLifeTags = new() { "intl_r1a" },
                 grantsLifeTags = new() { "intl_r1a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_bengoshi" },
-                eventStage = 3,
-                statCompareCount = 3,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_bengoshi" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_intl_r1b",
@@ -4461,26 +4460,23 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 sentence = "国連関連機関から顧問依頼が来た。",
                 startAge = 33,
                 endAge = 63,
-                baseWeight = 0.5f,
-                requireMinRank = 3,
+                baseWeight = 1.0f,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "intl_r1b" },
                 blockedByLifeTags = new() { "intl_r3a" },
                 grantsLifeTags = new() { "intl_r3a" },
                 hasStatWeightConfig = true,
                 statWeightConfig = new StatWeightConfig { stat = StatKind.DF, sign = "+" },
-                relatedJobIds = new() { "knight_bengoshi" },
-                eventStage = 4,
-                statCompareCount = 2,
-                statCompareMode = "min",
-            };
+                relatedJobIds = new() { "knight_bengoshi" },            };
             yield return new ReinLifeEvent
             {
                 eventId = "ev_intl_r3b",
+                learnsSkillId = "knight_bengoshi_s1",
                 sentence = "国際法の解釈を巡る議論で、主要な論者として名が上がった。",
                 startAge = 33,
                 endAge = 63,
                 baseWeight = 1.0f,
-                requireMinRank = 3,
+                requireMinRank = 4,
                 requiresAnyLifeTag = new() { "intl_r3a" },
                 blockedByLifeTags = new() { "intl_r3b" },
                 grantsLifeTags = new() { "intl_r3b" },
@@ -4585,6 +4581,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_intl_r7b",
+                learnsSkillId = "knight_bengoshi_s2",
                 sentence = "最後の法廷で最終弁論を行った。判決がどうであれ、記録は残った。",
                 startAge = 33,
                 endAge = 63,

@@ -94,6 +94,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
             yield return new ReinLifeEvent
             {
                 eventId = "ev_friend_loss",
+                eventType = ReinEventType.Sad,
                 sentence = "親友と金の貸し借りが原因で衝突し、絶縁した。それ以来、連絡は途絶えた。",
                 startAge = 30,
                 endAge = 70,

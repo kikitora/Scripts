@@ -56,6 +56,7 @@ namespace SteraCube.SpaceJourney
             list.AddRange(LifeEvents.LoveEvents.All());
             list.AddRange(LifeEvents.FriendEvents.All());
             list.AddRange(LifeEvents.LifeEndEvents.All());
+            list.AddRange(LifeEvents.RareEvents.All());
 
             return list;
         }

@@ -371,13 +371,15 @@ namespace SteraCube.SpaceJourney
         /// ポイントをeventFactor倍率に変換。ランクに応じて上限が変化。
         /// rank1 → 0pt=1.0x / 40pt=1.1x
         /// rank10 → 0pt=1.0x / 40pt=1.5x
-        /// 間は比例（rank毎に上限+0.0444x）
+        /// 低ptでも効果が出るよう、べき乗カーブ (指数0.4) を適用する。
+        /// 例: rank1 で 10pt → 1.057x / rank10 で 10pt → 1.287x
         /// </summary>
         public static float PtToMultiplier(int pt, int rank = 1)
         {
-            // rank1=0.10, rank10=0.50、1ランクごとに +0.0444
             float maxBonus = 0.10f + (Mathf.Clamp(rank, 1, 10) - 1) / 9f * 0.40f;
-            return 1.0f + (pt / 40f) * maxBonus;
+            float t = Mathf.Clamp01(pt / 40f);
+            // べき乗カーブ: 少ないptでも恩恵が大きく、ptが増えるほど伸びが緩やかになる
+            return 1.0f + Mathf.Pow(t, 0.4f) * maxBonus;
         }
 
         // ============================================================
@@ -1013,80 +1015,8 @@ namespace SteraCube.SpaceJourney
         }
 
         // ============================================================
-        // イベントIDからReinEventTypeを判定
-        // 大半はNone。感情が大きく動く瞬間だけ型をつける。
-        // ============================================================
-        private static ReinEventType ResolveEventType(string eventId)
-        {
-            if (string.IsNullOrEmpty(eventId)) return ReinEventType.None;
-
-            // 生涯の終わり
-            if (eventId.StartsWith("life_end_")) return ReinEventType.LifeEnd;
-            if (eventId.StartsWith("ev_death_")) return ReinEventType.LifeEnd;
-
-            switch (eventId)
-            {
-                // 誕生
-                case "birth_wealthy":
-                case "birth_normal":
-                case "birth_poor":
-                    return ReinEventType.Birth;
-
-                // Happy：おめでとう系（結婚・子供誕生・合格・夢の達成）
-                case "marriage_success":
-                case "child_born":
-                case "grandchild_born":
-                case "elder_grandchild_born2":
-                case "exam_middle_pass":
-                case "exam_high_pass_top":
-                case "exam_high_pass_second":
-                case "exam_univ_pass_top":
-                case "exam_univ_pass":
-                case "exam_univ_pass_ronin":
-                case "love_triangle_win":
-                case "love_longdistance_survive":
-                case "first_love_success":
-                case "mid_achievement":
-                case "midlife_independent":
-                case "talent_overcome":
-                case "betrayal_forgive":
-                case "parent_recover":
-                case "rare_lottery":
-                    return ReinEventType.Happy;
-
-                // Sad：じわっと沈む系（死別・喪失・別れ）
-                case "parent_death":
-                case "old_friend_death":
-                case "friend_death":
-                case "betrayal_start":
-                case "betrayal_distance":
-                case "romance_breakup":
-                case "marriage_decline":
-                case "love_triangle_lose":
-                case "love_longdistance_end":
-                case "first_love_fail":
-                case "midlife_friend_ill":
-                case "old_friend_loss":
-                case "family_violence":
-                case "family_poverty_sudden":
-                case "elder_spouse_ill":
-                    return ReinEventType.Sad;
-
-                // Shock：青天の霹靂系（事故・災害・突然の発覚）
-                case "near_death_accident":
-                case "near_death_change":
-                case "rare_accident":
-                case "rare_disaster":
-                case "rare_illness":
-                case "family_trouble_start":
-                case "family_divorce":
-                case "family_escape":
-                    return ReinEventType.Shock;
-
-                default:
-                    return ReinEventType.None;
-            }
-        }
+        // eventType は ReinLifeEvent.eventType / ReinSentenceOption.eventType で直接指定する。
+        // 旧 ResolveEventType (eventId switch) は廃止。
 
         private static ReinSentenceOption ChooseOption(
             ReinSimContext ctx,
@@ -1139,8 +1069,17 @@ namespace SteraCube.SpaceJourney
                 }
             }
 
+            // eventType 判定: option側が指定されていればそちら優先、なければ event 側
+            var evType = ev.eventType;
+            var optType = option.eventType;
+
+            // 死亡判定 (eventType で判定 or eventId で fallback)
+            bool isLifeEnd = evType == ReinEventType.End
+                || ev.EventId.StartsWith("ev_death_")
+                || ev.EventId.StartsWith("life_end_");
+            if (isLifeEnd) evType = ReinEventType.End;
+
             // イベント本文を記録（空でなければ）
-            var evType = ResolveEventType(ev.EventId);
             if (!string.IsNullOrEmpty(ev.Sentence))
             {
                 ctx.HistoryEvents.Add(new ReinEvent(
@@ -1149,19 +1088,22 @@ namespace SteraCube.SpaceJourney
                     evType));
             }
 
-            // 死亡イベントなら IsDead フラグを立てる(以降のシミュは打ち切り)
-            if (evType == ReinEventType.LifeEnd)
+            // 死亡イベントなら IsDead フラグを立てる
+            if (isLifeEnd)
             {
                 ctx.IsDead = true;
             }
 
             // オプション文を記録（空でなければ）
+            // オプションの eventType が指定されていればそれを使う。
+            // なければイベント本文と同じ eventType を継承。
             if (!string.IsNullOrEmpty(option.Sentence))
             {
+                var finalOptType = (optType != ReinEventType.None) ? optType : evType;
                 ctx.HistoryEvents.Add(new ReinEvent(
                     age,
                     option.Sentence,
-                    ReinEventType.None,
+                    finalOptType,
                     hideAge: true));
             }
 
@@ -1193,6 +1135,14 @@ namespace SteraCube.SpaceJourney
                 }
                 // 加算後すぐに NowStats を再計算して次のイベント判定に反映
                 ctx.UpdateNowStats(age);
+            }
+
+            // スキル習得（learnsSkillId が設定されていれば）
+            if (!string.IsNullOrEmpty(ev.learnsSkillId))
+            {
+                var skillDef = MasterDatabase.Instance?.GetSoulJobSkillById(ev.learnsSkillId);
+                if (skillDef != null)
+                    ctx.LearnSkill(skillDef);
             }
 
             // 発生済みフラグ登録（発火年齢も記録）

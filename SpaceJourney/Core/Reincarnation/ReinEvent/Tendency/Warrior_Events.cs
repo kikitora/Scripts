@@ -3856,8 +3856,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 },
             };
             yield return new ReinLifeEvent
-                learnsSkillId = "warrior_uchu_s1",
             {
+                learnsSkillId = "warrior_uchu_s1",
                 eventId = "ev_uchu_r3b_team",
                 sentence = "地上管制のオペレーターに礼を言いに行った。相手は驚いていた。",
                 startAge = 34,

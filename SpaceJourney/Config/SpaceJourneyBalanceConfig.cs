@@ -50,6 +50,16 @@ namespace SteraCube.SpaceJourney
         [Tooltip("各フィールドターン終了時に全サイドへ加算される士気回復量（ノーマル基準）。")]
         public float moraleRecoveryPerTurn = 3f;
 
+        // ===== ユニットコスト =====
+
+        [Header("ユニットコスト")]
+
+        [Tooltip("キャラクター1体あたりのコスト。")]
+        public int characterCost = 3;
+
+        [Tooltip("タワー1基あたりのコスト。0=無料。")]
+        public int towerCost = 0;
+
         // ===== コアHPダメージ係数 =====
 
         [Header("コアHPダメージ係数（ノーマル基準）")]

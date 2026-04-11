@@ -19,6 +19,9 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private SoulInstance soul;      // ソウル実体
         [SerializeField] private BodyInstance body;      // ボディ実体（ランク＋個体差込み）
 
+        [Header("士気")]
+        [SerializeField] private float moraleMultiplier = 1f;
+
         [Header("戦闘状態")]
         [SerializeField] private int currentHp;          // 現在HP（戦闘中に減る）
         [SerializeField] private bool isDead = false;    // 戦闘不能フラグ
@@ -56,6 +59,13 @@ namespace SteraCube.SpaceJourney
         public SoulInstance Soul => soul;
         public BodyInstance Body => body;
 
+        /// <summary>士気によるステータス乗算倍率 (0.1~1.0)</summary>
+        public float MoraleMultiplier
+        {
+            get => moraleMultiplier;
+            set => moraleMultiplier = Mathf.Clamp(value, 0.1f, 1f);
+        }
+
         // ─────────────────────────────
         // 追加：戦闘タイム(t)
         // ─────────────────────────────
@@ -81,7 +91,8 @@ namespace SteraCube.SpaceJourney
                 int baseVal = (soul != null && body != null)
                     ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.AT), StatKind.AT)
                     : 0;
-                return ApplyPercentModifier(baseVal, GetTotalPercentModifierForStat(StatKind.AT));
+                int withEffect = ApplyPercentModifier(baseVal, GetTotalPercentModifierForStat(StatKind.AT));
+                return Mathf.RoundToInt(withEffect * moraleMultiplier);
             }
         }
 
@@ -92,7 +103,8 @@ namespace SteraCube.SpaceJourney
                 int baseVal = (soul != null && body != null)
                     ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.DF), StatKind.DF)
                     : 0;
-                return ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.DF));
+                int withEffect = ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.DF));
+                return Mathf.Max(0, Mathf.RoundToInt(withEffect * moraleMultiplier));
             }
         }
 
@@ -103,13 +115,21 @@ namespace SteraCube.SpaceJourney
                 int baseVal = (soul != null && body != null)
                     ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.AGI), StatKind.AGI)
                     : 0;
-                return ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.AGI));
+                int withEffect = ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.AGI));
+                return Mathf.Max(0, Mathf.RoundToInt(withEffect * moraleMultiplier));
             }
         }
 
-        public int MatFinal => (soul != null && body != null)
-            ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.MAT), StatKind.MAT)
-            : 0;
+        public int MatFinal
+        {
+            get
+            {
+                int baseVal = (soul != null && body != null)
+                    ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.MAT), StatKind.MAT)
+                    : 0;
+                return Mathf.RoundToInt(baseVal * moraleMultiplier);
+            }
+        }
 
         public int MdfFinal
         {
@@ -120,11 +140,12 @@ namespace SteraCube.SpaceJourney
                     : 0;
 
                 // BuffDf/DebuffDf は DF/MDF 両方に効かせる運用（「防御」扱い）
-                return ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.MDF));
+                int withEffect = ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.MDF));
+                return Mathf.Max(0, Mathf.RoundToInt(withEffect * moraleMultiplier));
             }
         }
 
-        public int MaxHp => body != null ? body.MaxHp : 0;
+        public int MaxHp => Mathf.Max(1, Mathf.RoundToInt((body != null ? body.MaxHp : 0) * moraleMultiplier));
 
         // ─────────────────────────────
         // HP・死亡状態管理
@@ -336,14 +357,4 @@ namespace SteraCube.SpaceJourney
         }
     }
 
-    [System.Serializable]
-    public class SkillAndConditions
-    {
-        [SerializeField] SkillDefinition skill;
-        [SerializeField] ConditionDefinition[] conditions;
-    }
-
-    public class ConditionDefinition
-    {
-    }
 }

@@ -72,6 +72,7 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private string equippedBodyInstanceId;
 
 
+
         [Header("転生ソウルセット")]
         [SerializeField] private List<OneReinSoulData> reinSouls = new List<OneReinSoulData>();
         [SerializeField] private int selectedReinIndex = 0;
@@ -249,6 +250,21 @@ namespace SteraCube.SpaceJourney
         }
 
         public SoulInstance() { }
+
+        /// <summary>
+        /// テスト用: OneReinSoulData を直接渡して SoulInstance を生成する。
+        /// MasterDatabase 不要。テスト完了後に削除して OK。
+        /// </summary>
+        public static SoulInstance CreateForTest(OneReinSoulData reinData)
+        {
+            return new SoulInstance(
+                instanceId: System.Guid.NewGuid().ToString("N"),
+                soulName: "テストユニット",
+                iconId: "0",
+                reinSouls: new List<OneReinSoulData> { reinData },
+                selectedReinIndex: 0
+            );
+        }
 
         /// <summary>
         /// iconId の形式から SoulType を自動判定する。
@@ -432,6 +448,23 @@ namespace SteraCube.SpaceJourney
             equippedBodyInstanceId = body.InstanceId;
         }
 
+        /// <summary>
+        /// 現在の転生データ + 指定ボディ職の行動リストを取得する。
+        /// なければ null を返す (呼び出し側で ActionListBuilder で生成する想定)。
+        /// </summary>
+        public List<BattleActionEntry> GetActionList(string bodyJobId)
+        {
+            return CurrentReinSoul?.GetActionList(bodyJobId);
+        }
+
+        /// <summary>
+        /// 現在の転生データに、指定ボディ職の行動リストを保存する。
+        /// </summary>
+        public void SetActionList(string bodyJobId, List<BattleActionEntry> list)
+        {
+            CurrentReinSoul?.SetActionList(bodyJobId, list);
+        }
+
 
         public SoulSnapshot GetFinalSnapshot(BodyInstance body)
         {
@@ -506,6 +539,17 @@ namespace SteraCube.SpaceJourney
         [Header("来歴・スキル")]
         [SerializeField] private List<ReinEvent> historyEvents;
         [SerializeField] private List<string> learnedSkillIds;
+
+        [Header("行動リスト (ボディ職ごと)")]
+        [SerializeField] private List<BodyJobActionList> actionListEntries = new List<BodyJobActionList>();
+
+        /// <summary>ボディ職 → 行動リストのシリアライズ可能なエントリ</summary>
+        [Serializable]
+        public class BodyJobActionList
+        {
+            public string bodyJobId;
+            public List<BattleActionEntry> actionList = new List<BattleActionEntry>();
+        }
 
         public string ReincarnationId => reincarnationId;
         public string Title => title;
@@ -678,7 +722,90 @@ namespace SteraCube.SpaceJourney
 
             data.learnedSkillIds = learned;
 
+            // 初期行動リスト生成 (MasterDatabase が利用可能な場合)
+            data.BuildInitialActionList(learned);
+
             return data;
+        }
+
+        /// <summary>
+        /// ソウル傾向に対応するデフォルトのボディ職IDを返す。
+        /// </summary>
+        public static string GetDefaultBodyJobId(SoulJobTendency tendency)
+        {
+            return tendency switch
+            {
+                SoulJobTendency.Warrior => "Warrior",
+                SoulJobTendency.Knight => "Knight",
+                SoulJobTendency.Archer => "Archer",
+                SoulJobTendency.Mage => "Mage",
+                SoulJobTendency.Lancer => "Spearman",
+                _ => "Warrior",
+            };
+        }
+
+        /// <summary>
+        /// ソウル傾向に対応するデフォルトの作戦を返す。
+        /// </summary>
+        public static BattleTactic GetDefaultTactic(SoulJobTendency tendency)
+        {
+            return tendency switch
+            {
+                SoulJobTendency.Warrior => BattleTactic.Offensive,
+                SoulJobTendency.Knight => BattleTactic.Defensive,
+                SoulJobTendency.Archer => BattleTactic.Offensive,
+                SoulJobTendency.Mage => BattleTactic.Balanced,
+                SoulJobTendency.Lancer => BattleTactic.Balanced,
+                _ => BattleTactic.Balanced,
+            };
+        }
+
+        /// <summary>
+        /// MasterDatabase からスキルを収集し、デフォルトの行動リストを生成してセットする。
+        /// </summary>
+        private void BuildInitialActionList(List<string> learnedIds)
+        {
+            var db = MasterDatabase.Instance;
+            if (db == null) return;
+
+            // 全5職について初期行動リストを生成
+            var tendencies = new[] {
+                SoulJobTendency.Warrior, SoulJobTendency.Knight,
+                SoulJobTendency.Archer, SoulJobTendency.Mage,
+                SoulJobTendency.Lancer
+            };
+
+            foreach (var tendency in tendencies)
+            {
+                string bodyJobId = GetDefaultBodyJobId(tendency);
+                var bodyJob = db.GetBodyJobById(bodyJobId);
+                if (bodyJob == null) continue;
+
+                var skills = new List<SkillDefinition>();
+
+                // ボディ職基本スキル
+                if (bodyJob.baseSkills != null)
+                {
+                    foreach (var skill in bodyJob.baseSkills)
+                        if (skill != null) skills.Add(skill);
+                }
+
+                // ソウル生業スキル (習得済み)
+                if (learnedIds != null)
+                {
+                    foreach (var skillId in learnedIds)
+                    {
+                        var skill = db.GetSoulJobSkillById(skillId);
+                        if (skill != null) skills.Add(skill);
+                    }
+                }
+
+                if (skills.Count == 0) continue;
+
+                var tactic = GetDefaultTactic(tendency);
+                var actionList = ActionListBuilder.Build(skills, tactic);
+                SetActionList(bodyJobId, actionList);
+            }
         }
 
 
@@ -754,6 +881,39 @@ namespace SteraCube.SpaceJourney
         public void SetRank(int newRank)
         {
             rank = Mathf.Max(1, newRank);
+        }
+
+        /// <summary>指定ボディ職の行動リストを取得。未設定なら null。</summary>
+        public List<BattleActionEntry> GetActionList(string bodyJobId)
+        {
+            if (string.IsNullOrEmpty(bodyJobId) || actionListEntries == null) return null;
+            foreach (var entry in actionListEntries)
+            {
+                if (entry.bodyJobId == bodyJobId) return entry.actionList;
+            }
+            return null;
+        }
+
+        /// <summary>指定ボディ職の行動リストを保存。既存なら上書き、なければ追加。</summary>
+        public void SetActionList(string bodyJobId, List<BattleActionEntry> list)
+        {
+            if (string.IsNullOrEmpty(bodyJobId)) return;
+            if (actionListEntries == null) actionListEntries = new List<BodyJobActionList>();
+
+            foreach (var entry in actionListEntries)
+            {
+                if (entry.bodyJobId == bodyJobId)
+                {
+                    entry.actionList = list ?? new List<BattleActionEntry>();
+                    return;
+                }
+            }
+
+            actionListEntries.Add(new BodyJobActionList
+            {
+                bodyJobId = bodyJobId,
+                actionList = list ?? new List<BattleActionEntry>(),
+            });
         }
     }
     #endregion

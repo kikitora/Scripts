@@ -389,5 +389,43 @@ namespace SteraCube.SpaceJourney
             if (!moveAfterSkill) moveAfterRange = new GridRangePattern();
         }
 #endif
+
+        // =====================================================================
+        // AI / おすすめ設定
+        // =====================================================================
+        [Header("AI / おすすめ設定")]
+        [Tooltip("おすすめ行動リスト生成時の優先度 (1=最高, 10=最低)。\n" +
+                 "作戦ボーナスで最終値が変わる。")]
+        [Range(1, 10)]
+        public int recommendedPriority = 5;
+
+        [Tooltip("おすすめの発動条件。AND で評価される。\n" +
+                 "空なら EnemyInRange (攻撃系) or Always (補助系) を暗黙で使う。")]
+        public List<ActionCondition> recommendedConditions = new();
+
+        /// <summary>
+        /// このスキルの戦術カテゴリを自動判定する。
+        /// 作戦ボーナス計算用。
+        /// </summary>
+        public SkillTacticCategory GetTacticCategory()
+        {
+            if (category == SkillCategory.ActiveMove) return SkillTacticCategory.Move;
+            if (category == SkillCategory.Passive) return SkillTacticCategory.Wait; // パッシブは行動リストに入れない
+
+            // 回復判定 (味方対象 + damageKind が回復系)
+            if (effectTargetSide == EffectTargetSide.Self)
+            {
+                if (damageKind == SkillDamageKind.Fixed && amount < 0) return SkillTacticCategory.Heal;
+                if (damageKind == SkillDamageKind.MaxHpRate && amount < 0) return SkillTacticCategory.Heal;
+                return SkillTacticCategory.Buff;
+            }
+
+            // 敵対象でダメージなし → デバフ
+            if (effectTargetSide == EffectTargetSide.Enemy && damageKind == SkillDamageKind.None)
+                return SkillTacticCategory.Debuff;
+
+            // それ以外のアクティブ → 攻撃
+            return SkillTacticCategory.Attack;
+        }
     }
 }

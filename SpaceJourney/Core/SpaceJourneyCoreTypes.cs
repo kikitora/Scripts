@@ -312,6 +312,14 @@ namespace SteraCube.SpaceJourney
         Unknown = 2
     }
 
+    /// <summary>キューブのサイド種別</summary>
+    public enum CubeSideType
+    {
+        Empty = 0,
+        Character = 1,
+        Tower = 2,
+    }
+
     public enum SoulState
     {
         None,

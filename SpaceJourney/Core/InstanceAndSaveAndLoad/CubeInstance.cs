@@ -40,6 +40,9 @@ namespace SteraCube.SpaceJourney
         [SerializeField] private int vp;
         [SerializeField] private int ep;
 
+        [Header("Cost")]
+        [SerializeField] private int maxCost = 20;
+
         [SerializeField] private OneSide[] sides = new OneSide[4];
 
         // ===== ランタイム参照（セーブしない）=====
@@ -104,6 +107,18 @@ namespace SteraCube.SpaceJourney
         public int Vp { get => vp; set => vp = value; }
         public int Ep { get => ep; set => ep = value; }
 
+        /// <summary>キューブ全体のコスト上限 (拡張可能)</summary>
+        public int MaxCost { get => maxCost; set => maxCost = value; }
+
+        /// <summary>指定サイドの OneSide を取得 (0~3)。範囲外なら null。</summary>
+        public OneSide GetSide(int sideNumber)
+        {
+            if (sides == null || sideNumber < 0 || sideNumber >= sides.Length) return null;
+            if (sides[sideNumber] == null)
+                sides[sideNumber] = new OneSide();
+            return sides[sideNumber];
+        }
+
         public CubeUnit RuntimeCubeUnit => cubeUnit;
         public GameObject RuntimeGroundGO => groundGO;
 
@@ -115,7 +130,12 @@ namespace SteraCube.SpaceJourney
     [Serializable]
     public class OneSide
     {
-        [SerializeField] private int morale;
+        [SerializeField] private CubeSideType sideType = CubeSideType.Empty;
+        [SerializeField] private int morale = 100;
+
+        public CubeSideType SideType { get => sideType; set => sideType = value; }
+
+        /// <summary>士気 (0~100)。Character面のみ使用。Tower/Empty面では無視。</summary>
         public int Morale { get => morale; set => morale = value; }
     }
 }

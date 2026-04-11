@@ -4036,8 +4036,8 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 },
             };
             yield return new ReinLifeEvent
-                learnsSkillId = "mage_kult_s2",
             {
+                learnsSkillId = "mage_kult_s2",
                 eventId = "ev_cult_r7b_light",
                 sentence = "最後の集会を終えた日、信者の一人が「あなたに救われた」と言った。",
                 startAge = 29,

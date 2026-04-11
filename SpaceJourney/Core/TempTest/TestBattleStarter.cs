@@ -5,16 +5,15 @@ namespace SteraCube.SpaceJourney
 {
     /// <summary>
     /// テスト用 MonoBehaviour: Play モードで MasterDatabase を使った本データ戦闘テスト。
-    /// シーン上の GameObject に貼り付けて使う。テスト完了後に削除して OK。
+    /// BattleStartData → BattleManager.StartBattle() の新フローで実行する。
     ///
-    /// Inspector から設定:
-    /// - allyRank / allyLevel / allyCount
-    /// - enemyRank / enemyLevel / enemyCount
+    /// Inspector から設��:
+    /// - rank / level
+    /// - allyMembers / enemyMembers (傾向リスト)
+    /// - allyTactic / enemyTactic
+    /// - allyMorale / enemyMorale
+    /// - initiativeSide
     /// - autoStart: true なら Start() で自動実行
-    ///
-    /// 実行方法:
-    /// 1. Inspector で autoStart = true にして Play
-    /// 2. または Inspector のコンテキストメニューから「テスト戦闘実行」
     /// </summary>
     public class TestBattleStarter : MonoBehaviour
     {
@@ -23,7 +22,7 @@ namespace SteraCube.SpaceJourney
         public int level = 10;
         public bool autoStart = true;
 
-        [Header("味方チーム (傾向ごとに1体ずつ生成。5傾向で最大5体)")]
+        [Header("味方チーム")]
         public BattleTactic allyTactic = BattleTactic.Balanced;
         public List<SoulJobTendency> allyMembers = new()
         {
@@ -41,7 +40,13 @@ namespace SteraCube.SpaceJourney
             SoulJobTendency.Lancer,
         };
 
-        [Header("結果 (実行後に表示)")]
+        [Header("戦闘条件")]
+        [Tooltip("先制側: 0=味方, 1=敵, -1=なし")]
+        public int initiativeSide = -1;
+        [Range(0, 100)] public float allyMorale = 100f;
+        [Range(0, 100)] public float enemyMorale = 100f;
+
+        [Header("結果 (実行���に表示)")]
         [TextArea(5, 30)]
         public string resultLog = "";
 
@@ -60,25 +65,38 @@ namespace SteraCube.SpaceJourney
                 return;
             }
 
-            Debug.Log("[TestBattleStarter] 戦闘開始...");
+            Debug.Log("[TestBattleStarter] BattleStartData 経由で戦闘開��...");
 
-            var field = new BattleField();
-            var manager = new BattleManager(field);
+            // BattleStartData を組み立て
+            var startData = new BattleStartData
+            {
+                fieldLayout = BattleFieldLayout.Default3x3(),
+                allyUnits = CreatePlacements(rank, level, allyMembers, allyTactic),
+                enemyUnits = CreatePlacements(rank, level, enemyMembers, enemyTactic),
+                initiativeSide = initiativeSide,
+                allyMorale = allyMorale,
+                enemyMorale = enemyMorale,
+            };
 
-            // 味方チーム生成
-            var allies = CreateTeam(rank, level, allyMembers);
-            PlaceTeam(manager, field, allies, 0, allyTactic);
-
-            // 敵チーム生成
-            var enemies = CreateTeam(rank, level, enemyMembers);
-            PlaceTeam(manager, field, enemies, 1, enemyTactic);
-
-            // 戦闘実行
-            manager.RunFullBattle();
+            // StartBattle で一連の流れを実行
+            var manager = BattleManager.StartBattle(startData);
 
             // ログ出力
             resultLog = string.Join("\n", manager.Log);
             Debug.Log(resultLog);
+
+            // 戦闘結果
+            var result = BattleResult.FromManager(manager);
+            Debug.Log($"[TestBattleStarter] 勝者: {(result.winningSide == 0 ? "味方" : result.winningSide == 1 ? "敵" : "引分")}");
+
+            for (int s = 0; s < 2; s++)
+            {
+                var sr = result.sideResults[s];
+                string label = s == 0 ? "味方" : "敵";
+                float moraleLoss = BattleResult.CalcMoraleLoss(sr, null);
+                int vpDamage = BattleResult.CalcVpDamage(sr, null);
+                Debug.Log($"  [{label}] 死亡{sr.deadUnits}/{sr.totalUnits} dmgRatio={sr.dmgRatio:P0} 全滅={sr.wiped}");
+            }
 
             // ファイル保存
             string path = System.IO.Path.Combine(Application.dataPath, "../__battle_log.txt");
@@ -86,41 +104,62 @@ namespace SteraCube.SpaceJourney
             Debug.Log($"[TestBattleStarter] ログ保存: {path}");
         }
 
-        /// <summary>SoulFactory + BodyFactory で正規のユニットを生成</summary>
-        private List<(SpaceJourneyUnit unit, List<SkillDefinition> skills)> CreateTeam(
-            int rank, int level, List<SoulJobTendency> members)
+        /// <summary>傾向リストから BattleUnitPlacement を生成</summary>
+        private List<BattleUnitPlacement> CreatePlacements(
+            int rank, int level, List<SoulJobTendency> members, BattleTactic tactic)
         {
-            var team = new List<(SpaceJourneyUnit, List<SkillDefinition>)>();
+            var placements = new List<BattleUnitPlacement>();
             var db = MasterDatabase.Instance;
 
+            // 職業に応じた配置列を決定
+            // x=0: 前列 (Knight, Warrior), x=1: 中列 (Lancer), x=2: 後列 (Archer, Mage)
+            var rowSlots = new Dictionary<int, List<int>>
+            {
+                [0] = new List<int> { 0, 1, 2 },
+                [1] = new List<int> { 0, 1, 2 },
+                [2] = new List<int> { 0, 1, 2 },
+            };
+
+            int memberIdx = 0;
             foreach (var tendency in members)
             {
-                // 傾向に対応するボディ職名
-                string bodyJobId = tendency switch
+                int row = tendency switch
                 {
-                    SoulJobTendency.Warrior => "Warrior",
-                    SoulJobTendency.Knight => "Knight",
-                    SoulJobTendency.Archer => "Archer",
-                    SoulJobTendency.Mage => "Mage",
-                    SoulJobTendency.Lancer => "Spearman",
-                    _ => "Warrior",
+                    SoulJobTendency.Knight => 0,
+                    SoulJobTendency.Warrior => 0,
+                    SoulJobTendency.Lancer => 1,
+                    SoulJobTendency.Archer => 2,
+                    SoulJobTendency.Mage => 2,
+                    _ => 1,
                 };
-                // ソウル生成 (SoulFactory 経由)
+                // 指定列が満杯なら隣の列を探す
+                if (rowSlots[row].Count == 0)
+                {
+                    row = rowSlots[0].Count > 0 ? 0 : rowSlots[1].Count > 0 ? 1 : 2;
+                }
+                if (rowSlots[row].Count == 0) break;
+
+                int yIdx = Random.Range(0, rowSlots[row].Count);
+                int y = rowSlots[row][yIdx];
+                rowSlots[row].RemoveAt(yIdx);
+                var cell = new Vector2Int(row, y);
+
+                string bodyJobId = OneReinSoulData.GetDefaultBodyJobId(tendency);
+
+                // ソウル生成
                 var soul = SoulFactory.Create(
                     rank: rank,
                     soulTendency: tendency,
                     level: level,
                     registerToWorld: false
                 );
-
                 if (soul == null)
                 {
-                    Debug.LogError($"[TestBattleStarter] SoulFactory.Create failed for rank={rank}");
+                    Debug.LogError($"[TestBattleStarter] SoulFactory.Create failed for {tendency}");
                     continue;
                 }
 
-                // ボディ生成 (BodyFactory 経由)
-                // bodyJobId が見つからない場合はランダム職で生成
+                // ボディ生成
                 BodyInstance body;
                 try
                 {
@@ -129,89 +168,65 @@ namespace SteraCube.SpaceJourney
                 catch (System.Exception e)
                 {
                     Debug.LogWarning($"[TestBattleStarter] BodyJob '{bodyJobId}' not found, trying random: {e.Message}");
-                    try
-                    {
-                        body = BodyFactory.CreateRandom(rank: rank);
-                    }
+                    try { body = BodyFactory.CreateRandom(rank: rank); }
                     catch (System.Exception e2)
                     {
                         Debug.LogError($"[TestBattleStarter] BodyFactory failed: {e2.Message}");
                         continue;
                     }
                 }
+                if (body == null) continue;
 
-                if (body == null)
+                // 行動リストがなければ自動生成してソ��ルに保存
+                if (soul.GetActionList(bodyJobId) == null || soul.GetActionList(bodyJobId).Count == 0)
                 {
-                    Debug.LogError($"[TestBattleStarter] BodyFactory returned null for rank={rank}");
-                    continue;
+                    var skills = CollectAllSkills(soul, body, db);
+                    var actionList = ActionListBuilder.Build(skills, tactic);
+                    soul.SetActionList(bodyJobId, actionList);
                 }
 
-                Debug.Log($"[TestBattleStarter] 生成: {tendency} → Body={body.BodyJobId} Race={body.RaceId} Weapon={body.WeaponId}");
+                Debug.Log($"[TestBattleStarter] 生��: {tendency} → Body={body.BodyJobId} Race={body.RaceId} Weapon={body.WeaponId}");
 
-                var unit = new SpaceJourneyUnit(soul, body);
-
-                // スキル収集: ボディ職基本スキル
-                var skills = new List<SkillDefinition>();
-                var bodyJob = db.GetBodyJobById(bodyJobId);
-                if (bodyJob != null && bodyJob.baseSkills != null)
-                {
-                    foreach (var skill in bodyJob.baseSkills)
-                    {
-                        if (skill != null) skills.Add(skill);
-                    }
-                }
-
-                // 武器パッシブスキル
-                var weapon = db.GetWeaponById(body.WeaponId);
-                if (weapon != null && weapon.effectSkill != null)
-                    skills.Add(weapon.effectSkill);
-
-                // 種族パッシブスキル
-                var race = db.GetRaceById(body.RaceId);
-                if (race != null && race.racialSkill != null)
-                    skills.Add(race.racialSkill);
-
-                // ソウル生業スキル (転生で覚えたスキル)
-                var rein = soul.CurrentReinSoul;
-                if (rein != null && rein.LearnedSkillIds != null)
-                {
-                    foreach (var skillId in rein.LearnedSkillIds)
-                    {
-                        var skill = db.GetSoulJobSkillById(skillId);
-                        if (skill != null) skills.Add(skill);
-                    }
-                }
-
-                team.Add((unit, skills));
+                placements.Add(new BattleUnitPlacement(soul, body, cell));
+                memberIdx++;
             }
 
-            return team;
+            return placements;
         }
 
-        /// <summary>フィールドにランダム配置して BattleManager に登録</summary>
-        private void PlaceTeam(BattleManager manager, BattleField field,
-            List<(SpaceJourneyUnit unit, List<SkillDefinition> skills)> team, int side,
-            BattleTactic tactic)
+        /// <summary>ソウル+ボディから全スキルを収集</summary>
+        private static List<SkillDefinition> CollectAllSkills(SoulInstance soul, BodyInstance body, MasterDatabase db)
         {
-            // 空きマスをリストアップしてシャッフル
-            var emptyCells = new List<Vector2Int>(field.Cells);
+            var skills = new List<SkillDefinition>();
 
-            // シャッフル
-            for (int i = emptyCells.Count - 1; i > 0; i--)
+            // ボディ職基本スキル
+            var bodyJob = db.GetBodyJobById(body.BodyJobId);
+            if (bodyJob?.baseSkills != null)
             {
-                int j = Random.Range(0, i + 1);
-                (emptyCells[i], emptyCells[j]) = (emptyCells[j], emptyCells[i]);
+                foreach (var skill in bodyJob.baseSkills)
+                    if (skill != null) skills.Add(skill);
             }
 
-            int idx = 0;
-            foreach (var (unit, skills) in team)
+            // 武器パッシブ
+            var weapon = db.GetWeaponById(body.WeaponId);
+            if (weapon?.effectSkill != null) skills.Add(weapon.effectSkill);
+
+            // 種族パッシブ
+            var race = db.GetRaceById(body.RaceId);
+            if (race?.racialSkill != null) skills.Add(race.racialSkill);
+
+            // ソウル生業スキル
+            var rein = soul.CurrentReinSoul;
+            if (rein?.LearnedSkillIds != null)
             {
-                if (idx >= emptyCells.Count) break;
-                var cell = emptyCells[idx];
-                field.PlaceUnit(unit, side, cell.x, cell.y);
-                manager.RegisterUnit(unit, ActionListBuilder.Build(skills, tactic));
-                idx++;
+                foreach (var skillId in rein.LearnedSkillIds)
+                {
+                    var skill = db.GetSoulJobSkillById(skillId);
+                    if (skill != null) skills.Add(skill);
+                }
             }
+
+            return skills;
         }
     }
 }

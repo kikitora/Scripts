@@ -25,7 +25,8 @@ namespace SteraCube.SpaceJourney
 
         public List<string> Log { get; } = new List<string>();
 
-        private const int MaxTime = 10;
+        private const int MaxTime = 20;
+        private const int InitiativeDelay = 5;
         private const float AgiCap = 600f;
         private const float MaxCostReductionRate = 0.35f;
 
@@ -40,6 +41,9 @@ namespace SteraCube.SpaceJourney
 
             // スキルごとの再使用カウントダウン: skillId → 次に使える t
             public Dictionary<string, float> SkillCooldowns = new();
+
+            // このユニットのパッシブスキル一覧
+            public List<SkillDefinition> PassiveSkills = new();
 
             public UnitBattleState(SpaceJourneyUnit unit, List<BattleActionEntry> actionList)
             {
@@ -83,11 +87,12 @@ namespace SteraCube.SpaceJourney
                 unit.MoraleMultiplier = allyMoraleMul;
                 string bodyJobId = p.body?.BodyJobId;
                 var actionList = p.soul?.GetActionList(bodyJobId) ?? new List<BattleActionEntry>();
+                var passives = CollectPassiveSkills(p.soul, p.body);
                 field.PlaceUnit(unit, 0, p.battleCell);
-                manager.RegisterUnit(unit, actionList);
+                manager.RegisterUnit(unit, actionList, passives);
 
                 var state = manager.GetUnitState(unit);
-                state.NextActTime = data.initiativeSide == 0 ? 0 : 1;
+                state.NextActTime = data.initiativeSide == 0 ? 0 : InitiativeDelay;
             }
 
             // 敵配置
@@ -97,11 +102,12 @@ namespace SteraCube.SpaceJourney
                 unit.MoraleMultiplier = enemyMoraleMul;
                 string bodyJobId = p.body?.BodyJobId;
                 var actionList = p.soul?.GetActionList(bodyJobId) ?? new List<BattleActionEntry>();
+                var passives = CollectPassiveSkills(p.soul, p.body);
                 field.PlaceUnit(unit, 1, p.battleCell);
-                manager.RegisterUnit(unit, actionList);
+                manager.RegisterUnit(unit, actionList, passives);
 
                 var state = manager.GetUnitState(unit);
-                state.NextActTime = data.initiativeSide == 1 ? 0 : 1;
+                state.NextActTime = data.initiativeSide == 1 ? 0 : InitiativeDelay;
             }
 
             // 先制なし (-1) の場合は全員 nextActTime=0
@@ -122,10 +128,56 @@ namespace SteraCube.SpaceJourney
             return 0.1f + 0.9f * Mathf.Pow(clamped / 100f, 1.3f);
         }
 
+        /// <summary>ソウル���ボディからパッシブスキルを収集���る</summary>
+        private static List<SkillDefinition> CollectPassiveSkills(SoulInstance soul, BodyInstance body)
+        {
+            var passives = new List<SkillDefinition>();
+            var db = MasterDatabase.Instance;
+            if (db == null) return passives;
+
+            // 武器パッシブ
+            if (body != null)
+            {
+                var weapon = db.GetWeaponById(body.WeaponId);
+                if (weapon?.effectSkill != null && weapon.effectSkill.category == SkillCategory.Passive)
+                    passives.Add(weapon.effectSkill);
+            }
+
+            // 種族パッシブ
+            if (body != null)
+            {
+                var race = db.GetRaceById(body.RaceId);
+                if (race?.racialSkill != null && race.racialSkill.category == SkillCategory.Passive)
+                    passives.Add(race.racialSkill);
+            }
+
+            // ソウル生業スキルのうちパッシブ
+            if (soul?.CurrentReinSoul?.LearnedSkillIds != null)
+            {
+                foreach (var skillId in soul.CurrentReinSoul.LearnedSkillIds)
+                {
+                    var skill = db.GetSoulJobSkillById(skillId);
+                    if (skill != null && skill.category == SkillCategory.Passive)
+                        passives.Add(skill);
+                }
+            }
+
+            return passives;
+        }
+
         /// <summary>ユニットの戦闘状態を登録する (戦闘開始前に呼ぶ)</summary>
         public void RegisterUnit(SpaceJourneyUnit unit, List<BattleActionEntry> actionList)
         {
             unitStates[unit] = new UnitBattleState(unit, actionList);
+        }
+
+        /// <summary>ユニットの戦闘状態を登録する (パッシブスキルリスト付き)</summary>
+        public void RegisterUnit(SpaceJourneyUnit unit, List<BattleActionEntry> actionList, List<SkillDefinition> passiveSkills)
+        {
+            var state = new UnitBattleState(unit, actionList);
+            if (passiveSkills != null)
+                state.PassiveSkills = passiveSkills;
+            unitStates[unit] = state;
         }
 
         /// <summary>戦闘を最後まで実行</summary>
@@ -311,13 +363,13 @@ namespace SteraCube.SpaceJourney
             // 追加効果
             ApplyAdditionalEffects(skill, actor, target, t);
 
-            // パッシブ発火: 攻撃命中 (timing=1)
-            FirePassivesForUnit(state, 1);
+            // パッシブ発火: 攻撃命中 (Action=1)
+            FirePassivesForUnit(state, 1, actor, target, skill);
 
-            // 被弾パッシブ (timing=3)
+            // 被弾パッシブ (Hp=3)
             var defenderState = GetUnitState(target);
             if (defenderState != null)
-                FirePassivesForUnit(defenderState, 3);
+                FirePassivesForUnit(defenderState, 3, target, actor, skill);
         }
 
         private void ExecuteSupportSkill(UnitBattleState state, SkillDefinition skill, SpaceJourneyUnit target, int t, int cost)
@@ -357,10 +409,117 @@ namespace SteraCube.SpaceJourney
         {
             var actor = state.Unit;
             var actorPos = Field.FindUnit(actor);
+            int side = actorPos[0];
+            var currentCell = new Vector2Int(actorPos[1], actorPos[2]);
+            int enemySide = BattleField.OppositeSide(side);
 
-            // TODO: 実際のマス移動処理 (GridRangePattern.moveRange に基づく)
-            // 現時点ではログだけ
-            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」移動 [cost={cost}]");
+            // 1. 自陣内で moveRange に基づく移動先を探す
+            Vector2Int? bestCell = null;
+            int bestDist = int.MaxValue;
+            bool crossSide = false;
+
+            if (skill.moveRange != null && skill.moveRange.Offsets.Count > 0)
+            {
+                foreach (var offset in skill.moveRange.Offsets)
+                {
+                    var candidate = currentCell + offset;
+                    if (!Field.IsCellEmpty(side, candidate)) continue;
+
+                    int dist = CalcDistToNearestEnemy(candidate, side, enemySide);
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        bestCell = candidate;
+                    }
+                }
+            }
+
+            // 2. 自陣で移動先がない + 前列(x=0)にいる → 敵陣に攻め込む
+            if (bestCell == null && currentCell.x == Field.FrontRow)
+            {
+                // 敵陣の後列(x=最大)の同じy、またはその周辺に空きがあれば移動
+                var enemyCells = new List<Vector2Int>();
+                int maxX = 0;
+                foreach (var cell in Field.Cells)
+                    if (cell.x > maxX) maxX = cell.x;
+
+                // 後列 → 中列 → 前列の順で空きを探す
+                for (int x = maxX; x >= 0; x--)
+                {
+                    foreach (var cell in Field.Cells)
+                    {
+                        if (cell.x != x) continue;
+                        if (Field.IsCellEmpty(enemySide, cell))
+                            enemyCells.Add(cell);
+                    }
+                    if (enemyCells.Count > 0) break;
+                }
+
+                if (enemyCells.Count > 0)
+                {
+                    // 敵に最も近いセルを選ぶ
+                    foreach (var candidate in enemyCells)
+                    {
+                        int dist = CalcDistToNearestEnemySameSide(candidate, enemySide);
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            bestCell = candidate;
+                            crossSide = true;
+                        }
+                    }
+                }
+            }
+
+            // 実行
+            if (bestCell.HasValue)
+            {
+                bool moved;
+                if (crossSide)
+                    moved = Field.MoveUnitCrossSide(actor, enemySide, bestCell.Value);
+                else
+                    moved = Field.MoveUnit(actor, bestCell.Value);
+
+                if (moved)
+                {
+                    string sideLabel = crossSide ? " [敵陣侵入]" : "";
+                    Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」移動 ({currentCell.x},{currentCell.y})→({bestCell.Value.x},{bestCell.Value.y}){sideLabel} [cost={cost}]");
+                    return;
+                }
+            }
+
+            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」移動先なし → 待機 [cost={cost}]");
+        }
+
+        private int CalcDistToNearestEnemy(Vector2Int cell, int mySide, int enemySide)
+        {
+            var enemies = Field.GetAllAlive(enemySide);
+            if (enemies.Count == 0) return int.MaxValue;
+
+            int minDist = int.MaxValue;
+            foreach (var enemy in enemies)
+            {
+                var ep = Field.FindUnit(enemy);
+                // sideまたぎ距離
+                int dist = cell.x + 1 + ep[1] + Mathf.Abs(cell.y - ep[2]);
+                if (dist < minDist) minDist = dist;
+            }
+            return minDist;
+        }
+
+        private int CalcDistToNearestEnemySameSide(Vector2Int cell, int side)
+        {
+            var enemies = Field.GetAllAlive(side);
+            if (enemies.Count == 0) return int.MaxValue;
+
+            int minDist = int.MaxValue;
+            foreach (var enemy in enemies)
+            {
+                var ep = Field.FindUnit(enemy);
+                int dist = Mathf.Abs(cell.x - ep[1]) + Mathf.Abs(cell.y - ep[2]);
+                if (dist < minDist) minDist = dist;
+            }
+            return minDist;
         }
 
         // ================================================================
@@ -523,6 +682,7 @@ namespace SteraCube.SpaceJourney
             var actor = state.Unit;
             var actorPos = Field.FindUnit(actor);
             int mySide = actorPos[0];
+            var actorCell = new Vector2Int(actorPos[1], actorPos[2]);
 
             EffectTargetSide targetSide = skill.effectTargetSide;
             List<SpaceJourneyUnit> candidates;
@@ -534,10 +694,38 @@ namespace SteraCube.SpaceJourney
 
             if (candidates.Count == 0) return null;
 
-            // TODO: GridRangePattern による射程フィルタ
-            // 現時点では距離ベースで最も近い敵/味方を選択
+            // GridRangePattern による射程フィルタ
+            if (skill.targetRange != null && skill.targetRange.Offsets.Count > 0)
+            {
+                candidates = candidates.Where(c => IsInRange(actorCell, mySide, c, skill.targetRange)).ToList();
+                if (candidates.Count == 0) return null;
+            }
 
+            // 最も近い候補を選択
             return candidates.OrderBy(c => Field.Distance(actor, c)).First();
+        }
+
+        /// <summary>対象が射程パターン内にいるか判定</summary>
+        private bool IsInRange(Vector2Int actorCell, int actorSide, SpaceJourneyUnit target, GridRangePattern range)
+        {
+            var targetPos = Field.FindUnit(target);
+            if (targetPos.x < 0) return false;
+
+            int targetSide = targetPos[0];
+            var targetCell = new Vector2Int(targetPos[1], targetPos[2]);
+
+            // 同じ side の場合: 単純なオフセット比較
+            if (actorSide == targetSide)
+            {
+                var offset = targetCell - actorCell;
+                return range.Contains(offset);
+            }
+
+            // 異なる side の場合: 自陣から見た相対座標に変換
+            // 自陣の前列(x=0) と 敵陣の前列(x=0) が隣接
+            // 敵陣の座標を自陣基準に変換: x → -(targetCell.x + 1), y はそのまま
+            var crossOffset = new Vector2Int(-(targetCell.x + 1), targetCell.y - actorCell.y);
+            return range.Contains(crossOffset);
         }
 
         // ================================================================
@@ -566,17 +754,102 @@ namespace SteraCube.SpaceJourney
 
         private void FirePassives(int timing)
         {
+            FirePassives(timing, null, null, null);
+        }
+
+        private void FirePassives(int timing, SpaceJourneyUnit triggerUnit, SpaceJourneyUnit otherUnit, SkillDefinition triggerSkill)
+        {
             foreach (var state in unitStates.Values)
             {
                 if (state.Unit.IsDead) continue;
-                FirePassivesForUnit(state, timing);
+                FirePassivesForUnit(state, timing, triggerUnit, otherUnit, triggerSkill);
             }
         }
 
         private void FirePassivesForUnit(UnitBattleState state, int timing)
         {
-            // TODO: ユニットのパッシブスキルリストをチェックして条件を評価
-            // 現時点ではスタブ
+            FirePassivesForUnit(state, timing, null, null, null);
+        }
+
+        private void FirePassivesForUnit(UnitBattleState state, int timing,
+            SpaceJourneyUnit triggerUnit, SpaceJourneyUnit otherUnit, SkillDefinition triggerSkill)
+        {
+            if (state.PassiveSkills == null || state.PassiveSkills.Count == 0) return;
+
+            var unit = state.Unit;
+            var unitPos = Field.FindUnit(unit);
+            int mySide = unitPos[0];
+
+            foreach (var passive in state.PassiveSkills)
+            {
+                if (passive == null) continue;
+                if (passive.category != SkillCategory.Passive) continue;
+
+                // タイミングチェック: passiveTimings のいずれかが timing に一致するか
+                bool timingMatch = false;
+                if (passive.passiveTimings != null)
+                {
+                    foreach (var t in passive.passiveTimings)
+                    {
+                        if ((int)t == timing) { timingMatch = true; break; }
+                    }
+                }
+                if (!timingMatch) continue;
+
+                // コンテキスト構築
+                var ctx = BuildTriggerContext(state, timing, triggerUnit, otherUnit, triggerSkill);
+
+                // 条件チェック
+                if (!SkillOccasionEvaluator.AreAllTrue(passive.passiveConditions, ctx))
+                    continue;
+
+                // パッシブ発動: 追加効果を適用
+                ApplyPassiveEffect(state, passive);
+            }
+        }
+
+        private SkillTriggerContext BuildTriggerContext(UnitBattleState state, int timing,
+            SpaceJourneyUnit triggerUnit, SpaceJourneyUnit otherUnit, SkillDefinition triggerSkill)
+        {
+            var unit = state.Unit;
+            var unitPos = Field.FindUnit(unit);
+            int mySide = unitPos[0];
+
+            return new SkillTriggerContext
+            {
+                timing = (SkillTriggerTiming)timing,
+                self = unit,
+                other = otherUnit,
+                usedSkill = triggerSkill,
+                selfHpRate = unit.MaxHp > 0 ? (float)unit.CurrentHp / unit.MaxHp : 1f,
+                otherHpRate = otherUnit != null && otherUnit.MaxHp > 0
+                    ? (float)otherUnit.CurrentHp / otherUnit.MaxHp : 1f,
+                enemyCount = Field.GetAllAlive(BattleField.OppositeSide(mySide)).Count,
+                allyCount = Field.GetAllAlive(mySide).Count,
+                selfAttackCount = state.AttackCount,
+                usedSkillTags = triggerSkill?.skillTags ?? SkillTag.None,
+            };
+        }
+
+        private void ApplyPassiveEffect(UnitBattleState state, SkillDefinition passive)
+        {
+            var unit = state.Unit;
+
+            // パッシブの追加効果を自分 or 対象に適用
+            if (passive.AdditionalEffects != null)
+            {
+                foreach (var eff in passive.AdditionalEffects)
+                {
+                    if (eff.effectType == StatusEffectType.None) continue;
+                    if (UnityEngine.Random.value > eff.probability) continue;
+
+                    int duration = eff.duration > 0 ? eff.duration : 2;
+                    var target = passive.effectTargetSide == EffectTargetSide.Self ? unit : unit;
+                    target.ApplyStatusEffect(eff.effectType, eff.value, duration, CurrentTime);
+                }
+            }
+
+            Log.Add($"    [パッシブ] {GetLabel(unit)} 「{passive.SkillName}」発動");
         }
 
         // ================================================================

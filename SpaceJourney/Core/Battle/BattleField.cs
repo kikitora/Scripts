@@ -20,6 +20,9 @@ namespace SteraCube.SpaceJourney
         private readonly HashSet<Vector2Int> validCells;
         private readonly Dictionary<(int side, Vector2Int cell), SpaceJourneyUnit> grid;
 
+        /// <summary>ユニットの所属サイド (物理位置が変わっても所属は変わらない)</summary>
+        private readonly Dictionary<SpaceJourneyUnit, int> unitOwnerSide = new();
+
         /// <summary>有効セル一覧 (読み取り専用コピー)</summary>
         public IReadOnlyCollection<Vector2Int> Cells => validCells;
 
@@ -67,6 +70,8 @@ namespace SteraCube.SpaceJourney
             var key = (side, cell);
             if (grid.ContainsKey(key) && grid[key] != null) return false;
             grid[key] = unit;
+            if (!unitOwnerSide.ContainsKey(unit))
+                unitOwnerSide[unit] = side;
             return true;
         }
 
@@ -88,30 +93,32 @@ namespace SteraCube.SpaceJourney
             return new Vector3Int(-1, -1, -1);
         }
 
+        /// <summary>ユニットの所属サイドを返す (物理位置ではなく元の陣営)</summary>
         public int GetSide(SpaceJourneyUnit unit)
         {
-            var pos = FindUnit(unit);
-            return pos.x >= 0 ? pos[0] : -1;
+            return unitOwnerSide.TryGetValue(unit, out int s) ? s : -1;
         }
 
+        /// <summary>所属サイドが side のユニット一覧 (物理位置に関係なく)</summary>
         public List<SpaceJourneyUnit> GetAllUnits(int side)
         {
             var list = new List<SpaceJourneyUnit>();
-            foreach (var kvp in grid)
+            foreach (var kvp in unitOwnerSide)
             {
-                if (kvp.Key.side == side && kvp.Value != null)
-                    list.Add(kvp.Value);
+                if (kvp.Value == side && kvp.Key != null)
+                    list.Add(kvp.Key);
             }
             return list;
         }
 
+        /// <summary>所属サイドが side の生存ユニット一覧</summary>
         public List<SpaceJourneyUnit> GetAllAlive(int side)
         {
             var list = new List<SpaceJourneyUnit>();
-            foreach (var kvp in grid)
+            foreach (var kvp in unitOwnerSide)
             {
-                if (kvp.Key.side == side && kvp.Value != null && !kvp.Value.IsDead)
-                    list.Add(kvp.Value);
+                if (kvp.Value == side && kvp.Key != null && !kvp.Key.IsDead)
+                    list.Add(kvp.Key);
             }
             return list;
         }
@@ -188,6 +195,49 @@ namespace SteraCube.SpaceJourney
                 foreach (var cell in validCells) ys.Add(cell.y);
                 return ys;
             }
+        }
+
+        /// <summary>ユニットを同じside内の別セルに移動する。</summary>
+        public bool MoveUnit(SpaceJourneyUnit unit, Vector2Int toCell)
+        {
+            var pos = FindUnit(unit);
+            if (pos.x < 0) return false;
+
+            int side = pos[0];
+            var fromCell = new Vector2Int(pos[1], pos[2]);
+
+            if (!IsValid(side, toCell)) return false;
+            var toKey = (side, toCell);
+            if (grid.ContainsKey(toKey) && grid[toKey] != null) return false;
+
+            grid.Remove((side, fromCell));
+            grid[toKey] = unit;
+            return true;
+        }
+
+        /// <summary>ユニットを別のsideに移動する (sideまたぎ)。</summary>
+        public bool MoveUnitCrossSide(SpaceJourneyUnit unit, int toSide, Vector2Int toCell)
+        {
+            var pos = FindUnit(unit);
+            if (pos.x < 0) return false;
+
+            int fromSide = pos[0];
+            var fromCell = new Vector2Int(pos[1], pos[2]);
+
+            if (!IsValid(toSide, toCell)) return false;
+            var toKey = (toSide, toCell);
+            if (grid.ContainsKey(toKey) && grid[toKey] != null) return false;
+
+            grid.Remove((fromSide, fromCell));
+            grid[toKey] = unit;
+            return true;
+        }
+
+        /// <summary>指定セルが空いているか</summary>
+        public bool IsCellEmpty(int side, Vector2Int cell)
+        {
+            if (!IsValid(side, cell)) return false;
+            return !grid.ContainsKey((side, cell)) || grid[(side, cell)] == null;
         }
 
         private bool IsValid(int side, Vector2Int cell)

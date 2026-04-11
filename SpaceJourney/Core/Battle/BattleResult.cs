@@ -78,8 +78,8 @@ namespace SteraCube.SpaceJourney
                     totalMaxHp = totalMax,
                     totalEndHp = totalEnd,
                     dmgRatio = totalMax > 0 ? (float)(totalMax - totalEnd) / totalMax : 0f,
-                    // コスト未実装のため、死亡数で代用 (将来: ユニットごとのコスト値を使う)
-                    totalDeadCost = deadCount,
+                    // キャラコスト = 3 (BalanceConfig.characterCost)
+                    totalDeadCost = deadCount * 3,
                 };
             }
 
@@ -93,12 +93,16 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public static float CalcMoraleLoss(SideResult sideResult, SpaceJourneyBalanceConfig config)
         {
-            float lossDamage = sideResult.dmgRatio * config.damageLossMax;
-            float lossDeath = config.baseMoraleLossPerCostOnDeath * sideResult.totalDeadCost;
-            float lossWipe = sideResult.wiped ? config.sideWipeMoraleLoss : 0f;
-            float lossParticipation = config.participationLoss;
+            float damageLossMax = config != null ? config.damageLossMax : 30f;
+            float lossPerCost = config != null ? config.baseMoraleLossPerCostOnDeath : 2f;
+            float wipeLoss = config != null ? config.sideWipeMoraleLoss : 35f;
+            float partLoss = config != null ? config.participationLoss : 8f;
 
-            return Mathf.Clamp(lossDamage + lossDeath + lossWipe + lossParticipation, 0f, 100f);
+            float lossDamage = sideResult.dmgRatio * damageLossMax;
+            float lossDeath = lossPerCost * sideResult.totalDeadCost;
+            float lossWipe = sideResult.wiped ? wipeLoss : 0f;
+
+            return Mathf.Clamp(lossDamage + lossDeath + lossWipe + partLoss, 0f, 100f);
         }
 
         /// <summary>
@@ -108,10 +112,12 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public static int CalcVpDamage(SideResult sideResult, SpaceJourneyBalanceConfig config)
         {
-            float dmgDeath = config.baseCoreDamagePerCost * sideResult.totalDeadCost;
-            // 全滅ボーナス: サイド総コスト分。コスト未実装のためユニット数で代用
+            float coreDmgPerCost = config != null ? config.baseCoreDamagePerCost : 2f;
+            float wipePerCost = config != null ? config.baseSideWipeCoreDamagePerCost : 2f;
+
+            float dmgDeath = coreDmgPerCost * sideResult.totalDeadCost;
             float dmgWipe = sideResult.wiped
-                ? config.baseSideWipeCoreDamagePerCost * sideResult.totalUnits
+                ? wipePerCost * sideResult.totalUnits
                 : 0f;
 
             return Mathf.Max(0, Mathf.RoundToInt(dmgDeath + dmgWipe));

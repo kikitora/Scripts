@@ -34,15 +34,15 @@ namespace SteraCube.SpaceJourney
             grid = new Dictionary<(int, Vector2Int), SpaceJourneyUnit>();
         }
 
-        /// <summary>デフォルト 3x3 × 2面</summary>
-        public BattleField() : this(BuildDefault3x3Cells(), 2) { }
+        /// <summary>デフォルト 5x5 × 2面</summary>
+        public BattleField() : this(BuildDefault5x5Cells(), 2) { }
 
-        private static Vector2Int[] BuildDefault3x3Cells()
+        private static Vector2Int[] BuildDefault5x5Cells()
         {
-            var cells = new Vector2Int[9];
+            var cells = new Vector2Int[25];
             int i = 0;
-            for (int x = 0; x < 3; x++)
-                for (int y = 0; y < 3; y++)
+            for (int x = 0; x < 5; x++)
+                for (int y = 0; y < 5; y++)
                     cells[i++] = new Vector2Int(x, y);
             return cells;
         }
@@ -230,6 +230,19 @@ namespace SteraCube.SpaceJourney
 
             grid.Remove((fromSide, fromCell));
             grid[toKey] = unit;
+            return true;
+        }
+
+        /// <summary>2体のユニットの位置を入れ替える (sideまたぎ対応)。</summary>
+        public bool Swap(SpaceJourneyUnit a, SpaceJourneyUnit b)
+        {
+            var pa = FindUnit(a);
+            var pb = FindUnit(b);
+            if (pa.x < 0 || pb.x < 0) return false;
+            int sa = pa[0]; var ca = new Vector2Int(pa[1], pa[2]);
+            int sb = pb[0]; var cb = new Vector2Int(pb[1], pb[2]);
+            grid[(sa, ca)] = b;
+            grid[(sb, cb)] = a;
             return true;
         }
 

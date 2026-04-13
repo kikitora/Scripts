@@ -39,6 +39,55 @@ namespace SteraCube.SpaceJourney
         public bool Contains(Vector2Int offset) => offsets.Contains(offset);
 
         /// <summary>
+        /// オフセットを90度単位で回転させたリストを返す。
+        /// rotation: 0=前(+Y), 1=右(+X), 2=後(-Y), 3=左(-X)
+        /// </summary>
+        public List<Vector2Int> GetRotatedOffsets(int rotation)
+        {
+            rotation = ((rotation % 4) + 4) % 4;
+            if (rotation == 0) return new List<Vector2Int>(offsets);
+
+            var result = new List<Vector2Int>(offsets.Count);
+            foreach (var o in offsets)
+            {
+                result.Add(RotateOffset(o, rotation));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 指定オフセットが、いずれかの回転方向で含まれるかチェック。
+        /// 含まれる場合はその回転値(0~3)を返す。含まれなければ -1。
+        /// </summary>
+        public int ContainsAnyRotation(Vector2Int offset)
+        {
+            for (int r = 0; r < 4; r++)
+            {
+                var inv = RotateOffset(offset, (4 - r) % 4);
+                if (offsets.Contains(inv)) return r;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// いずれかの回転で offset が含まれるか。
+        /// </summary>
+        public bool ContainsRotated(Vector2Int offset)
+            => ContainsAnyRotation(offset) >= 0;
+
+        private static Vector2Int RotateOffset(Vector2Int o, int rotation)
+        {
+            // 0=そのまま, 1=90°右(x,y)→(y,-x), 2=180°→(-x,-y), 3=90°左→(-y,x)
+            return rotation switch
+            {
+                1 => new Vector2Int(o.y, -o.x),
+                2 => new Vector2Int(-o.x, -o.y),
+                3 => new Vector2Int(-o.y, o.x),
+                _ => o,
+            };
+        }
+
+        /// <summary>
         /// 旧仕様(0)のデータを、新仕様(1)に移行する。
         /// - 旧：前方=-Y
         /// - 新：前方=+Y

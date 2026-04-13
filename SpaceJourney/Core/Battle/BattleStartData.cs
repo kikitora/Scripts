@@ -69,6 +69,25 @@ namespace SteraCube.SpaceJourney
                 cellSize = 1f,
             };
         }
+
+        /// <summary>標準の 5x5 レイアウトを生成</summary>
+        public static BattleFieldLayout Default5x5()
+        {
+            var cells = new Vector2Int[25];
+            int i = 0;
+            for (int x = 0; x < 5; x++)
+                for (int y = 0; y < 5; y++)
+                    cells[i++] = new Vector2Int(x, y);
+
+            return new BattleFieldLayout
+            {
+                worldPosition = Vector3.zero,
+                worldRotation = Quaternion.identity,
+                cells = cells,
+                sideCount = 2,
+                cellSize = 1f,
+            };
+        }
     }
 
     /// <summary>

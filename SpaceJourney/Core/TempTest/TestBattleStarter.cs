@@ -22,6 +22,23 @@ namespace SteraCube.SpaceJourney
         public int level = 10;
         public bool autoStart = true;
 
+        [Header("転生由来ソウル")]
+        [Tooltip("true にすると ReinSimRunner.RunFixedRank で転生経由ソウルを生成。" +
+                 "共通レアスキル等の習得が戦闘に反映される。")]
+        public bool useReincarnatedSouls = true;
+        [Tooltip("転生ソウル生成時の才能ランク")]
+        public TalentRank talentRank = TalentRank.C;
+
+        [Header("バッチ実行")]
+        [Tooltip("複数戦闘を連続実行して勝率統計を取る。1=通常の1戦")]
+        [Range(1, 100)]
+        public int batchCount = 1;
+        [Tooltip("バッチ実行時、各戦闘でチーム構成をランダムにする")]
+        public bool randomizeTeams = true;
+        [Tooltip("チームサイズ (1戦あたりのユニット数)")]
+        [Range(3, 10)]
+        public int teamSize = 5;
+
         [Header("味方チーム")]
         public BattleTactic allyTactic = BattleTactic.Balanced;
         public List<SoulJobTendency> allyMembers = new()
@@ -50,12 +67,20 @@ namespace SteraCube.SpaceJourney
         [TextArea(5, 30)]
         public string resultLog = "";
 
+        private static readonly SoulJobTendency[] ALL_TENDENCIES = new[]
+        {
+            SoulJobTendency.Warrior, SoulJobTendency.Knight, SoulJobTendency.Lancer,
+            SoulJobTendency.Archer, SoulJobTendency.Mage,
+        };
+
         private void Start()
         {
-            if (autoStart) RunTestBattle();
+            if (!autoStart) return;
+            if (batchCount > 1) RunBatch();
+            else RunTestBattle();
         }
 
-        [ContextMenu("テスト戦闘実行")]
+        [ContextMenu("テスト戦闘実行 (1戦)")]
         public void RunTestBattle()
         {
             var db = MasterDatabase.Instance;
@@ -65,12 +90,12 @@ namespace SteraCube.SpaceJourney
                 return;
             }
 
-            Debug.Log("[TestBattleStarter] BattleStartData 経由で戦闘開��...");
+            Debug.Log("[TestBattleStarter] BattleStartData 経由で戦闘開始...");
 
             // BattleStartData を組み立て
             var startData = new BattleStartData
             {
-                fieldLayout = BattleFieldLayout.Default3x3(),
+                fieldLayout = BattleFieldLayout.Default5x5(),
                 allyUnits = CreatePlacements(rank, level, allyMembers, allyTactic),
                 enemyUnits = CreatePlacements(rank, level, enemyMembers, enemyTactic),
                 initiativeSide = initiativeSide,
@@ -104,6 +129,70 @@ namespace SteraCube.SpaceJourney
             Debug.Log($"[TestBattleStarter] ログ保存: {path}");
         }
 
+        [ContextMenu("バッチ戦闘実行 (batchCount戦)")]
+        public void RunBatch()
+        {
+            var db = MasterDatabase.Instance;
+            if (db == null)
+            {
+                Debug.LogError("[TestBattleStarter] MasterDatabase.Instance が null。");
+                return;
+            }
+
+            int allyWins = 0, enemyWins = 0, draws = 0;
+            float totalEndT = 0;
+            var allLogs = new List<string>();
+            allLogs.Add($"=== バッチ実行 {batchCount}戦 / ランダム={randomizeTeams} / チームサイズ={teamSize} ===");
+
+            for (int i = 0; i < batchCount; i++)
+            {
+                var allyTends = randomizeTeams ? PickRandomTeam(teamSize) : allyMembers;
+                var enemyTends = randomizeTeams ? PickRandomTeam(teamSize) : enemyMembers;
+
+                var startData = new BattleStartData
+                {
+                    fieldLayout = BattleFieldLayout.Default5x5(),
+                    allyUnits = CreatePlacements(rank, level, allyTends, allyTactic),
+                    enemyUnits = CreatePlacements(rank, level, enemyTends, enemyTactic),
+                    initiativeSide = initiativeSide,
+                    allyMorale = allyMorale,
+                    enemyMorale = enemyMorale,
+                };
+
+                var manager = BattleManager.StartBattle(startData);
+                int ws = manager.WinningSide;
+                if (ws == 0) allyWins++;
+                else if (ws == 1) enemyWins++;
+                else draws++;
+                totalEndT += manager.CurrentTime;
+
+                string allyStr = string.Join(",", allyTends);
+                string enemyStr = string.Join(",", enemyTends);
+                string winStr = ws == 0 ? "味方勝" : ws == 1 ? "敵勝" : "引分";
+                allLogs.Add($"戦{i + 1}: {winStr} (t={manager.CurrentTime}) 味方[{allyStr}] vs 敵[{enemyStr}]");
+            }
+
+            float avgT = totalEndT / Mathf.Max(1, batchCount);
+            string summary = $"\n--- サマリー ---\n味方勝利: {allyWins} ({100f * allyWins / batchCount:F1}%)\n敵勝利: {enemyWins} ({100f * enemyWins / batchCount:F1}%)\n引き分け: {draws} ({100f * draws / batchCount:F1}%)\n平均終了タイム: {avgT:F2}";
+            allLogs.Add(summary);
+
+            resultLog = string.Join("\n", allLogs);
+            Debug.Log(resultLog);
+
+            // ファイル保存
+            string path = System.IO.Path.Combine(Application.dataPath, "../__battle_batch_log.txt");
+            System.IO.File.WriteAllLines(path, allLogs, System.Text.Encoding.UTF8);
+            Debug.Log($"[TestBattleStarter] バッチログ保存: {path}");
+        }
+
+        private static List<SoulJobTendency> PickRandomTeam(int size)
+        {
+            var list = new List<SoulJobTendency>(size);
+            for (int i = 0; i < size; i++)
+                list.Add(ALL_TENDENCIES[Random.Range(0, ALL_TENDENCIES.Length)]);
+            return list;
+        }
+
         /// <summary>傾向リストから BattleUnitPlacement を生成</summary>
         private List<BattleUnitPlacement> CreatePlacements(
             int rank, int level, List<SoulJobTendency> members, BattleTactic tactic)
@@ -111,13 +200,15 @@ namespace SteraCube.SpaceJourney
             var placements = new List<BattleUnitPlacement>();
             var db = MasterDatabase.Instance;
 
-            // 職業に応じた配置列を決定
-            // x=0: 前列 (Knight, Warrior), x=1: 中列 (Lancer), x=2: 後列 (Archer, Mage)
+            // 5x5 での職業配置:
+            // x=0: 前列 (Knight, Warrior), x=1: 中衛 (Lancer), x=3: 後衛 (Archer, Mage), x=4: 予備
             var rowSlots = new Dictionary<int, List<int>>
             {
-                [0] = new List<int> { 0, 1, 2 },
-                [1] = new List<int> { 0, 1, 2 },
-                [2] = new List<int> { 0, 1, 2 },
+                [0] = new List<int> { 0, 1, 2, 3, 4 },
+                [1] = new List<int> { 0, 1, 2, 3, 4 },
+                [2] = new List<int> { 0, 1, 2, 3, 4 },
+                [3] = new List<int> { 0, 1, 2, 3, 4 },
+                [4] = new List<int> { 0, 1, 2, 3, 4 },
             };
 
             int memberIdx = 0;
@@ -128,14 +219,15 @@ namespace SteraCube.SpaceJourney
                     SoulJobTendency.Knight => 0,
                     SoulJobTendency.Warrior => 0,
                     SoulJobTendency.Lancer => 1,
-                    SoulJobTendency.Archer => 2,
-                    SoulJobTendency.Mage => 2,
-                    _ => 1,
+                    SoulJobTendency.Archer => 3,
+                    SoulJobTendency.Mage => 3,
+                    _ => 2,
                 };
-                // 指定列が満杯なら隣の列を探す
+                // 指定列が満杯なら前後を順に探す
                 if (rowSlots[row].Count == 0)
                 {
-                    row = rowSlots[0].Count > 0 ? 0 : rowSlots[1].Count > 0 ? 1 : 2;
+                    for (int r = 0; r < 5; r++)
+                        if (rowSlots[r].Count > 0) { row = r; break; }
                 }
                 if (rowSlots[row].Count == 0) break;
 
@@ -147,15 +239,39 @@ namespace SteraCube.SpaceJourney
                 string bodyJobId = OneReinSoulData.GetDefaultBodyJobId(tendency);
 
                 // ソウル生成
-                var soul = SoulFactory.Create(
-                    rank: rank,
-                    soulTendency: tendency,
-                    level: level,
-                    registerToWorld: false
-                );
+                SoulInstance soul;
+                if (useReincarnatedSouls)
+                {
+                    // 転生経由: RunFixedRank で OneReinSoulData を生成し SoulInstance に追加
+                    soul = SoulInstance.CreateRandomInitialSoul(rank, tendency, registerToWorld: false);
+                    var reinData = ReinSimRunner.RunFixedRank(
+                        fixedRank: rank,
+                        tendency: tendency,
+                        talentRank: talentRank,
+                        allEvents: db.ReinLifeEvents);
+                    if (reinData != null) soul.AddReinSoul(reinData);
+                    // 共通レアスキル数をログ
+                    var rareCount = 0;
+                    if (reinData?.LearnedSkillIds != null)
+                    {
+                        foreach (var sid in reinData.LearnedSkillIds)
+                            if (sid != null && sid.StartsWith("skill_")) rareCount++;
+                    }
+                    if (rareCount > 0)
+                        Debug.Log($"[TestBattleStarter] 転生ソウル: {tendency} 共通レア{rareCount}個習得");
+                }
+                else
+                {
+                    soul = SoulFactory.Create(
+                        rank: rank,
+                        soulTendency: tendency,
+                        level: level,
+                        registerToWorld: false
+                    );
+                }
                 if (soul == null)
                 {
-                    Debug.LogError($"[TestBattleStarter] SoulFactory.Create failed for {tendency}");
+                    Debug.LogError($"[TestBattleStarter] soul creation failed for {tendency}");
                     continue;
                 }
 
@@ -181,7 +297,7 @@ namespace SteraCube.SpaceJourney
                 if (soul.GetActionList(bodyJobId) == null || soul.GetActionList(bodyJobId).Count == 0)
                 {
                     var skills = CollectAllSkills(soul, body, db);
-                    var actionList = ActionListBuilder.Build(skills, tactic);
+                    var actionList = ActionListBuilder.Build(skills, tactic, bodyJobId);
                     soul.SetActionList(bodyJobId, actionList);
                 }
 

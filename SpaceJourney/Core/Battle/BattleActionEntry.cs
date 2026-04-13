@@ -21,6 +21,12 @@ namespace SteraCube.SpaceJourney
         [Tooltip("AND で評価される条件リスト。空 = 無条件 (Always)。")]
         public List<ActionCondition> conditions = new();
 
+        [Tooltip("移動スキル用: 移動先の方針。攻撃/サポートスキルでは無視される。")]
+        public MoveTargetKind moveTarget = MoveTargetKind.NearestEnemy;
+
+        [Tooltip("移動先パラメータ (NearestJobEnemy 用の職ID等)。")]
+        public string moveTargetParam = "";
+
         public BattleActionEntry() { }
 
         public BattleActionEntry(SkillDefinition skill, params ActionCondition[] conditions)
@@ -28,6 +34,27 @@ namespace SteraCube.SpaceJourney
             this.skill = skill;
             this.conditions = new List<ActionCondition>(conditions);
         }
+
+        public BattleActionEntry(SkillDefinition skill, MoveTargetKind moveTarget, params ActionCondition[] conditions)
+        {
+            this.skill = skill;
+            this.moveTarget = moveTarget;
+            this.conditions = new List<ActionCondition>(conditions);
+        }
+    }
+
+    // ================================================================
+    // 移動先の方針
+    // ================================================================
+
+    public enum MoveTargetKind
+    {
+        NearestEnemy = 0,       // 最も近い敵に接近
+        NearestJobEnemy = 1,    // 指定職の敵に接近 (moveTargetParam = bodyJobId)
+        IntruderEnemy = 2,      // 自陣に侵入してきた敵に接近
+        FarthestEnemy = 3,      // 最も遠い敵に接近
+        EnemyTerritory = 4,     // 敵陣地を目指す (侵攻用)
+        Retreat = 5,            // 自陣後方に下がる
     }
 
     // ================================================================
@@ -69,6 +96,9 @@ namespace SteraCube.SpaceJourney
         EnemyCountInRange = 11, // 射程内の敵が intParam 体以上
         EnemyHpBelowRate = 12,  // 射程内に HP rateParam 以下の敵がいる
         NoEnemyForward = 13,    // 前方列に敵がいない
+        EnemyHasEmptyBehind = 14, // 射程内に「ノックバック先が空いてる敵」が1体以上 (KnockbackThrust用)
+        SelfInCastTargetArea = 15, // 自分が敵の詠唱AoE予告マスに含まれる時
+        EnemyAdjacentCount = 16,   // 自分の隣接マス (マンハッタン1) にいる敵数が intParam 体以上
 
         // ── 味方関連 ──
         AllyInRange = 20,       // スキルの射程内に味方がいる
@@ -81,6 +111,14 @@ namespace SteraCube.SpaceJourney
 
         // ── その他 ──
         SkillReady = 40,        // 特定スキルの CT が解けている (コンボ用)
+
+        // ── 移動方向指定 (Move系スキルのみ有効。条件としては常に true を返す) ──
+        MoveTo_NearestEnemy = 100,
+        MoveTo_NearestJobEnemy = 101,   // intParam に bodyJob インデックス
+        MoveTo_IntruderEnemy = 102,
+        MoveTo_FarthestEnemy = 103,
+        MoveTo_EnemyTerritory = 104,
+        MoveTo_Retreat = 105,
     }
 
     // ================================================================

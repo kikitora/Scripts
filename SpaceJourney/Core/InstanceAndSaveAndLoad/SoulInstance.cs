@@ -739,7 +739,7 @@ namespace SteraCube.SpaceJourney
                 SoulJobTendency.Knight => "Knight",
                 SoulJobTendency.Archer => "Archer",
                 SoulJobTendency.Mage => "Mage",
-                SoulJobTendency.Lancer => "Spearman",
+                SoulJobTendency.Lancer => "Lancer",
                 _ => "Warrior",
             };
         }
@@ -803,7 +803,7 @@ namespace SteraCube.SpaceJourney
                 if (skills.Count == 0) continue;
 
                 var tactic = GetDefaultTactic(tendency);
-                var actionList = ActionListBuilder.Build(skills, tactic);
+                var actionList = ActionListBuilder.Build(skills, tactic, bodyJobId);
                 SetActionList(bodyJobId, actionList);
             }
         }

@@ -142,8 +142,13 @@ namespace SteraCube.SpaceJourney
         // =====================================================================
         [Header("移動（ActiveMoveのみ）")]
         [SCShowIf(nameof(category), SkillCategory.ActiveMove)]
-        [Tooltip("移動可能マス。例：前方1マスなら(0,+1)のみ。")]
+        [Tooltip("移動可能マス。例：隣接4方向なら(-1,0)(1,0)(0,-1)(0,1)。")]
         public GridRangePattern moveRange = new GridRangePattern();
+
+        [SCShowIf(nameof(category), SkillCategory.ActiveMove)]
+        [Tooltip("1回の移動アクションで進める歩数。1=1マス、2=2マス連続移動。")]
+        [Range(1, 3)]
+        public int moveSteps = 1;
 
         // 他カテゴリで「移動付き攻撃」等を作りたい場合のトグル（ActiveMove時は固定でtrue扱い）
         [Header("アクション後の最終マス設定（ActiveMove以外用）")]
@@ -153,6 +158,15 @@ namespace SteraCube.SpaceJourney
         [SCHideIf(nameof(category), SkillCategory.ActiveMove)]
         [SCShowIf(nameof(moveAfterSkill), true)]
         public GridRangePattern moveAfterRange = new GridRangePattern();
+
+        // =====================================================================
+        // 特殊実行モード（共通レアスキル等で使う）
+        // =====================================================================
+        [Header("特殊実行モード（指定すると通常実行を上書き）")]
+        [Tooltip("None以外を指定すると BattleManager が専用処理にディスパッチする。")]
+        public SpecialSkillKind specialKind = SpecialSkillKind.None;
+
+        public SpecialSkillKind SpecialKind => specialKind;
 
         // =====================================================================
         // 追加効果（全カテゴリ）
@@ -402,6 +416,20 @@ namespace SteraCube.SpaceJourney
         [Tooltip("おすすめの発動条件。AND で評価される。\n" +
                  "空なら EnemyInRange (攻撃系) or Always (補助系) を暗黙で使う。")]
         public List<ActionCondition> recommendedConditions = new();
+
+        [Tooltip("複数の発動条件セットを優先度順に最大3個登録できる。\n" +
+                 "各セット内の条件は AND、セット間は OR (独立したエントリとして展開される)。\n" +
+                 "登録がある場合は recommendedPriority/recommendedConditions より優先。")]
+        public List<RecommendedActionSet> recommendedActionSets = new();
+
+        [Serializable]
+        public class RecommendedActionSet
+        {
+            [Range(1, 15)]
+            public int priority = 5;
+            public List<ActionCondition> conditions = new();
+            public MoveTargetKind moveTarget = MoveTargetKind.NearestEnemy;
+        }
 
         /// <summary>
         /// このスキルの戦術カテゴリを自動判定する。

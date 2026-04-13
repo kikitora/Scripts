@@ -50,7 +50,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 3,
                 statCompareCount = 3,
                 statCompareMode = "max",
-                // learnsSkillId = "skill_mentor_wisdom", // TODO
+                learnsSkillId = "skill_mentor_wisdom",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -84,7 +84,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 3,
                 statCompareCount = 3,
                 statCompareMode = "max",
-                // learnsSkillId = "skill_mentor_inspire", // TODO
+                learnsSkillId = "skill_mentor_inspire",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -118,7 +118,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 3,
                 statCompareCount = 3,
                 statCompareMode = "max",
-                // learnsSkillId = "skill_mentor_insight", // TODO
+                learnsSkillId = "skill_mentor_insight",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -160,7 +160,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 4,
                 statCompareCount = 3,
                 statCompareMode = "min",
-                // learnsSkillId = "skill_train_focus", // TODO
+                learnsSkillId = "skill_train_focus",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -194,7 +194,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 4,
                 statCompareCount = 3,
                 statCompareMode = "min",
-                // learnsSkillId = "skill_train_versatile", // TODO
+                learnsSkillId = "skill_train_versatile",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -228,7 +228,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 4,
                 statCompareCount = 3,
                 statCompareMode = "min",
-                // learnsSkillId = "skill_train_breakthrough", // TODO
+                learnsSkillId = "skill_train_breakthrough",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -268,7 +268,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 3,
                 statCompareCount = 3,
                 statCompareMode = "max",
-                // learnsSkillId = "skill_nature_storm", // TODO
+                learnsSkillId = "skill_nature_storm",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -301,7 +301,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 3,
                 statCompareCount = 3,
                 statCompareMode = "max",
-                // learnsSkillId = "skill_nature_starlight", // TODO
+                learnsSkillId = "skill_nature_starlight",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -320,11 +320,11 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 },
             };
 
-            // C: 海での遭難 → 生存系スキル
+            // C: 焚き火を囲んだ夜 → 結束系スキル
             yield return new ReinLifeEvent
             {
                 eventId = "ev_rare_nature_c",
-                sentence = "海で流された。波に揉まれながら、必死に岸を目指した。生きて帰れたのは運だけだった。",
+                sentence = "山で道に迷った夜、見ず知らずの者たちと焚き火を囲んだ。言葉少なに火を見つめながら、不思議と心が通じ合った。",
                 startAge = 14,
                 endAge = 45,
                 baseWeight = 0.35f,
@@ -333,7 +333,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 3,
                 statCompareCount = 3,
                 statCompareMode = "max",
-                // learnsSkillId = "skill_nature_survival", // TODO
+                learnsSkillId = "skill_nature_bond",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -341,13 +341,13 @@ namespace SteraCube.SpaceJourney.LifeEvents
                         baseWeight = 1.0f,
                         statEffects = new()
                         {
-                            new StatEffect { stat = StatKind.DF, eventFactorPt = 3 },
-                            new StatEffect { stat = StatKind.AGI, eventFactorPt = 2 },
+                            new StatEffect { stat = StatKind.AT, eventFactorPt = 2 },
+                            new StatEffect { stat = StatKind.MAT, eventFactorPt = 2 },
                         },
                         grantsStats = new()
                         {
-                            new StatBonus { stat = StatKind.DF, value = 2 },
-                            new StatBonus { stat = StatKind.AGI, value = 1 },
+                            new StatBonus { stat = StatKind.AT, value = 1 },
+                            new StatBonus { stat = StatKind.MAT, value = 1 },
                         },
                     },
                 },
@@ -374,7 +374,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 4,
                 statCompareCount = 3,
                 statCompareMode = "min",
-                // learnsSkillId = "skill_save_heal", // TODO
+                learnsSkillId = "skill_save_heal",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -407,7 +407,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 4,
                 statCompareCount = 3,
                 statCompareMode = "min",
-                // learnsSkillId = "skill_save_guard", // TODO
+                learnsSkillId = "skill_save_guard",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -440,7 +440,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = 4,
                 statCompareCount = 3,
                 statCompareMode = "min",
-                // learnsSkillId = "skill_save_protect", // TODO
+                learnsSkillId = "skill_save_protect",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -480,7 +480,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = -1,
                 statCompareCount = 3,
                 statCompareMode = "avg",
-                // learnsSkillId = "skill_nd_tenacity", // TODO
+                learnsSkillId = "skill_nd_tenacity",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -514,7 +514,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = -1,
                 statCompareCount = 3,
                 statCompareMode = "avg",
-                // learnsSkillId = "skill_nd_recovery", // TODO
+                learnsSkillId = "skill_nd_recovery",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -548,7 +548,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = -1,
                 statCompareCount = 3,
                 statCompareMode = "avg",
-                // learnsSkillId = "skill_nd_survival", // TODO
+                learnsSkillId = "skill_nd_survival",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -590,7 +590,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = -1,
                 statCompareCount = 3,
                 statCompareMode = "avg",
-                // learnsSkillId = "skill_betray_counter", // TODO
+                learnsSkillId = "skill_betray_counter",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -624,7 +624,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = -1,
                 statCompareCount = 3,
                 statCompareMode = "avg",
-                // learnsSkillId = "skill_betray_vigilance", // TODO
+                learnsSkillId = "skill_betray_vigilance",
                 options = new()
                 {
                     new ReinSentenceOption
@@ -658,7 +658,7 @@ namespace SteraCube.SpaceJourney.LifeEvents
                 eventStage = -1,
                 statCompareCount = 3,
                 statCompareMode = "avg",
-                // learnsSkillId = "skill_betray_endure", // TODO
+                learnsSkillId = "skill_betray_endure",
                 options = new()
                 {
                     new ReinSentenceOption

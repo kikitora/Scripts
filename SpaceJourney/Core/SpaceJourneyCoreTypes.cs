@@ -446,6 +446,22 @@ namespace SteraCube.SpaceJourney
     }
 
     /// <summary>
+    /// 特殊実行スキル種別 (共通レアスキル等)。
+    /// None 以外を指定すると BattleManager が専用ハンドラで処理する。
+    /// </summary>
+    public enum SpecialSkillKind
+    {
+        None = 0,
+        SwapAlly = 1,       // 射程内の味方1体と位置交換
+        PullEnemy = 2,      // 射程内の敵1体を自分の隣接マスへ引き寄せ
+        DispelAlly = 3,     // 射程内の味方1体のデバフ全解除 + HP回復
+        RandomMoveEnemies = 4, // 範囲内の敵を1マスランダム方向に強制移動
+        CancelEnemyAction = 5, // 射程内の敵1体の次発動をキャンセル (詠唱中断 or next_act_time 遅延)
+        DoubleActionCharge = 6, // 自身に「次スキル発動直後に同tでもう1度行動可」フラグ
+        StealBuffs = 7,     // 射程内の敵1体のバフを最大3つ剥奪+自分にコピー
+    }
+
+    /// <summary>
     /// スキルのダメージ/回復方式。
     /// Unityのenumシリアライズ崩壊を防ぐため、数値を固定しています。
     /// ※旧 True(=3) は削除し、3は欠番として残します。
@@ -529,6 +545,19 @@ namespace SteraCube.SpaceJourney
         Burn,
         HealMorale,
         ChainDamage,
+        Taunt,          // 挑発: 周囲の敵が自分を優先攻撃
+        Knockback,      // ノックバック: 対象を1マス後方に押し戻す
+        BuffMat,        // 魔法攻撃力アップ
+        DebuffMat,      // 魔法攻撃力ダウン
+        BuffMdf,        // 魔法防御力アップ (魔法被ダメ減)
+        DebuffMdf,      // 魔法防御力ダウン
+        AoeAbsorb,      // 次のAoE攻撃の他ターゲットを自身に吸収 (1回消費)
+        Counter = 19,   // 被攻撃時に AT×(value/100) で即時反撃 (duration中)
+        SurviveLethal,  // 致死ダメを HP1 に丸める (1回消費)
+        Invincible,     // 全ダメージ0化 (duration中)
+        RangeBoost,     // targetRange のマンハッタン距離を +value 拡張
+        CycleDelay,     // 所持スキルの reuseCycle 発動時 +value 加算 (debuff)
+        CoverAlly,      // 隣接味方への次攻撃1回を自分が肩代わり (1回消費)
         Custom,
     }
 

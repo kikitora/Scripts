@@ -37,6 +37,7 @@ namespace SteraCube.SpaceJourney
             public StatusEffectType type;
             public int valuePercent; // %ポイント（例：+30 / -20）
             public int expireTime;   // battleTime >= expireTime で失効
+            public SpaceJourneyUnit source; // 挑発source等の追跡用
         }
 
         [SerializeField] private List<ActiveStatusEffect> activeEffects = new List<ActiveStatusEffect>();
@@ -127,7 +128,8 @@ namespace SteraCube.SpaceJourney
                 int baseVal = (soul != null && body != null)
                     ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.MAT), StatKind.MAT)
                     : 0;
-                return Mathf.RoundToInt(baseVal * moraleMultiplier);
+                int withEffect = ApplyPercentModifier(baseVal, GetTotalPercentModifierForStat(StatKind.MAT));
+                return Mathf.RoundToInt(withEffect * moraleMultiplier);
             }
         }
 
@@ -208,10 +210,15 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public void ApplyStatusEffect(StatusEffectType type, int value, int duration)
         {
-            ApplyStatusEffect(type, value, duration, battleTime);
+            ApplyStatusEffect(type, value, duration, battleTime, null);
         }
 
         public void ApplyStatusEffect(StatusEffectType type, int value, int duration, int nowTime)
+        {
+            ApplyStatusEffect(type, value, duration, nowTime, null);
+        }
+
+        public void ApplyStatusEffect(StatusEffectType type, int value, int duration, int nowTime, SpaceJourneyUnit source)
         {
             if (duration <= 0) return;
 
@@ -227,6 +234,7 @@ namespace SteraCube.SpaceJourney
 
                 activeEffects[i].expireTime = Mathf.Max(activeEffects[i].expireTime, expire);
                 activeEffects[i].valuePercent = ChooseStrongerValue(type, activeEffects[i].valuePercent, normalizedValue);
+                if (source != null) activeEffects[i].source = source;
                 return;
             }
 
@@ -234,8 +242,22 @@ namespace SteraCube.SpaceJourney
             {
                 type = type,
                 valuePercent = normalizedValue,
-                expireTime = expire
+                expireTime = expire,
+                source = source,
             });
+        }
+
+        /// <summary>指定 type の状態異常の source を取得 (有効期限内のみ)</summary>
+        public SpaceJourneyUnit GetActiveEffectSource(StatusEffectType type)
+        {
+            if (activeEffects == null) return null;
+            for (int i = 0; i < activeEffects.Count; i++)
+            {
+                var e = activeEffects[i];
+                if (e.type == type && e.expireTime > battleTime && e.source != null && !e.source.IsDead)
+                    return e.source;
+            }
+            return null;
         }
 
         public bool IsActionDisabled
@@ -247,7 +269,129 @@ namespace SteraCube.SpaceJourney
             }
         }
 
-        private bool HasActiveEffect(StatusEffectType type)
+        public bool HasActiveEffect(StatusEffectType type) => HasActiveEffectInternal(type);
+
+        /// <summary>指定StatusEffect の valuePercent を返す。無ければ0。複数あれば最大値。</summary>
+        public int GetActiveEffectValue(StatusEffectType type)
+        {
+            if (activeEffects == null) return 0;
+            int max = 0;
+            bool found = false;
+            for (int i = 0; i < activeEffects.Count; i++)
+            {
+                var e = activeEffects[i];
+                if (e.type == type && e.expireTime > battleTime)
+                {
+                    if (!found || e.valuePercent > max) { max = e.valuePercent; found = true; }
+                }
+            }
+            return max;
+        }
+
+        /// <summary>全てのデバフ/状態異常を解除する (浄化用)。解除数を返す。</summary>
+        public int DispelAllDebuffs()
+        {
+            if (activeEffects == null || activeEffects.Count == 0) return 0;
+            int count = 0;
+            for (int i = activeEffects.Count - 1; i >= 0; i--)
+            {
+                var e = activeEffects[i];
+                if (e.expireTime <= battleTime) continue;
+                switch (e.type)
+                {
+                    case StatusEffectType.DebuffAt:
+                    case StatusEffectType.DebuffDf:
+                    case StatusEffectType.DebuffAgi:
+                    case StatusEffectType.DebuffMat:
+                    case StatusEffectType.DebuffMdf:
+                    case StatusEffectType.Stun:
+                    case StatusEffectType.Freeze:
+                    case StatusEffectType.Burn:
+                    case StatusEffectType.ChainDamage:
+                    case StatusEffectType.Taunt:
+                    case StatusEffectType.CycleDelay:
+                        activeEffects.RemoveAt(i);
+                        count++;
+                        break;
+                }
+            }
+            return count;
+        }
+
+        /// <summary>指定タイプ群のバフを最大 maxCount 個、別ユニットへ移す (奪取)。</summary>
+        public int StealBuffsTo(SpaceJourneyUnit thief, StatusEffectType[] stealableTypes, int maxCount, int nowTime)
+        {
+            if (activeEffects == null || activeEffects.Count == 0) return 0;
+            int moved = 0;
+            for (int i = activeEffects.Count - 1; i >= 0 && moved < maxCount; i--)
+            {
+                var e = activeEffects[i];
+                if (e.expireTime <= battleTime) continue;
+                bool match = false;
+                foreach (var ty in stealableTypes) { if (e.type == ty) { match = true; break; } }
+                if (!match) continue;
+                int remaining = Mathf.Max(1, e.expireTime - battleTime);
+                thief.ApplyStatusEffect(e.type, e.valuePercent, remaining, nowTime, null);
+                activeEffects.RemoveAt(i);
+                moved++;
+            }
+            return moved;
+        }
+
+        /// <summary>指定StatusEffect を強制的に失効させる (消費用)。</summary>
+        public void ConsumeActiveEffect(StatusEffectType type)
+        {
+            if (activeEffects == null) return;
+            for (int i = activeEffects.Count - 1; i >= 0; i--)
+            {
+                if (activeEffects[i].type == type && activeEffects[i].expireTime > battleTime)
+                {
+                    activeEffects.RemoveAt(i);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 有効な Burn/ChainDamage 効果のダメージ合計を計算し、TakeDamage を呼ぶ。
+        /// 1tickごとに呼ぶ想定。value は 1tickあたりのダメージ量 (Burnは固定値)。
+        /// 戻り値: (type, damage) のリスト (ログ用)
+        /// </summary>
+        public List<(StatusEffectType type, int damage)> TickPeriodicDamage()
+        {
+            var applied = new List<(StatusEffectType, int)>();
+            if (activeEffects == null || activeEffects.Count == 0) return applied;
+
+            for (int i = 0; i < activeEffects.Count; i++)
+            {
+                var e = activeEffects[i];
+                if (e.expireTime <= battleTime) continue;
+
+                int dmg = 0;
+                switch (e.type)
+                {
+                    case StatusEffectType.Burn:
+                        // valuePercent を1tickの固定ダメージとして扱う
+                        dmg = Mathf.Max(1, Mathf.Abs(e.valuePercent));
+                        break;
+                    case StatusEffectType.ChainDamage:
+                        // MaxHP の valuePercent % をダメージ (連鎖ダメージ)
+                        dmg = Mathf.Max(1, Mathf.RoundToInt(MaxHp * Mathf.Abs(e.valuePercent) / 100f));
+                        break;
+                    default:
+                        continue;
+                }
+
+                TakeDamage(dmg);
+                applied.Add((e.type, dmg));
+
+                if (IsDead) break;
+            }
+
+            return applied;
+        }
+
+        private bool HasActiveEffectInternal(StatusEffectType type)
         {
             if (activeEffects == null) return false;
             for (int i = 0; i < activeEffects.Count; i++)
@@ -294,8 +438,19 @@ namespace SteraCube.SpaceJourney
                         break;
 
                     case StatKind.DF:
-                    case StatKind.MDF:
                         if (e.type == StatusEffectType.BuffDf || e.type == StatusEffectType.DebuffDf)
+                            sum += e.valuePercent;
+                        break;
+
+                    case StatKind.MAT:
+                        if (e.type == StatusEffectType.BuffMat || e.type == StatusEffectType.DebuffMat)
+                            sum += e.valuePercent;
+                        break;
+
+                    case StatKind.MDF:
+                        // 防御系バフ(BuffDf/DebuffDf)は MDF にも効く運用
+                        if (e.type == StatusEffectType.BuffDf || e.type == StatusEffectType.DebuffDf
+                            || e.type == StatusEffectType.BuffMdf || e.type == StatusEffectType.DebuffMdf)
                             sum += e.valuePercent;
                         break;
                 }
@@ -313,11 +468,15 @@ namespace SteraCube.SpaceJourney
                 case StatusEffectType.BuffAt:
                 case StatusEffectType.BuffDf:
                 case StatusEffectType.BuffAgi:
+                case StatusEffectType.BuffMat:
+                case StatusEffectType.BuffMdf:
                     return v;
 
                 case StatusEffectType.DebuffAt:
                 case StatusEffectType.DebuffDf:
                 case StatusEffectType.DebuffAgi:
+                case StatusEffectType.DebuffMat:
+                case StatusEffectType.DebuffMdf:
                     return -v;
 
                 default:
@@ -332,11 +491,15 @@ namespace SteraCube.SpaceJourney
                 case StatusEffectType.BuffAt:
                 case StatusEffectType.BuffDf:
                 case StatusEffectType.BuffAgi:
+                case StatusEffectType.BuffMat:
+                case StatusEffectType.BuffMdf:
                     return Mathf.Max(oldValue, newValue);
 
                 case StatusEffectType.DebuffAt:
                 case StatusEffectType.DebuffDf:
                 case StatusEffectType.DebuffAgi:
+                case StatusEffectType.DebuffMat:
+                case StatusEffectType.DebuffMdf:
                     return Mathf.Min(oldValue, newValue);
 
                 default:

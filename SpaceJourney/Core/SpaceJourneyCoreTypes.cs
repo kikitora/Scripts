@@ -433,8 +433,9 @@ namespace SteraCube.SpaceJourney
     /// </summary>
     public enum MultiSinglePickMode
     {
-        MaxTargets = 0,
-        AllInRange = 1,
+        MaxTargets = 0,  // 近い順に maxTargets 体 (deterministic)
+        AllInRange = 1,  // 射程内全員
+        RandomN = 2,     // 射程内から maxTargets 体をランダム抽選 (重複なし)
     }
 
     public enum SkillCategory
@@ -443,6 +444,17 @@ namespace SteraCube.SpaceJourney
         ActiveSupport,
         ActiveMove,
         Passive,
+    }
+
+    /// <summary>
+    /// スキル効果パターン (v2設計)。
+    /// DirectStrike: 自中心の attackArea (= effectRange) 内の敵全員にヒット
+    /// ImpactLanding: flightRange (= targetRange) で狙い → burstArea (= effectRange) を target中心にAoE展開
+    /// </summary>
+    public enum SkillEffectPattern
+    {
+        DirectStrike = 0,
+        ImpactLanding = 1,
     }
 
     /// <summary>
@@ -459,6 +471,13 @@ namespace SteraCube.SpaceJourney
         CancelEnemyAction = 5, // 射程内の敵1体の次発動をキャンセル (詠唱中断 or next_act_time 遅延)
         DoubleActionCharge = 6, // 自身に「次スキル発動直後に同tでもう1度行動可」フラグ
         StealBuffs = 7,     // 射程内の敵1体のバフを最大3つ剥奪+自分にコピー
+        // 新規 v2 (2026-04-15)
+        PlowThrust = 8,             // 突撃: targetセルまで直進、途中の敵に amount% ダメ+ノックバック
+        TeamTeleport = 9,           // 集団瞬間移動: effectRange内の味方を target 周辺空きマスへ全員転送
+        RandomizeAllPositions = 10, // 盤面シャッフル: 全生存ユニットの位置をランダム再配置
+        RandomizedEffect = 11,      // 確率分岐: additionalEffects から確率で1つ選択して適用
+        SummonBarricade = 12,       // 召喚: 前方3マスにバリケード(HP3, 非貫通1cap)を配置
+        SummonAlly = 13,            // 召喚: 周辺空きマスに actor 同等ステの守護霊を配置
     }
 
     /// <summary>
@@ -559,6 +578,12 @@ namespace SteraCube.SpaceJourney
         CycleDelay,     // 所持スキルの reuseCycle 発動時 +value 加算 (debuff)
         CoverAlly,      // 隣接味方への次攻撃1回を自分が肩代わり (1回消費)
         Custom,
+        // 新規 v2 (2026-04-15)
+        Regen = 26,            // HP自動回復 (1tickあたり MaxHP×value%)
+        Confusion,             // 味方と敵の認識が反転 (攻撃対象選択が逆)
+        NextAttackAppliesStun, // 次の1回の自身攻撃時、対象にStun付与 (1回消費)
+        IgnoreDefenseReactions,// 自身攻撃時、敵の回避/反撃/無敵等を無効化 (duration中)
+        EffectRangeBoost,      // AoE ImpactLanding スキルの effectRange を +1マス広げる (duration中)
     }
 
     #endregion

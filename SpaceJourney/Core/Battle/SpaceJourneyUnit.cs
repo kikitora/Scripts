@@ -31,6 +31,30 @@ namespace SteraCube.SpaceJourney
         // ─────────────────────────────
         [SerializeField] private int battleTime = 0;
 
+        /// <summary>ユニットの向き (攻撃パターン回転値 0-3)。0=forward(敵方向), 1=右, 2=後, 3=左。</summary>
+        [SerializeField] private int facing = 0;
+        public int Facing { get => facing; set => facing = Mathf.Clamp(value, 0, 3) % 4; }
+
+        // ─── パッシブ被ダメ軽減 (社畜魂=魔法 / 与圧スーツ=物理 等で 0.7 などに設定) ───
+        [SerializeField] private float passivePhysReduceRate = 1f;
+        [SerializeField] private float passiveMagReduceRate = 1f;
+        public float PassivePhysReduceRate { get => passivePhysReduceRate; set => passivePhysReduceRate = value; }
+        public float PassiveMagReduceRate { get => passiveMagReduceRate; set => passiveMagReduceRate = value; }
+        // ─── 踏ん張り (HP閾値到達で1回ずつダメ refund) ───
+        [NonSerialized] public bool Shoulder70Used = false;
+        [NonSerialized] public bool Shoulder40Used = false;
+        // ─── 召喚体マーカー (バリケード = 非貫通1cap, 勝敗集計から除外) ───
+        [NonSerialized] public bool IsBarricade = false;
+        [NonSerialized] public bool IsSummoned = false;
+        // 召喚体専用の固定ステ (Body/Soul を持たない場合に使用)
+        [NonSerialized] public bool UseFixedStats = false;
+        [NonSerialized] public int FixedMaxHp = 0;
+        [NonSerialized] public int FixedAt = 0;
+        [NonSerialized] public int FixedDf = 0;
+        [NonSerialized] public int FixedAgi = 0;
+        [NonSerialized] public int FixedMat = 0;
+        [NonSerialized] public int FixedMdf = 0;
+
         [Serializable]
         private class ActiveStatusEffect
         {
@@ -89,9 +113,10 @@ namespace SteraCube.SpaceJourney
         {
             get
             {
-                int baseVal = (soul != null && body != null)
-                    ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.AT), StatKind.AT)
-                    : 0;
+                int baseVal = UseFixedStats ? FixedAt
+                    : (soul != null && body != null)
+                        ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.AT), StatKind.AT)
+                        : 0;
                 int withEffect = ApplyPercentModifier(baseVal, GetTotalPercentModifierForStat(StatKind.AT));
                 return Mathf.RoundToInt(withEffect * moraleMultiplier);
             }
@@ -101,9 +126,10 @@ namespace SteraCube.SpaceJourney
         {
             get
             {
-                int baseVal = (soul != null && body != null)
-                    ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.DF), StatKind.DF)
-                    : 0;
+                int baseVal = UseFixedStats ? FixedDf
+                    : (soul != null && body != null)
+                        ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.DF), StatKind.DF)
+                        : 0;
                 int withEffect = ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.DF));
                 return Mathf.Max(0, Mathf.RoundToInt(withEffect * moraleMultiplier));
             }
@@ -113,9 +139,10 @@ namespace SteraCube.SpaceJourney
         {
             get
             {
-                int baseVal = (soul != null && body != null)
-                    ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.AGI), StatKind.AGI)
-                    : 0;
+                int baseVal = UseFixedStats ? FixedAgi
+                    : (soul != null && body != null)
+                        ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.AGI), StatKind.AGI)
+                        : 0;
                 int withEffect = ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.AGI));
                 return Mathf.Max(0, Mathf.RoundToInt(withEffect * moraleMultiplier));
             }
@@ -125,9 +152,10 @@ namespace SteraCube.SpaceJourney
         {
             get
             {
-                int baseVal = (soul != null && body != null)
-                    ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.MAT), StatKind.MAT)
-                    : 0;
+                int baseVal = UseFixedStats ? FixedMat
+                    : (soul != null && body != null)
+                        ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.MAT), StatKind.MAT)
+                        : 0;
                 int withEffect = ApplyPercentModifier(baseVal, GetTotalPercentModifierForStat(StatKind.MAT));
                 return Mathf.RoundToInt(withEffect * moraleMultiplier);
             }
@@ -137,9 +165,10 @@ namespace SteraCube.SpaceJourney
         {
             get
             {
-                int baseVal = (soul != null && body != null)
-                    ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.MDF), StatKind.MDF)
-                    : 0;
+                int baseVal = UseFixedStats ? FixedMdf
+                    : (soul != null && body != null)
+                        ? body.ApplyToSoulStat(soul.GetSoulStat(StatKind.MDF), StatKind.MDF)
+                        : 0;
 
                 // BuffDf/DebuffDf は DF/MDF 両方に効かせる運用（「防御」扱い）
                 int withEffect = ApplyPercentModifierClampMin0(baseVal, GetTotalPercentModifierForStat(StatKind.MDF));
@@ -147,7 +176,23 @@ namespace SteraCube.SpaceJourney
             }
         }
 
-        public int MaxHp => Mathf.Max(1, Mathf.RoundToInt((body != null ? body.MaxHp : 0) * moraleMultiplier));
+        public int MaxHp => Mathf.Max(1, Mathf.RoundToInt(
+            (UseFixedStats ? FixedMaxHp : (body != null ? body.MaxHp : 0)) * moraleMultiplier));
+
+        /// <summary>召喚体生成: Soul/Body なしで固定ステを持つ Unit を作る (バリケード/守護霊)</summary>
+        public static SpaceJourneyUnit CreateSummonedUnit(int hp, int at, int df, int agi, int mat, int mdf, bool isBarricade)
+        {
+            var u = new SpaceJourneyUnit(null, null);
+            u.UseFixedStats = true;
+            u.FixedMaxHp = Mathf.Max(1, hp);
+            u.FixedAt = at; u.FixedDf = df; u.FixedAgi = agi;
+            u.FixedMat = mat; u.FixedMdf = mdf;
+            u.currentHp = u.MaxHp;
+            u.isDead = false;
+            u.IsBarricade = isBarricade;
+            u.IsSummoned = true;
+            return u;
+        }
 
         // ─────────────────────────────
         // HP・死亡状態管理
@@ -378,6 +423,15 @@ namespace SteraCube.SpaceJourney
                         // MaxHP の valuePercent % をダメージ (連鎖ダメージ)
                         dmg = Mathf.Max(1, Mathf.RoundToInt(MaxHp * Mathf.Abs(e.valuePercent) / 100f));
                         break;
+                    case StatusEffectType.Regen:
+                    {
+                        // MaxHP の valuePercent % を回復 (負値でログ化)
+                        int heal = Mathf.Max(1, Mathf.RoundToInt(MaxHp * Mathf.Abs(e.valuePercent) / 100f));
+                        int before = currentHp;
+                        currentHp = Mathf.Min(MaxHp, currentHp + heal);
+                        applied.Add((e.type, -(currentHp - before)));
+                        continue;
+                    }
                     default:
                         continue;
                 }

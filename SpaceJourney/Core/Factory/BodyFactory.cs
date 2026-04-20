@@ -31,12 +31,25 @@ namespace SteraCube.SpaceJourney
             rank = SpaceJourneyStatMath.ClampRankMin(rank);
             rng ??= new System.Random();
 
-            // raceId 未指定 → ランダム選択（TODO: 本格抽選ロジックは後で）
+            // raceId 未指定 → ランダム選択 (minRank <= 0 はユニーク扱いで除外)
             if (string.IsNullOrEmpty(raceId))
             {
                 var races = db.RaceDefinitions;
                 if (races != null && races.Length > 0)
-                    raceId = races[rng.Next(races.Length)].raceId;
+                {
+                    var available = new System.Collections.Generic.List<RaceDefinition>();
+                    foreach (var r in races)
+                    {
+                        if (r == null) continue;
+                        if (r.minRank <= 0) continue; // ユニーク/除外扱い
+                        if (rank < r.minRank) continue; // ランク不足
+                        available.Add(r);
+                    }
+                    if (available.Count > 0)
+                        raceId = available[rng.Next(available.Count)].raceId;
+                    else
+                        raceId = races[rng.Next(races.Length)].raceId; // フォールバック
+                }
             }
 
             // bodyJobId 未指定 → ランダム選択

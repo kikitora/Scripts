@@ -160,6 +160,22 @@ namespace SteraCube.SpaceJourney
         public GridRangePattern moveAfterRange = new GridRangePattern();
 
         // =====================================================================
+        // 効果パターン (v2設計)
+        // =====================================================================
+        [Header("効果パターン (v2設計)")]
+        [Tooltip("DirectStrike: 自中心 attackArea(=effectRange) の範囲内敵全員にヒット\n" +
+                 "ImpactLanding: flightRange(=targetRange) でターゲット選択 → burstArea(=effectRange) を target中心にAoE展開")]
+        public SkillEffectPattern effectPattern = SkillEffectPattern.DirectStrike;
+
+        public SkillEffectPattern EffectPattern => effectPattern;
+
+        [Tooltip("0以外のとき、射程内からランダムに N 回ヒット (同じ敵に重複可)。連射系に使用。")]
+        [Range(0, 10)]
+        public int randomHitCount = 0;
+
+        public int RandomHitCount => randomHitCount;
+
+        // =====================================================================
         // 特殊実行モード（共通レアスキル等で使う）
         // =====================================================================
         [Header("特殊実行モード（指定すると通常実行を上書き）")]
@@ -167,6 +183,11 @@ namespace SteraCube.SpaceJourney
         public SpecialSkillKind specialKind = SpecialSkillKind.None;
 
         public SpecialSkillKind SpecialKind => specialKind;
+
+        [Tooltip("SpecialSkillKind 用の汎用int引数 (PlowThrust: 最大歩数 / TeamTeleport: 半径 / 等)。")]
+        public int specialIntParam = 0;
+
+        public int SpecialIntParam => specialIntParam;
 
         // =====================================================================
         // 追加効果（全カテゴリ）
@@ -388,9 +409,11 @@ namespace SteraCube.SpaceJourney
                     break;
 
                 case SkillTargetingMode.MultiSingle:
-                    // MultiSingle では pointTarget / effectRange は不要
+                    // MultiSingle では pointTarget は不要
                     pointTargetKind = SkillPointTargetKind.Unit;
-                    effectRange = new GridRangePattern();
+                    // v2: ImpactLanding は target中心AoEに effectRange を使うので保持
+                    if (effectPattern != SkillEffectPattern.ImpactLanding)
+                        effectRange = new GridRangePattern();
 
                     if (multiSinglePickMode == MultiSinglePickMode.AllInRange)
                         maxTargets = 1;

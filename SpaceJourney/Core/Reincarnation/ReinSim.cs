@@ -516,9 +516,9 @@ namespace SteraCube.SpaceJourney
         // 1年あたりの発火率に変換する: per_year = 1 - (1 - P)^(1/period)
         private static readonly int[][] PositiveStageTable = new int[][]
         {
-            new int[] { 20, 40, 60, 80, 90, 90, 90, 90, 90, 90 }, // stage 1 (易・日常)
-            new int[] {  5, 20, 40, 60, 80, 80, 80, 80, 80, 80 }, // stage 2 (普通)
-            new int[] {  0,  5, 20, 40, 60, 70, 70, 70, 70, 70 }, // stage 3 (中堅)
+            new int[] { 10, 18, 28, 40, 52, 63, 73, 80, 85, 85 }, // stage 1 (易・日常)
+            new int[] {  5, 10, 18, 28, 40, 52, 62, 72, 78, 82 }, // stage 2 (普通)
+            new int[] {  0,  5, 10, 18, 28, 40, 50, 60, 68, 72 }, // stage 3 (中堅)
             new int[] {  0,  0,  0, 10, 30, 50, 60, 60, 60, 60 }, // stage 4 (難)
             new int[] {  0,  0,  0,  0,  0,  0,  0, 10, 30, 50 }, // stage 5 (伝説)
         };

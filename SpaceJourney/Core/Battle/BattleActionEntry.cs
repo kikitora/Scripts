@@ -97,6 +97,11 @@ namespace SteraCube.SpaceJourney
         EnemyHpBelowRate = 12,  // 射程内に HP rateParam 以下の敵がいる
         NoEnemyForward = 13,    // 前方列に敵がいない
         EnemyHasEmptyBehind = 14, // 射程内に「ノックバック先が空いてる敵」が1体以上 (KnockbackThrust用)
+
+        // ── 汎用前方エリアチェック (intParam = W*10 + D, W=幅, D=深さ, facing回転適用) ──
+        EnemyInForwardArea = 17, // 前方エリアに敵1体以上
+        AllyInForwardArea = 18,  // 前方エリアに味方1体以上
+        EmptyInForwardArea = 19, // 前方エリアに誰もいない
         SelfInCastTargetArea = 15, // 自分が敵の詠唱AoE予告マスに含まれる時
         EnemyAdjacentCount = 16,   // 自分の隣接マス (マンハッタン1) にいる敵数が intParam 体以上
 

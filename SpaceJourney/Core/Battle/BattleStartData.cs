@@ -92,6 +92,7 @@ namespace SteraCube.SpaceJourney
 
     /// <summary>
     /// 戦闘に参加する1ユニットの配置情報。
+    /// Soul+Body ルートと EnemyUnitDefinition ルートの両方に対応。
     /// </summary>
     [Serializable]
     public class BattleUnitPlacement
@@ -99,8 +100,16 @@ namespace SteraCube.SpaceJourney
         public SoulInstance soul;
         public BodyInstance body;
 
+        /// <summary>専用敵定義 (非null なら Soul+Body より優先)</summary>
+        public EnemyUnitDefinition enemyDef;
+        /// <summary>専用敵用のランク</summary>
+        public int enemyRank = 1;
+
         /// <summary>戦場グリッド上の配置位置 (BattleFieldLayout.cells 内の座標)</summary>
         public Vector2Int battleCell;
+
+        /// <summary>専用敵定義を使うか</summary>
+        public bool IsEnemyDef => enemyDef != null;
 
         public BattleUnitPlacement() { }
 
@@ -108,6 +117,13 @@ namespace SteraCube.SpaceJourney
         {
             this.soul = soul;
             this.body = body;
+            this.battleCell = battleCell;
+        }
+
+        public BattleUnitPlacement(EnemyUnitDefinition enemyDef, int rank, Vector2Int battleCell)
+        {
+            this.enemyDef = enemyDef;
+            this.enemyRank = rank;
             this.battleCell = battleCell;
         }
     }

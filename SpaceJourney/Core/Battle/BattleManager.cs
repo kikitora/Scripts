@@ -25,7 +25,19 @@ namespace SteraCube.SpaceJourney
 
         public List<string> Log { get; } = new List<string>();
 
-        private const int MaxTime = 15;
+        private const int MaxTime = 10;
+
+        /// <summary>リアルタイムモード用: 戦闘制限時間 (秒)</summary>
+        public static float RealtimeMaxSec = 30f;
+
+        /// <summary>リアルタイムモード用: ゲーム内連続時計 (秒)</summary>
+        public float ClockTime { get; private set; } = 0f;
+
+        /// <summary>true: ガンビット方式 (cost無視、全アクション uniformActionDurationSec)</summary>
+        public bool realtimeMode { get; private set; } = false;
+
+        /// <summary>リアルタイムモードで全アクション共通の行動時間 (秒)</summary>
+        public static float UniformActionDurationSec = 0.8f;
         private const int InitiativeDelay = 5;
         private const float AgiCap = 600f;
         private const float MaxCostReductionRate = 0.35f;
@@ -87,6 +99,21 @@ namespace SteraCube.SpaceJourney
 
         private readonly Dictionary<SpaceJourneyUnit, UnitBattleState> unitStates = new();
 
+        /// <summary>今tick中に強制移動 (ノックバック等) したユニット。visual 側で「向き変更なし+高速」表現に使う。tick開始時にクリア。</summary>
+        public readonly HashSet<SpaceJourneyUnit> ForcedMovedThisTick = new();
+
+        /// <summary>今tick中にスキルを発動した actor リスト (攻撃側マス点滅用)</summary>
+        public readonly List<SpaceJourneyUnit> SkillActorsThisTick = new();
+
+        /// <summary>今tick中に被弾したユニットリスト (被弾マス点滅用)</summary>
+        public readonly List<SpaceJourneyUnit> DamagedUnitsThisTick = new();
+
+        /// <summary>今tick中のスキル効果範囲セル一覧 (範囲マス点滅用、実際に当たった/当たらない問わず)</summary>
+        public readonly List<(int side, Vector2Int cell)> SkillRangeCellsThisTick = new();
+
+        /// <summary>今tick中の actor → primary target セル位置 (攻撃時に対象方向を向く用)</summary>
+        public readonly Dictionary<SpaceJourneyUnit, (int side, Vector2Int cell)> ActorPrimaryTargetCell = new();
+
         /// <summary>外部からユニット状態を参照する用</summary>
         public UnitBattleState GetUnitState(SpaceJourneyUnit unit)
             => unitStates.TryGetValue(unit, out var s) ? s : null;
@@ -110,6 +137,39 @@ namespace SteraCube.SpaceJourney
             return false;
         }
 
+        /// <summary>常時パッシブ (社畜魂/与圧スーツ) を learned passive 一覧から検出して unit に反映</summary>
+        private void ApplyConstantPassives()
+        {
+            foreach (var st in unitStates.Values)
+            {
+                if (st?.PassiveSkills == null || st.Unit == null) continue;
+                foreach (var p in st.PassiveSkills)
+                {
+                    if (p == null) continue;
+                    if (p.SkillId == "warrior_salaryman_s1") st.Unit.PassiveMagReduceRate = 0.7f;
+                    else if (p.SkillId == "warrior_uchu_s1")  st.Unit.PassivePhysReduceRate = 0.7f;
+                }
+            }
+        }
+
+        /// <summary>defender が 踏ん張り (knight_shobo_s2) を持っていれば、HP70%/40% 初到達時にダメを refund (1回ずつ)</summary>
+        private void TryShoulderRefund(SpaceJourneyUnit defender, int dmgJustTaken)
+        {
+            if (dmgJustTaken <= 0) return;
+            var st = GetUnitState(defender);
+            if (st == null || st.PassiveSkills == null) return;
+            bool has = false;
+            foreach (var p in st.PassiveSkills) if (p != null && p.SkillId == "knight_shobo_s2") { has = true; break; }
+            if (!has) return;
+            float pct = (float)defender.CurrentHp / Mathf.Max(1, defender.MaxHp);
+            int fired = 0;
+            if (pct <= 0.40f && !defender.Shoulder40Used) { defender.Shoulder40Used = true; fired = 40; }
+            else if (pct <= 0.70f && !defender.Shoulder70Used) { defender.Shoulder70Used = true; fired = 70; }
+            if (fired == 0) return;
+            defender.Heal(dmgJustTaken);
+            Log.Add($"    [{GetLabel(defender)}] 💪踏ん張り発動! (HP{fired}%)");
+        }
+
         public BattleManager(BattleField field)
         {
             Field = field;
@@ -122,6 +182,17 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public static BattleManager StartBattle(BattleStartData data)
         {
+            var manager = InitBattle(data);
+            manager.RunFullBattle();
+            return manager;
+        }
+
+        /// <summary>
+        /// 戦闘を初期化するだけで実行はしない。
+        /// 戻り値の manager に対し RunFullBattle() または RunStepByStep() を呼んで進行できる。
+        /// </summary>
+        public static BattleManager InitBattle(BattleStartData data)
+        {
             var field = new BattleField(data.fieldLayout);
             var manager = new BattleManager(field);
 
@@ -132,11 +203,26 @@ namespace SteraCube.SpaceJourney
             // 味方配置
             foreach (var p in data.allyUnits)
             {
-                var unit = new SpaceJourneyUnit(p.soul, p.body);
-                unit.MoraleMultiplier = allyMoraleMul;
-                string bodyJobId = p.body?.BodyJobId;
-                var actionList = p.soul?.GetActionList(bodyJobId) ?? new List<BattleActionEntry>();
-                var passives = CollectPassiveSkills(p.soul, p.body);
+                SpaceJourneyUnit unit;
+                List<BattleActionEntry> actionList;
+                List<SkillDefinition> passives;
+
+                if (p.IsEnemyDef)
+                {
+                    unit = p.enemyDef.CreateUnit(p.enemyRank, data.allyMorale);
+                    if (unit == null) continue;
+                    actionList = p.enemyDef.actionList ?? new List<BattleActionEntry>();
+                    passives = CollectPassiveSkillsFromActionList(actionList);
+                }
+                else
+                {
+                    unit = new SpaceJourneyUnit(p.soul, p.body);
+                    unit.MoraleMultiplier = allyMoraleMul;
+                    string bodyJobId = p.body?.BodyJobId;
+                    actionList = p.soul?.GetActionList(bodyJobId) ?? new List<BattleActionEntry>();
+                    passives = CollectPassiveSkills(p.soul, p.body);
+                }
+
                 field.PlaceUnit(unit, 0, p.battleCell);
                 manager.RegisterUnit(unit, actionList, passives);
 
@@ -147,11 +233,28 @@ namespace SteraCube.SpaceJourney
             // 敵配置
             foreach (var p in data.enemyUnits)
             {
-                var unit = new SpaceJourneyUnit(p.soul, p.body);
-                unit.MoraleMultiplier = enemyMoraleMul;
-                string bodyJobId = p.body?.BodyJobId;
-                var actionList = p.soul?.GetActionList(bodyJobId) ?? new List<BattleActionEntry>();
-                var passives = CollectPassiveSkills(p.soul, p.body);
+                SpaceJourneyUnit unit;
+                List<BattleActionEntry> actionList;
+                List<SkillDefinition> passives;
+
+                if (p.IsEnemyDef)
+                {
+                    // 専用敵定義ルート
+                    unit = p.enemyDef.CreateUnit(p.enemyRank, data.enemyMorale);
+                    if (unit == null) continue;
+                    actionList = p.enemyDef.actionList ?? new List<BattleActionEntry>();
+                    passives = CollectPassiveSkillsFromActionList(actionList);
+                }
+                else
+                {
+                    // Soul+Body ルート
+                    unit = new SpaceJourneyUnit(p.soul, p.body);
+                    unit.MoraleMultiplier = enemyMoraleMul;
+                    string bodyJobId = p.body?.BodyJobId;
+                    actionList = p.soul?.GetActionList(bodyJobId) ?? new List<BattleActionEntry>();
+                    passives = CollectPassiveSkills(p.soul, p.body);
+                }
+
                 field.PlaceUnit(unit, 1, p.battleCell);
                 manager.RegisterUnit(unit, actionList, passives);
 
@@ -166,7 +269,6 @@ namespace SteraCube.SpaceJourney
                     s.NextActTime = 0;
             }
 
-            manager.RunFullBattle();
             return manager;
         }
 
@@ -214,6 +316,19 @@ namespace SteraCube.SpaceJourney
             return passives;
         }
 
+        /// <summary>行動リスト内のパッシブスキルを収集する (専用敵ユニット用)</summary>
+        private static List<SkillDefinition> CollectPassiveSkillsFromActionList(List<BattleActionEntry> actionList)
+        {
+            var passives = new List<SkillDefinition>();
+            if (actionList == null) return passives;
+            foreach (var entry in actionList)
+            {
+                if (entry.skill != null && entry.skill.category == SkillCategory.Passive)
+                    passives.Add(entry.skill);
+            }
+            return passives;
+        }
+
         /// <summary>ユニットの戦闘状態を登録する (戦闘開始前に呼ぶ)</summary>
         public void RegisterUnit(SpaceJourneyUnit unit, List<BattleActionEntry> actionList)
         {
@@ -232,17 +347,28 @@ namespace SteraCube.SpaceJourney
         /// <summary>戦闘を最後まで実行</summary>
         public void RunFullBattle()
         {
+            foreach (var _ in RunStepByStep()) { /* no-op, 完走 */ }
+        }
+
+        /// <summary>
+        /// 1 time unit ずつ戦闘を進行させるイテレータ。
+        /// 呼び出し側は foreach で各ステップ後に yield 処理を挟める (ビジュアル更新用)。
+        /// </summary>
+        public System.Collections.Generic.IEnumerable<int> RunStepByStep()
+        {
             Log.Clear();
             Log.Add("=== 戦闘開始 ===");
+            ApplyConstantPassives();
             LogAllUnitsStatus();
-
-            // 開幕パッシブ (timing=2)
             FirePassives(2);
 
             while (!IsFinished && CurrentTime < MaxTime)
             {
-                ProcessTimeUnit(CurrentTime);
+                // 1 tick 内のアクター単位で yield → visual 側は各アクター行動後に描画更新
+                foreach (var _ in ProcessTimeUnitStream(CurrentTime))
+                    yield return CurrentTime;
                 CurrentTime++;
+                yield return CurrentTime; // tick 境界の追加 yield
             }
 
             if (!IsFinished)
@@ -282,12 +408,154 @@ namespace SteraCube.SpaceJourney
 
         private void ProcessTimeUnit(int t)
         {
+            foreach (var _ in ProcessTimeUnitStream(t)) { }
+        }
+
+        /// <summary>
+        /// リアルタイム戦闘モード: 連続時間でアクターを1体ずつ処理するイテレータ。
+        /// cost 1 = 1秒、最も早く次行動可能なユニットが順次行動。
+        /// 30秒タイムリミットで終了。
+        /// </summary>
+        public System.Collections.Generic.IEnumerable<float> RunRealtimeStepByStep()
+        {
+            realtimeMode = true;
+            Log.Clear();
+            Log.Add("=== 戦闘開始 (リアルタイム) ===");
+            ApplyConstantPassives();
+            LogAllUnitsStatus();
+            FirePassives(2);
+
+            ClockTime = 0f;
+            // 初期化: 全員 NextActTime=0 からスタート (先制は既に初期化済み)
+            foreach (var s in unitStates.Values)
+                if (s.NextActTime < 0f) s.NextActTime = 0f;
+
+            while (!IsFinished && ClockTime < RealtimeMaxSec)
+            {
+                // 生存かつ最も早く行動可能なユニットを探す
+                UnitBattleState nextState = null;
+                float minTime = float.MaxValue;
+                foreach (var s in unitStates.Values)
+                {
+                    if (s.Unit.IsDead) continue;
+                    // 詠唱中は fire_time 基準
+                    float actAt = s.Casting != null ? s.Casting.FireTime : s.NextActTime;
+                    // タイブレーク: AGI 高い方が先
+                    if (actAt < minTime || (Mathf.Approximately(actAt, minTime)
+                        && nextState != null && s.Unit.AgiFinal > nextState.Unit.AgiFinal))
+                    {
+                        minTime = actAt;
+                        nextState = s;
+                    }
+                }
+
+                if (nextState == null) break; // 全滅
+
+                // 時計を進める
+                ClockTime = Mathf.Max(ClockTime, minTime);
+                if (ClockTime >= RealtimeMaxSec) break;
+
+                int tInt = Mathf.FloorToInt(ClockTime);
+
+                // このアクターのみのvisual追跡をクリア
+                SkillActorsThisTick.Clear();
+                DamagedUnitsThisTick.Clear();
+                ForcedMovedThisTick.Clear();
+                SkillRangeCellsThisTick.Clear();
+                ActorPrimaryTargetCell.Clear();
+
+                // 全ユニットに battleTime 通知 (状態異常 tick 管理)
+                foreach (var u in unitStates.Values)
+                    u.Unit.SetBattleTime(tInt);
+
+                // 状態異常ティックダメ (秒単位で1回ずつ発動)
+                if (!loggedStatusTickAt.Contains(tInt))
+                {
+                    loggedStatusTickAt.Add(tInt);
+                    ApplyStatusTickDamage(tInt);
+                    CheckVictory();
+                    if (IsFinished) break;
+                    FirePendingCasts(tInt);
+                    CheckVictory();
+                    if (IsFinished) break;
+                    ApplySuccubusAura(tInt);
+                    ResetReaperPerTurn(tInt);
+                }
+
+                if (nextState.Unit.IsDead) continue;
+
+                // 詠唱発動した場合は NextActTime が変わってるかも
+                if (nextState.Casting != null) continue;
+
+                if (nextState.Unit.IsActionDisabled)
+                {
+                    nextState.NextActTime = ClockTime + 1f;
+                    continue; // yield せず次へ
+                }
+
+                // 行動実行
+                ExecuteFromActionList(nextState, tInt);
+                nextState.NormalTurnCount++;
+                CheckVictory();
+
+                // 視覚的イベントあれば yield
+                bool hasVisualEvent = SkillActorsThisTick.Count > 0
+                                      || DamagedUnitsThisTick.Count > 0
+                                      || ForcedMovedThisTick.Count > 0;
+                if (hasVisualEvent)
+                    yield return ClockTime;
+            }
+
+            // 終了処理
+            if (!IsFinished)
+            {
+                IsFinished = true;
+                float s0 = CalcSideHpRate(0);
+                float s1 = CalcSideHpRate(1);
+                if (s0 > s1) WinningSide = 0;
+                else if (s1 > s0) WinningSide = 1;
+                else WinningSide = -1;
+                Log.Add($"\n[{ClockTime:F1}s] 制限時間到達。HP残量で判定。");
+            }
+
+            Log.Add($"\n=== 戦闘終了 (t={ClockTime:F1}s) ===");
+            for (int side = 0; side < 2; side++)
+            {
+                string sLabel = side == 0 ? "味方" : "敵";
+                var alive = Field.GetAllAlive(side);
+                var all = Field.GetAllUnits(side);
+                int totalHp = alive.Sum(u => u.CurrentHp);
+                int totalMax = all.Sum(u => u.MaxHp);
+                float rate = totalMax > 0 ? (float)totalHp / totalMax * 100f : 0f;
+                Log.Add($"  {sLabel}: {alive.Count}/{all.Count}名生存, HP {totalHp}/{totalMax} ({rate:F0}%)");
+            }
+            if (WinningSide >= 0)
+                Log.Add($"\n勝者: {(WinningSide == 0 ? "味方" : "敵")}");
+            else
+                Log.Add("\n結果: 引き分け");
+        }
+
+        /// <summary>状態異常tickが適用された秒を記録 (重複発動防止)</summary>
+        private readonly HashSet<int> loggedStatusTickAt = new();
+
+        /// <summary>
+        /// ProcessTimeUnit のイテレータ版。各アクター処理後に yield するので、
+        /// visual 側がアクターごとに 3D 同期と点滅演出を挟める。
+        /// </summary>
+        public System.Collections.Generic.IEnumerable<int> ProcessTimeUnitStream(int t)
+        {
+            // このtickのvisual追跡リストをクリア (visual側が前tick分を読み終えた後)
+            ForcedMovedThisTick.Clear();
+            SkillActorsThisTick.Clear();
+            DamagedUnitsThisTick.Clear();
+            SkillRangeCellsThisTick.Clear();
+
             var actors = unitStates.Values
                 .Where(s => !s.Unit.IsDead && s.NextActTime <= t)
                 .OrderByDescending(s => s.Unit.AgiFinal + UnityEngine.Random.Range(-2f, 2f))
                 .ToList();
 
-            if (actors.Count == 0) return;
+            if (actors.Count == 0) yield break;
             Log.Add($"\n--- t={t} ({actors.Count}体行動) ---");
 
             foreach (var s in unitStates.Values)
@@ -296,12 +564,19 @@ namespace SteraCube.SpaceJourney
             // 状態異常ティック処理 (Burn/ChainDamage)
             ApplyStatusTickDamage(t);
             CheckVictory();
-            if (IsFinished) return;
+            if (IsFinished) yield break;
 
-            // 詠唱発動チェック (fire_time 到達で実際スキル発動)
+            // 詠唱発動チェック (fire_time 到達で実際スキル発動) — ここで ExecuteSkill が呼ばれるので
+            // 呼び出し前に visual 追跡をクリア→呼び出し後に yield
+            SkillActorsThisTick.Clear();
+            DamagedUnitsThisTick.Clear();
+            ForcedMovedThisTick.Clear();
             FirePendingCasts(t);
+            if (SkillActorsThisTick.Count > 0 || DamagedUnitsThisTick.Count > 0)
+                yield return 0; // 詠唱発動を1サブステップとして yield
+
             CheckVictory();
-            if (IsFinished) return;
+            if (IsFinished) yield break;
 
             // Succubus の隣接敵AT-10% オーラ適用 (毎タイム)
             ApplySuccubusAura(t);
@@ -313,24 +588,36 @@ namespace SteraCube.SpaceJourney
             {
                 if (state.Unit.IsDead || IsFinished) continue;
 
-                // 詠唱中ユニットは他行動不可
-                if (state.Casting != null)
-                {
-                    Log.Add($"  [{GetLabel(state.Unit)}] 詠唱中「{state.Casting.Skill.SkillName}」(t={state.Casting.FireTime}発動)");
-                    continue;
-                }
+                // 詠唱中ユニットは他行動不可 (ログは詠唱開始時のみで省略)
+                if (state.Casting != null) continue;
+
+                // 各アクター開始時に visual 追跡をクリア (このアクターの行動だけ映したい)
+                SkillActorsThisTick.Clear();
+                DamagedUnitsThisTick.Clear();
+                ForcedMovedThisTick.Clear();
+                SkillRangeCellsThisTick.Clear();
+                ActorPrimaryTargetCell.Clear();
 
                 if (state.Unit.IsActionDisabled)
                 {
                     Log.Add($"  [{GetLabel(state.Unit)}] 行動不能 → 待機 [cost=1]");
-                    state.NextActTime = t + 1;
+                    state.NextActTime = realtimeMode ? (ClockTime + UniformActionDurationSec) : (t + 1);
                     state.NormalTurnCount++;
+                    // 行動不能は視覚的に省略 (yield しない)
                     continue;
                 }
 
                 ExecuteFromActionList(state, t);
                 state.NormalTurnCount++;
                 CheckVictory();
+
+                // 視覚的に意味のあるイベントが発生した場合のみ yield
+                bool hasVisualEvent = SkillActorsThisTick.Count > 0
+                                      || DamagedUnitsThisTick.Count > 0
+                                      || ForcedMovedThisTick.Count > 0;
+                if (hasVisualEvent)
+                    yield return 0;
+                // 待機 (null action) 等は yield せず次のアクターへ即座に移る
             }
         }
 
@@ -343,19 +630,85 @@ namespace SteraCube.SpaceJourney
                 if (state.Casting.FireTime != t) continue;
                 var skill = state.Casting.Skill;
                 var primary = state.Casting.PrimaryTarget;
+                // 対象が死んでる or 未設定なら fire time で再ターゲット
                 if (primary == null || primary.IsDead)
+                {
+                    primary = FindTarget(state, skill);
+                }
+                if (primary == null)
                 {
                     Log.Add($"  [{GetLabel(state.Unit)}] 詠唱発動「{skill.SkillName}」→ 対象不在で不発");
                     state.Casting = null;
                     continue;
                 }
                 Log.Add($"  [{GetLabel(state.Unit)}] 詠唱発動「{skill.SkillName}」!");
-                if (skill.category == SkillCategory.ActiveAttack)
+                // special_kind があれば専用 handler、なければ通常 attack/support
+                if (skill.SpecialKind != SpecialSkillKind.None)
+                    ExecuteSpecialSkill(state, skill, primary, t, 0);
+                else if (skill.category == SkillCategory.ActiveAttack)
                     ExecuteAttackSkill(state, skill, primary, t, 0);
                 else if (skill.category == SkillCategory.ActiveSupport)
                     ExecuteSupportSkill(state, skill, primary, t, 0);
                 state.Casting = null;
             }
+        }
+
+        /// <summary>SelfArea+SpecialKindスキルが意味ある効果を発揮できるか事前確認 (詠唱以外)。</summary>
+        private bool CanExecuteSelfArea(SpaceJourneyUnit actor, SkillDefinition skill)
+        {
+            if (skill.targetingMode != SkillTargetingMode.SelfArea) return true;
+            var aPos = Field.FindUnit(actor);
+            if (aPos.x < 0) return false;
+            int aSide = aPos[0];
+            var aCell = new Vector2Int(aPos[1], aPos[2]);
+            int kind = (int)skill.SpecialKind;
+            // SummonBarricade: 配置先全て場内 + knockback先も全て空きor場内
+            if (kind == 12)
+            {
+                var placementGrid = new[] { new Vector2Int(0,1), new Vector2Int(-1,1), new Vector2Int(1,1) };
+                var kbGrid = new Vector2Int(0, 1);
+                foreach (var g in placementGrid)
+                {
+                    var bf = GridToBFOffset(RotateGridOffset(g, actor.Facing));
+                    var c = new Vector2Int(aCell.x + bf.x, aCell.y + bf.y);
+                    if (c.x < 0 || c.x >= 5 || c.y < 0 || c.y >= 5) return false;
+                }
+                var kbBf = GridToBFOffset(RotateGridOffset(kbGrid, actor.Facing));
+                foreach (var g in placementGrid)
+                {
+                    var bf = GridToBFOffset(RotateGridOffset(g, actor.Facing));
+                    var c = new Vector2Int(aCell.x + bf.x, aCell.y + bf.y);
+                    var occ = Field.GetUnit(aSide, c);
+                    if (occ == null) continue;
+                    var kbDest = new Vector2Int(c.x + kbBf.x, c.y + kbBf.y);
+                    if (kbDest.x < 0 || kbDest.x >= 5 || kbDest.y < 0 || kbDest.y >= 5) return false;
+                    if (Field.GetUnit(aSide, kbDest) != null) return false;
+                }
+                return true;
+            }
+            // SummonAlly: 周囲4マスに空きあり
+            if (kind == 13)
+            {
+                var dirs = new[] { new Vector2Int(-1,0), new Vector2Int(1,0), new Vector2Int(0,-1), new Vector2Int(0,1) };
+                foreach (var d in dirs)
+                {
+                    var c = aCell + d;
+                    if (c.x >= 0 && c.x < 5 && c.y >= 0 && c.y < 5 && Field.GetUnit(aSide, c) == null)
+                        return true;
+                }
+                return false;
+            }
+            // TeamTeleport: 味方1体以上
+            if (kind == 9)
+            {
+                var state = GetUnitState(actor);
+                if (state == null) return false;
+                var allies = FindAllTargetsInRange(state, skill);
+                foreach (var a in allies) if (!a.IsDead) return true;
+                return false;
+            }
+            // RandomizeAllPositions / 自己バフ等: 常にOK
+            return true;
         }
 
         /// <summary>行動リストを上から評価して最初に条件を満たしたスキルを実行</summary>
@@ -381,17 +734,25 @@ namespace SteraCube.SpaceJourney
                 if (skill.openingCoolTime > 0 && state.NormalTurnCount < skill.openingCoolTime)
                     continue;
 
-                // 再使用サイクル チェック
-                if (state.SkillCooldowns.TryGetValue(skill.SkillId, out float readyAt) && t < readyAt)
-                    continue;
+                // 再使用サイクル チェック (realtimeは ClockTime で比較)
+                if (state.SkillCooldowns.TryGetValue(skill.SkillId, out float readyAt))
+                {
+                    float currentTime = realtimeMode ? ClockTime : t;
+                    if (currentTime < readyAt) continue;
+                }
 
                 // 条件チェック
                 if (!EvaluateConditions(entry.conditions, state, skill))
                     continue;
 
-                // 射程内にターゲットがいるかチェック (攻撃系)
+                // 射程内にターゲットがいるかチェック (攻撃系)。詠唱スキルは対象不在でも開始可。
+                bool isCast = skill.activationIndexInCost > 0
+                    && (skill.category == SkillCategory.ActiveAttack || skill.category == SkillCategory.ActiveSupport);
                 var target = FindTarget(state, skill);
-                if (skill.category == SkillCategory.ActiveAttack && target == null)
+                if (skill.category == SkillCategory.ActiveAttack && target == null && !isCast)
+                    continue;
+                // SelfArea系の最低発動チェック (詠唱以外)
+                if (!isCast && !CanExecuteSelfArea(actor, skill))
                     continue;
 
                 // ─── 実行 ───
@@ -405,7 +766,7 @@ namespace SteraCube.SpaceJourney
 
         private void DoWait(UnitBattleState state, int t)
         {
-            state.NextActTime = t + 1;
+            state.NextActTime = realtimeMode ? (ClockTime + UniformActionDurationSec) : (t + 1);
             Log.Add($"  [{GetLabel(state.Unit)}] 待機 [cost=1]");
         }
 
@@ -468,6 +829,24 @@ namespace SteraCube.SpaceJourney
         private void ExecuteSkill(UnitBattleState state, SkillDefinition skill, SpaceJourneyUnit target, int t, BattleActionEntry currentEntry = null)
         {
             var actor = state.Unit;
+            // visual追跡: スキル actor を記録 (攻撃マス点滅用)
+            if (!SkillActorsThisTick.Contains(actor))
+                SkillActorsThisTick.Add(actor);
+            // visual追跡: 効果範囲セルを記録 (範囲マス点滅用)
+            ComputeRangeCellsForVisual(actor, skill, target, SkillRangeCellsThisTick);
+            // visual追跡: primary target のセル位置を記録 (向き変更用)
+            if (target != null)
+            {
+                var _tp = Field.FindUnit(target);
+                if (_tp.x >= 0)
+                    ActorPrimaryTargetCell[actor] = (_tp[0], new Vector2Int(_tp[1], _tp[2]));
+            }
+            else if (SkillRangeCellsThisTick.Count > 0)
+            {
+                // ターゲットなし (AoE/SelfArea) → 範囲の最初のセルを向く
+                var first = SkillRangeCellsThisTick[0];
+                ActorPrimaryTargetCell[actor] = first;
+            }
             int baseCost = skill.baseCost;
             int effectiveCost = CalcEffectiveCost(baseCost, actor.AgiFinal);
 
@@ -485,7 +864,11 @@ namespace SteraCube.SpaceJourney
                 }
             }
 
-            state.NextActTime = t + effectiveCost;
+            // リアルタイムモードでは cost 無視、全アクション同じ duration (ガンビット方式)
+            if (realtimeMode)
+                state.NextActTime = ClockTime + UniformActionDurationSec;
+            else
+                state.NextActTime = t + effectiveCost;
 
             // 連撃: DoubleActionReady ならコスト無視で同t再行動可能に
             // ただし連撃スキル (SpecialKind.DoubleActionCharge) 自身の使用ではフラグを消費しない
@@ -515,7 +898,8 @@ namespace SteraCube.SpaceJourney
                     appliedCycle += cycleDelay;
                     Log.Add($"    [牽制] {GetLabel(actor)} 「{skill.SkillName}」CT +{cycleDelay}");
                 }
-                state.SkillCooldowns[skill.SkillId] = t + appliedCycle;
+                // リアルタイムモードでは CT を秒単位で扱う (cycle値 = 秒数)
+                state.SkillCooldowns[skill.SkillId] = realtimeMode ? (ClockTime + appliedCycle) : (t + appliedCycle);
             }
 
             var actorPos = Field.FindUnit(actor);
@@ -557,8 +941,16 @@ namespace SteraCube.SpaceJourney
                     break;
 
                 case SkillCategory.ActiveMove:
-                    ExecuteMoveSkill(state, skill, currentEntry, t, effectiveCost);
+                {
+                    int moved = ExecuteMoveSkill(state, skill, currentEntry, t, effectiveCost);
+                    if (moved == 0)
+                    {
+                        // 空振り: cost=1 のみ消費、CT は据置 (refund)
+                        state.NextActTime = realtimeMode ? (ClockTime + UniformActionDurationSec) : (t + 1);
+                        if (skill.reuseCycle > 0) state.SkillCooldowns.Remove(skill.SkillId);
+                    }
                     break;
+                }
 
                 default:
                     Log.Add($"  [{GetLabel(actor)}] {skill.SkillName} (未実装カテゴリ) [cost={effectiveCost}]");
@@ -595,6 +987,25 @@ namespace SteraCube.SpaceJourney
                     break;
                 case SpecialSkillKind.StealBuffs:
                     ExecuteStealBuffs(actor, skill, target, t, cost);
+                    break;
+                case SpecialSkillKind.PlowThrust:
+                    ExecutePlowThrust(state, skill, target, t, cost);
+                    break;
+                case SpecialSkillKind.TeamTeleport:
+                    ExecuteTeamTeleport(state, skill, target, t, cost);
+                    break;
+                case SpecialSkillKind.RandomizeAllPositions:
+                    ExecuteRandomizeAllPositions(actor, skill, t, cost);
+                    break;
+                case SpecialSkillKind.RandomizedEffect:
+                    ExecuteRandomizedEffect(actor, skill, target, t, cost);
+                    // RandomizedEffect は自身で additionalEffects を選択するので後段の一括適用は行わない
+                    return;
+                case SpecialSkillKind.SummonBarricade:
+                    ExecuteSummonBarricade(actor, skill, t, cost);
+                    break;
+                case SpecialSkillKind.SummonAlly:
+                    ExecuteSummonAlly(actor, skill, t, cost);
                     break;
             }
             ApplyAdditionalEffects(skill, actor, actor, t);
@@ -726,6 +1137,304 @@ namespace SteraCube.SpaceJourney
             Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ {movedCount}体をランダム移動 [cost={cost}]");
         }
 
+        // ================================================================
+        // PlowThrust: actor が前方 N マス突進、途中のユニットを chain で押し出す
+        // ================================================================
+        private void ExecutePlowThrust(UnitBattleState state, SkillDefinition skill, SpaceJourneyUnit target, int t, int cost)
+        {
+            var actor = state.Unit;
+            var aPos = Field.FindUnit(actor);
+            if (aPos.x < 0) return;
+            int aSide = aPos[0];
+            var aCell = new Vector2Int(aPos[1], aPos[2]);
+
+            // 方向: targetセルがあればそちら、なければ actor.facing から算出
+            Vector2Int dir;
+            if (target != null)
+            {
+                var tPos = Field.FindUnit(target);
+                if (tPos.x < 0) return;
+                int dx = tPos[1] - aCell.x;
+                int dy = tPos[2] - aCell.y;
+                if (Mathf.Abs(dx) >= Mathf.Abs(dy))
+                    dir = new Vector2Int(dx >= 0 ? 1 : -1, 0);
+                else
+                    dir = new Vector2Int(0, dy >= 0 ? 1 : -1);
+            }
+            else
+            {
+                // facing: 0=forward(+y), 1=+x, 2=-y, 3=-x  (SpaceJourneyUnit と同じ定義)
+                switch (actor.Facing)
+                {
+                    case 1:  dir = new Vector2Int(1, 0); break;
+                    case 2:  dir = new Vector2Int(0, -1); break;
+                    case 3:  dir = new Vector2Int(-1, 0); break;
+                    default: dir = new Vector2Int(0, 1); break;
+                }
+            }
+
+            int maxSteps = Mathf.Max(1, skill.SpecialIntParam > 0 ? skill.SpecialIntParam : 5);
+            var pushed = new HashSet<SpaceJourneyUnit>();
+            int steps = 0;
+            for (int s = 0; s < maxSteps; s++)
+            {
+                // actor から dir 方向に連続するユニット chain を収集
+                var chain = new List<SpaceJourneyUnit> { actor };
+                var cur = Field.FindUnit(actor);
+                var curCell = new Vector2Int(cur[1], cur[2]);
+                while (true)
+                {
+                    var next = curCell + dir;
+                    if (next.x < 0 || next.x >= 5 || next.y < 0 || next.y >= 5) break;
+                    var u = Field.GetUnit(aSide, next);
+                    if (u == null) break;
+                    chain.Add(u);
+                    curCell = next;
+                }
+                // chain 最前の 1マス先
+                var frontPos = Field.FindUnit(chain[chain.Count - 1]);
+                var frontCell = new Vector2Int(frontPos[1], frontPos[2]) + dir;
+                if (frontCell.x < 0 || frontCell.x >= 5 || frontCell.y < 0 || frontCell.y >= 5) break; // 詰まった
+
+                // 最前から逆順に1マスずつ移動 (上書き防止)
+                for (int i = chain.Count - 1; i >= 0; i--)
+                {
+                    var u = chain[i];
+                    var p = Field.FindUnit(u);
+                    var toCell = new Vector2Int(p[1], p[2]) + dir;
+                    Field.MoveUnit(u, toCell);
+                    if (u != actor) pushed.Add(u);
+                }
+                steps++;
+            }
+            actor.Facing = FacingFromDir(dir);
+            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ {steps}マス突進, {pushed.Count}体を押し出し [cost={cost}]");
+
+            // 押された敵味方全員に amount% Physical ダメ (actor除く)
+            foreach (var u in pushed)
+            {
+                if (u.IsDead) continue;
+                int dmg = Mathf.Max(1, Mathf.RoundToInt(actor.AtFinal * (skill.amount / 100f)));
+                int before = u.CurrentHp;
+                u.TakeDamage(dmg);
+                if (!DamagedUnitsThisTick.Contains(u)) DamagedUnitsThisTick.Add(u);
+                Log.Add($"    [{GetLabel(u)}] 突進衝撃 {dmg}ダメ (HP {before}→{u.CurrentHp}){(u.IsDead ? " ★撃破!" : "")}");
+            }
+        }
+
+        private static int FacingFromDir(Vector2Int dir)
+        {
+            if (dir.y > 0) return 0;
+            if (dir.x > 0) return 1;
+            if (dir.y < 0) return 2;
+            return 3;
+        }
+
+        // ================================================================
+        // TeamTeleport: effectRange内の味方全員を target 周辺の空マスへ転送
+        // ================================================================
+        private void ExecuteTeamTeleport(UnitBattleState state, SkillDefinition skill, SpaceJourneyUnit target, int t, int cost)
+        {
+            var actor = state.Unit;
+            int ownerSide = Field.GetSide(actor);
+            var allies = FindAllTargetsInRange(state, skill);
+            if (allies == null || allies.Count == 0)
+            {
+                Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 対象なし [cost={cost}]");
+                return;
+            }
+            // target セル: target が null なら actor の前方2マス
+            Vector2Int centerCell;
+            int centerSide;
+            if (target != null)
+            {
+                var tp = Field.FindUnit(target);
+                centerSide = tp[0]; centerCell = new Vector2Int(tp[1], tp[2]);
+            }
+            else
+            {
+                var ap = Field.FindUnit(actor);
+                centerSide = ap[0]; centerCell = new Vector2Int(ap[1], ap[2] + 2);
+            }
+            // 空マスを中心から近い順に収集 (同side内)
+            var freeCells = new List<Vector2Int>();
+            for (int x = 0; x < 5; x++)
+                for (int y = 0; y < 5; y++)
+                {
+                    var c = new Vector2Int(x, y);
+                    if (Field.GetUnit(centerSide, c) == null) freeCells.Add(c);
+                }
+            freeCells.Sort((a, b) =>
+                (Mathf.Abs(a.x - centerCell.x) + Mathf.Abs(a.y - centerCell.y))
+              - (Mathf.Abs(b.x - centerCell.x) + Mathf.Abs(b.y - centerCell.y)));
+
+            int moved = 0;
+            foreach (var ally in allies)
+            {
+                if (ally.IsDead) continue;
+                if (freeCells.Count == 0) break;
+                var dest = freeCells[0]; freeCells.RemoveAt(0);
+                Field.MoveUnitCrossSide(ally, centerSide, dest);
+                moved++;
+            }
+            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 味方{moved}体を瞬間移動 [cost={cost}]");
+        }
+
+        // ================================================================
+        // RandomizeAllPositions: 全生存ユニットを 2side × 25マス 上でランダム再配置
+        // ================================================================
+        private void ExecuteRandomizeAllPositions(SpaceJourneyUnit actor, SkillDefinition skill, int t, int cost)
+        {
+            var all = new List<SpaceJourneyUnit>();
+            all.AddRange(Field.GetAllAlive(0));
+            all.AddRange(Field.GetAllAlive(1));
+            if (all.Count == 0) return;
+
+            // 全マス座標 (side×x×y) を収集、シャッフル、ユニット数ぶん割り当て
+            var slots = new List<(int side, Vector2Int cell)>();
+            for (int s = 0; s < 2; s++)
+                for (int x = 0; x < 5; x++)
+                    for (int y = 0; y < 5; y++)
+                        slots.Add((s, new Vector2Int(x, y)));
+            // Fisher-Yates
+            for (int i = slots.Count - 1; i > 0; i--)
+            {
+                int j = UnityEngine.Random.Range(0, i + 1);
+                (slots[i], slots[j]) = (slots[j], slots[i]);
+            }
+
+            // 一旦全ユニットを退避 → 順次配置
+            Field.ClearGrid();
+            for (int i = 0; i < all.Count; i++)
+            {
+                var (s, c) = slots[i];
+                Field.PlaceUnit(all[i], s, c);
+            }
+            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 全{all.Count}体の位置をシャッフル [cost={cost}]");
+        }
+
+        // ================================================================
+        // SummonBarricade: actor の facing で回転した前方3マスに配置。敵はノックバック
+        // ================================================================
+        private void ExecuteSummonBarricade(SpaceJourneyUnit actor, SkillDefinition skill, int t, int cost)
+        {
+            var aPos = Field.FindUnit(actor);
+            if (aPos.x < 0) return;
+            int aSide = aPos[0];
+            var aCell = new Vector2Int(aPos[1], aPos[2]);
+            // 配置位置 (grid座標: y+ = 前方): 前方1マス + その両側
+            var placementGrid = new[] {
+                new Vector2Int(0, 1), new Vector2Int(-1, 1), new Vector2Int(1, 1),
+            };
+            var kbGrid = new Vector2Int(0, 1);  // さらに前方
+            // facing で回転 → BF に変換
+            var cells = new List<Vector2Int>();
+            foreach (var g in placementGrid)
+            {
+                var rg = RotateGridOffset(g, actor.Facing);
+                var bf = GridToBFOffset(rg);
+                cells.Add(new Vector2Int(aCell.x + bf.x, aCell.y + bf.y));
+            }
+            var kbRg = RotateGridOffset(kbGrid, actor.Facing);
+            var kbBf = GridToBFOffset(kbRg);
+            // 配置先が場外なら即失敗
+            foreach (var c in cells)
+            {
+                if (c.x < 0 || c.x >= 5 || c.y < 0 || c.y >= 5)
+                {
+                    Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 配置失敗 (場外) [cost={cost}]");
+                    return;
+                }
+            }
+            // 各配置先のユニット → knockback 先チェック
+            var toKnockback = new List<(SpaceJourneyUnit unit, Vector2Int dest)>();
+            foreach (var c in cells)
+            {
+                var occupant = Field.GetUnit(aSide, c);
+                if (occupant == null) continue;
+                var kbDest = new Vector2Int(c.x + kbBf.x, c.y + kbBf.y);
+                if (kbDest.x < 0 || kbDest.x >= 5 || kbDest.y < 0 || kbDest.y >= 5)
+                {
+                    Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 配置失敗 (ノックバック先場外) [cost={cost}]");
+                    return;
+                }
+                if (Field.GetUnit(aSide, kbDest) != null)
+                {
+                    Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 配置失敗 (ノックバック先占有) [cost={cost}]");
+                    return;
+                }
+                toKnockback.Add((occupant, kbDest));
+            }
+            // ノックバック実行
+            foreach (var (u, dest) in toKnockback)
+            {
+                var prev = Field.FindUnit(u);
+                Field.MoveUnit(u, dest);
+                Log.Add($"    [{GetLabel(u)}] ノックバック ({prev[1]},{prev[2]})→({dest.x},{dest.y})");
+                ForcedMovedThisTick.Add(u);
+            }
+            // バリケード3体配置
+            foreach (var c in cells)
+            {
+                var b = SpaceJourneyUnit.CreateSummonedUnit(3, 1, 999, 1, 1, 999, isBarricade: true);
+                Field.PlaceUnit(b, aSide, c);
+            }
+            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ バリケード3体配置 [cost={cost}]");
+        }
+
+        // ================================================================
+        // SummonAlly: actor 周辺空きマスに actor 同等ステの守護霊を配置
+        // ================================================================
+        private void ExecuteSummonAlly(SpaceJourneyUnit actor, SkillDefinition skill, int t, int cost)
+        {
+            var aPos = Field.FindUnit(actor);
+            if (aPos.x < 0) return;
+            int aSide = aPos[0];
+            var aCell = new Vector2Int(aPos[1], aPos[2]);
+            var dirs = new[] {
+                new Vector2Int(-1, 0), new Vector2Int(1, 0),
+                new Vector2Int(0, -1), new Vector2Int(0, 1),
+            };
+            foreach (var d in dirs)
+            {
+                var c = aCell + d;
+                if (c.x < 0 || c.x >= 5 || c.y < 0 || c.y >= 5) continue;
+                if (Field.GetUnit(aSide, c) != null) continue;
+                var s = SpaceJourneyUnit.CreateSummonedUnit(
+                    actor.MaxHp, actor.AtFinal, actor.DfFinal, actor.AgiFinal,
+                    actor.MatFinal, actor.MdfFinal, isBarricade: false);
+                Field.PlaceUnit(s, aSide, c);
+                // UnitBattleState 未登録 → 行動しない (Unity側は静的サンドバッグ扱い)
+                Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 守護霊召喚 ({c.x},{c.y}) [cost={cost}]");
+                return;
+            }
+            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 召喚失敗 (空マスなし) [cost={cost}]");
+        }
+
+        // ================================================================
+        // RandomizedEffect: 80% で additionalEffects から1つランダム適用
+        // ================================================================
+        private void ExecuteRandomizedEffect(SpaceJourneyUnit actor, SkillDefinition skill, SpaceJourneyUnit target, int t, int cost)
+        {
+            var effects = skill.AdditionalEffects;
+            if (effects == null || effects.Length == 0)
+            {
+                Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 効果なし [cost={cost}]");
+                return;
+            }
+            if (UnityEngine.Random.value > 0.8f)
+            {
+                Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 実験失敗 (何も起きず) [cost={cost}]");
+                return;
+            }
+            int idx = UnityEngine.Random.Range(0, effects.Length);
+            var chosen = effects[idx];
+            var tgt = target ?? actor;
+            tgt.ApplyStatusEffect(chosen.effectType, chosen.value, chosen.duration, t,
+                chosen.effectType == StatusEffectType.Taunt ? actor : null);
+            Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ [{GetLabel(tgt)}] ランダム効果: {chosen.effectType} val={chosen.value} [cost={cost}]");
+        }
+
         /// <summary>詠唱予告マス一覧を計算</summary>
         private List<(int side, Vector2Int cell)> PredictCastCells(
             UnitBattleState state, SkillDefinition skill, SpaceJourneyUnit primary)
@@ -742,7 +1451,7 @@ namespace SteraCube.SpaceJourney
                     if (p.x >= 0) cells.Add((p[0], new Vector2Int(p[1], p[2])));
                 }
             }
-            else
+            else if (primary != null)
             {
                 var p = Field.FindUnit(primary);
                 if (p.x >= 0) cells.Add((p[0], new Vector2Int(p[1], p[2])));
@@ -754,14 +1463,120 @@ namespace SteraCube.SpaceJourney
         {
             var actor = state.Unit;
 
-            // AoE判定: selectAllInRange フラグ or targetingMode+multiSinglePickMode の組み合わせ
-            bool isAoE = skill.selectAllInRange
-                || (skill.targetingMode == SkillTargetingMode.MultiSingle
-                    && skill.multiSinglePickMode == MultiSinglePickMode.AllInRange);
+            bool isAoE;
+            List<SpaceJourneyUnit> targets;
 
-            var targets = isAoE
-                ? FindAllTargetsInRange(state, skill)
-                : (target != null ? new List<SpaceJourneyUnit> { target } : new List<SpaceJourneyUnit>());
+            // ランダム複数ヒット (randomHitCount > 0): 射程内からN回ランダムピック、重複可
+            if (skill.RandomHitCount > 0)
+            {
+                var pool = FindAllTargetsInRange(state, skill);
+                if (pool == null || pool.Count == 0)
+                {
+                    Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」→ 対象なし [cost={cost}]");
+                    return;
+                }
+                targets = new List<SpaceJourneyUnit>();
+                for (int i = 0; i < skill.RandomHitCount; i++)
+                {
+                    var alive = pool.Where(u => !u.IsDead).ToList();
+                    if (alive.Count == 0) break;
+                    targets.Add(alive[UnityEngine.Random.Range(0, alive.Count)]);
+                }
+                isAoE = false; // AoE吸収ロジックはスキップ
+            }
+            // ImpactLanding: primary を中心に effectRange を展開して対象列挙
+            else if (skill.EffectPattern == SkillEffectPattern.ImpactLanding && target != null)
+            {
+                isAoE = false;
+                targets = new List<SpaceJourneyUnit>();
+                if (skill.effectRange != null && skill.effectRange.Offsets.Count > 0)
+                {
+                    var tpos = Field.FindUnit(target);
+                    if (tpos.x >= 0)
+                    {
+                        int tSide = tpos[0];
+                        var tCell = new Vector2Int(tpos[1], tpos[2]);
+                        int ownerSide = Field.GetSide(actor);
+                        // EffectRangeBoost (極大化): effectRange を Manhattan +1 拡張
+                        var offsets = new HashSet<Vector2Int>(skill.effectRange.Offsets);
+                        if (actor.HasActiveEffect(StatusEffectType.EffectRangeBoost))
+                        {
+                            var expanded = new HashSet<Vector2Int>(offsets);
+                            foreach (var o in offsets)
+                            {
+                                expanded.Add(o + new Vector2Int( 1, 0));
+                                expanded.Add(o + new Vector2Int(-1, 0));
+                                expanded.Add(o + new Vector2Int( 0, 1));
+                                expanded.Add(o + new Vector2Int( 0,-1));
+                            }
+                            offsets = expanded;
+                        }
+                        foreach (var off in offsets)
+                        {
+                            var cell = tCell + off;
+                            var u = Field.GetUnit(tSide, cell);
+                            if (u == null || u.IsDead) continue;
+                            if (skill.effectTargetSide == EffectTargetSide.Enemy
+                                && Field.GetSide(u) == ownerSide) continue;
+                            if (skill.effectTargetSide == EffectTargetSide.Self
+                                && Field.GetSide(u) != ownerSide) continue;
+                            if (!targets.Contains(u)) targets.Add(u);
+                        }
+                    }
+                }
+                if (targets.Count == 0) targets.Add(target);
+            }
+            else
+            {
+                // AoE判定: selectAllInRange フラグ or targetingMode+multiSinglePickMode の組み合わせ
+                isAoE = skill.selectAllInRange
+                    || (skill.targetingMode == SkillTargetingMode.MultiSingle
+                        && skill.multiSinglePickMode == MultiSinglePickMode.AllInRange);
+
+                bool multiTarget = isAoE || skill.maxTargets > 1;
+                if (multiTarget)
+                {
+                    // Direct 多ターゲット: 最良方向選択 (v2 Facing 対応)
+                    var pattern = (skill.targetRange != null && skill.targetRange.Offsets.Count > 0)
+                        ? skill.targetRange
+                        : (skill.targetingMode == SkillTargetingMode.SelfArea
+                           && skill.effectRange != null && skill.effectRange.Offsets.Count > 0
+                           ? skill.effectRange : null);
+                    if (pattern != null)
+                    {
+                        var (bestRot, bestTargets) = PickBestRotation(state, skill, pattern);
+                        actor.Facing = bestRot;
+                        targets = bestTargets;
+                    }
+                    else
+                    {
+                        targets = FindAllTargetsInRange(state, skill);
+                    }
+                }
+                else
+                {
+                    targets = target != null ? new List<SpaceJourneyUnit> { target } : new List<SpaceJourneyUnit>();
+                    // 単体 Direct: target 方向に facing 更新
+                    if (target != null)
+                    {
+                        var tpos = Field.FindUnit(target);
+                        var apos = Field.FindUnit(actor);
+                        if (tpos.x >= 0 && apos.x >= 0)
+                        {
+                            var bfOffset = CalcBFOffset(new Vector2Int(apos[1], apos[2]), apos[0], target);
+                            if (bfOffset.HasValue)
+                            {
+                                var grid = BFToGridOffset(bfOffset.Value);
+                                // 最も大きい成分で向き決定
+                                if (Mathf.Abs(grid.y) >= Mathf.Abs(grid.x))
+                                    actor.Facing = grid.y >= 0 ? 0 : 2;
+                                else
+                                    actor.Facing = grid.x >= 0 ? 1 : 3;
+                            }
+                        }
+                    }
+                }
+            }
 
             if (targets.Count == 0) return;
 
@@ -778,12 +1593,13 @@ namespace SteraCube.SpaceJourney
                 }
             }
 
+            bool ignoreDef = actor.HasActiveEffect(StatusEffectType.IgnoreDefenseReactions);
             foreach (var origTgt in targets)
             {
                 if (origTgt.IsDead) continue;
 
-                // CoverAlly: 隣接味方が身代わり状態なら、その味方が被弾
-                var tgt = TryRedirectToCoverer(origTgt);
+                // CoverAlly: 隣接味方が身代わり状態なら、その味方が被弾 (IgnoreDefenseReactionsで無効化)
+                var tgt = ignoreDef ? origTgt : TryRedirectToCoverer(origTgt);
                 if (tgt != origTgt)
                 {
                     Log.Add($"    [{GetLabel(tgt)}] 🛡身代わり! [{GetLabel(origTgt)}] への攻撃を受ける");
@@ -793,15 +1609,15 @@ namespace SteraCube.SpaceJourney
 
                 int damage = CalculateSkillDamage(skill, actor, tgt);
 
-                // Invincible: 全ダメ0
-                if (tgt.HasActiveEffect(StatusEffectType.Invincible))
+                // Invincible: 全ダメ0 (IgnoreDefenseReactionsで無効化)
+                if (!ignoreDef && tgt.HasActiveEffect(StatusEffectType.Invincible))
                 {
                     damage = 0;
                 }
 
-                // SurviveLethal: 致死→1HP残し、効果消費
+                // SurviveLethal: 致死→1HP残し、効果消費 (IgnoreDefenseReactionsで無効化)
                 bool survived = false;
-                if (damage >= tgt.CurrentHp && tgt.HasActiveEffect(StatusEffectType.SurviveLethal))
+                if (!ignoreDef && damage >= tgt.CurrentHp && tgt.HasActiveEffect(StatusEffectType.SurviveLethal))
                 {
                     damage = Mathf.Max(0, tgt.CurrentHp - 1);
                     tgt.ConsumeActiveEffect(StatusEffectType.SurviveLethal);
@@ -810,7 +1626,11 @@ namespace SteraCube.SpaceJourney
 
                 int hpBefore = tgt.CurrentHp;
                 tgt.TakeDamage(damage);
+                if (damage > 0 && !DamagedUnitsThisTick.Contains(tgt)) DamagedUnitsThisTick.Add(tgt);
                 state.AttackCount++;
+                int dmgActual = hpBefore - tgt.CurrentHp;
+                // 踏ん張り (knight_shobo_s2): HP70%/40% 初到達でダメ refund
+                TryShoulderRefund(tgt, dmgActual);
 
                 string deadMark = tgt.IsDead ? " ★撃破!" : (survived ? " ☆不屈!" : "");
                 Log.Add($"  [{GetLabel(actor)}] →「{skill.SkillName}」→ [{GetLabel(tgt)}] " +
@@ -819,25 +1639,54 @@ namespace SteraCube.SpaceJourney
                 // 追加効果
                 ApplyAdditionalEffects(skill, actor, tgt, t);
 
+                // NextAttackAppliesStun: 攻撃者が持っていれば対象にStun付与し、効果消費 (1回分)
+                if (!tgt.IsDead && actor.HasActiveEffect(StatusEffectType.NextAttackAppliesStun))
+                {
+                    int dur = Mathf.Max(1, actor.GetActiveEffectValue(StatusEffectType.NextAttackAppliesStun));
+                    tgt.ApplyStatusEffect(StatusEffectType.Stun, 1, dur, t, actor);
+                    actor.ConsumeActiveEffect(StatusEffectType.NextAttackAppliesStun);
+                    Log.Add($"    [{GetLabel(tgt)}] 💫Stun! (未来を見通す眼)");
+                }
+
                 // 被ダメ後の種族処理 (Orc: HP閾値到達で次攻撃ブースト)
                 UpdateOrcRevengeOnDamaged(tgt);
 
                 // パッシブ発火: 攻撃命中
                 FirePassivesForUnit(state, 1, actor, tgt, skill);
 
+                // 残心 proc (archer_kyudo_s1): 着弾型スキル後 30%で同ターゲットに弓射追加
+                if (!tgt.IsDead && !actor.IsDead
+                    && state.PassiveSkills != null
+                    && state.PassiveSkills.Any(p => p != null && p.SkillId == "archer_kyudo_s1")
+                    && skill.effectPattern == SkillEffectPattern.ImpactLanding
+                    && UnityEngine.Random.value < 0.30f)
+                {
+                    var arrow = MasterDatabase.Instance != null
+                        ? MasterDatabase.Instance.GetSkillById("ArrowShot") : null;
+                    if (arrow != null)
+                    {
+                        int arrowDmg = CalculateSkillDamage(arrow, actor, tgt);
+                        int aBefore = tgt.CurrentHp;
+                        tgt.TakeDamage(arrowDmg);
+                        if (!DamagedUnitsThisTick.Contains(tgt)) DamagedUnitsThisTick.Add(tgt);
+                        Log.Add($"    🎯残心発動! [{GetLabel(actor)}] →「弓射」→ [{GetLabel(tgt)}] {arrowDmg}ダメ (HP {aBefore}→{tgt.CurrentHp})");
+                    }
+                }
+
                 // 被弾パッシブ
                 var defenderState = GetUnitState(tgt);
                 if (defenderState != null)
                     FirePassivesForUnit(defenderState, 3, tgt, actor, skill);
 
-                // Counter: 被害者生存 && 攻撃者生存 && Counter持ち → 即時反撃割り込み
-                if (!tgt.IsDead && !actor.IsDead && tgt.HasActiveEffect(StatusEffectType.Counter))
+                // Counter: 被害者生存 && 攻撃者生存 && Counter持ち → 即時反撃割り込み (IgnoreDefenseReactionsで無効化)
+                if (!ignoreDef && !tgt.IsDead && !actor.IsDead && tgt.HasActiveEffect(StatusEffectType.Counter))
                 {
                     int rate = Mathf.Max(1, tgt.GetActiveEffectValue(StatusEffectType.Counter));
                     float atkPower = tgt.AtFinal * (rate / 100f);
                     int counterDmg = Mathf.Max(1, CalcDamageWithThroughRate(atkPower, actor.DfFinal));
                     int counterHpBefore = actor.CurrentHp;
                     actor.TakeDamage(counterDmg);
+                    if (!DamagedUnitsThisTick.Contains(actor)) DamagedUnitsThisTick.Add(actor);
                     Log.Add($"    [{GetLabel(tgt)}] ⚔反撃! [{GetLabel(actor)}] に{counterDmg}ダメ (HP {counterHpBefore}→{actor.CurrentHp})");
                     if (actor.IsDead)
                         FireReaperOnAllyDeath(actor, t);
@@ -855,7 +1704,7 @@ namespace SteraCube.SpaceJourney
             }
         }
 
-        /// <summary>moveAfterSkill=true のスキルで、moveAfterRange の offset分actor を動かす</summary>
+        /// <summary>moveAfterSkill=true のスキルで、moveAfterRange の offset分actor を動かす (facing で回転)</summary>
         private void ExecuteMoveAfterSkill(SpaceJourneyUnit actor, SkillDefinition skill)
         {
             if (skill.moveAfterRange == null || skill.moveAfterRange.Offsets.Count == 0) return;
@@ -863,9 +1712,11 @@ namespace SteraCube.SpaceJourney
             if (pos.x < 0) return;
             int curSide = pos[0];
             var curCell = new Vector2Int(pos[1], pos[2]);
-            foreach (var off in skill.moveAfterRange.Offsets)
+            // moveAfterRange の grid offset を actor.Facing で回転 → BF offset に変換して探索
+            foreach (var gOff in skill.moveAfterRange.GetRotatedOffsets(actor.Facing))
             {
-                var dest = curCell + off;
+                var bf = GridToBFOffset(gOff);
+                var dest = curCell + bf;
                 if (Field.IsValidCell(dest) && Field.IsCellEmpty(curSide, dest))
                 {
                     if (Field.MoveUnit(actor, dest))
@@ -949,16 +1800,31 @@ namespace SteraCube.SpaceJourney
             else
                 candidates = Field.GetAllAlive(BattleField.OppositeSide(ownerSide));
 
-            if (skill.targetRange != null && skill.targetRange.Offsets.Count > 0)
+            // 射程フィルタ: targetRange 優先、空なら SelfArea スキルでは effectRange を使う
+            GridRangePattern rng = (skill.targetRange != null && skill.targetRange.Offsets.Count > 0)
+                ? skill.targetRange
+                : (skill.targetingMode == SkillTargetingMode.SelfArea
+                   && skill.effectRange != null && skill.effectRange.Offsets.Count > 0
+                   ? skill.effectRange : null);
+            if (rng != null)
             {
-                candidates = candidates.Where(c => IsInRange(actorCell, physicalSide, c, skill.targetRange, actor)).ToList();
+                candidates = candidates.Where(c => IsInRange(actorCell, physicalSide, c, rng, actor)).ToList();
             }
 
-            // AllInRange の場合は maxTargets を無視 (SO設計上 maxTargets=1 強制だが全員ヒットが正しい)
+            // AllInRange の場合は maxTargets を無視
             bool allInRange = skill.multiSinglePickMode == MultiSinglePickMode.AllInRange;
             if (!allInRange && skill.maxTargets > 0 && candidates.Count > skill.maxTargets)
             {
-                candidates = candidates.OrderBy(c => Field.Distance(actor, c)).Take(skill.maxTargets).ToList();
+                if (skill.multiSinglePickMode == MultiSinglePickMode.RandomN)
+                {
+                    // ランダム抽選 (重複なし)
+                    candidates = candidates.OrderBy(_ => UnityEngine.Random.value).Take(skill.maxTargets).ToList();
+                }
+                else
+                {
+                    // MaxTargets: 近い順
+                    candidates = candidates.OrderBy(c => Field.Distance(actor, c)).Take(skill.maxTargets).ToList();
+                }
             }
 
             return candidates;
@@ -1043,7 +1909,7 @@ namespace SteraCube.SpaceJourney
             return result;
         }
 
-        private void ExecuteMoveSkill(UnitBattleState state, SkillDefinition skill, BattleActionEntry entry, int t, int cost)
+        private int ExecuteMoveSkill(UnitBattleState state, SkillDefinition skill, BattleActionEntry entry, int t, int cost)
         {
             var actor = state.Unit;
             var actorPos = Field.FindUnit(actor);
@@ -1138,13 +2004,26 @@ namespace SteraCube.SpaceJourney
             var finalCell = new Vector2Int(finalPos[1], finalPos[2]);
             if (totalMoved > 0)
             {
+                // 移動方向で facing 更新 (start → final の方向)
+                int dx = finalCell.x - startCell.x;
+                int dy = finalCell.y - startCell.y;
+                if (Mathf.Abs(dx) > 0 || Mathf.Abs(dy) > 0)
+                {
+                    // Grid 座標系で移動量から facing を決定
+                    // x正方向=BFのy方向=Grid x方向, y正方向=BFのx-方向=Grid y方向
+                    if (Mathf.Abs(dy) >= Mathf.Abs(dx))
+                        actor.Facing = dy >= 0 ? 0 : 2;
+                    else
+                        actor.Facing = dx >= 0 ? 1 : 3;
+                }
                 string crossLabel = finalPos[0] != startSide ? " [敵陣侵入]" : "";
                 Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」移動 ({startCell.x},{startCell.y})→({finalCell.x},{finalCell.y}) {totalMoved}歩{crossLabel} [cost={cost}]");
             }
             else
             {
-                Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」移動先なし → 待機 [cost={cost}]");
+                Log.Add($"  [{GetLabel(actor)}] 「{skill.SkillName}」移動先なし → 不発 [cost=1, CT据置]");
             }
+            return totalMoved;
         }
 
         /// <summary>MoveTargetKind に応じた目標地点を返す。(side, cell) のタプル。</summary>
@@ -1358,7 +2237,18 @@ namespace SteraCube.SpaceJourney
                 atkState.OrcNextAttackBoostPercent = 0; // 消費
             }
 
-            return Mathf.Max(1, Mathf.RoundToInt(raw * mul));
+            // ─── パッシブ被ダメ軽減 (与圧スーツ=物理 / 社畜魂=魔法) ───
+            bool isPhysicalKind = skill.damageKind == SkillDamageKind.Physical
+                                || skill.damageKind == SkillDamageKind.PenetratePhysical;
+            if (isPhysicalKind) mul *= defender.PassivePhysReduceRate;
+            else if (isMagical) mul *= defender.PassiveMagReduceRate;
+
+            int result = Mathf.Max(1, Mathf.RoundToInt(raw * mul));
+            // ─── バリケード: 非貫通ダメは 1 にキャップ (貫通スキルは通常通り) ───
+            bool isPenetrating = skill.damageKind == SkillDamageKind.PenetratePhysical
+                              || skill.damageKind == SkillDamageKind.PenetrateMagical;
+            if (defender.IsBarricade && !isPenetrating) result = Mathf.Min(result, 1);
+            return result;
         }
 
         public static int CalcDamageWithThroughRate(float attackPower, float defenderDf)
@@ -1523,6 +2413,43 @@ namespace SteraCube.SpaceJourney
                 case ActionConditionKind.SelfHpAboveRate:
                     return (float)actor.CurrentHp / Mathf.Max(1, actor.MaxHp) >= cond.rateParam;
 
+                case ActionConditionKind.EnemyInForwardArea:
+                case ActionConditionKind.AllyInForwardArea:
+                case ActionConditionKind.EmptyInForwardArea:
+                {
+                    var aPos = Field.FindUnit(actor);
+                    if (aPos.x < 0) return false;
+                    int aSide = aPos[0];
+                    var aCell = new Vector2Int(aPos[1], aPos[2]);
+                    int param = cond.intParam;
+                    int W = Mathf.Max(1, param / 10);
+                    int D = Mathf.Max(1, param % 10);
+                    int halfW = (W - 1) / 2;
+                    int ownerSide = Field.GetSide(actor);
+                    var targetOffsets = new HashSet<Vector2Int>();
+                    for (int d = 1; d <= D; d++)
+                        for (int w = -halfW; w <= halfW; w++)
+                            targetOffsets.Add(RotateGridOffset(new Vector2Int(w, d), actor.Facing));
+                    // 両サイドの全生存ユニットを走査 (cross-side 対応)
+                    bool anyEnemy = false, anyAlly = false, anyOccupied = false;
+                    for (int s = 0; s < 2; s++)
+                    {
+                        foreach (var u in Field.GetAllAlive(s))
+                        {
+                            if (u == actor) continue;
+                            var bfOff = CalcBFOffset(aCell, aSide, u);
+                            if (bfOff == null) continue;
+                            var g = BFToGridOffset(bfOff.Value);
+                            if (!targetOffsets.Contains(g)) continue;
+                            anyOccupied = true;
+                            if (Field.GetSide(u) == ownerSide) anyAlly = true; else anyEnemy = true;
+                        }
+                    }
+                    if (cond.kind == ActionConditionKind.EnemyInForwardArea) return anyEnemy;
+                    if (cond.kind == ActionConditionKind.AllyInForwardArea) return anyAlly;
+                    return !anyOccupied;
+                }
+
                 default:
                     return true;
             }
@@ -1535,12 +2462,24 @@ namespace SteraCube.SpaceJourney
         private SpaceJourneyUnit FindTarget(UnitBattleState state, SkillDefinition skill)
         {
             var actor = state.Unit;
+
+            // SelfArea + Self-target: actor自身が対象 (find バイパス)
+            if (skill.targetingMode == SkillTargetingMode.SelfArea
+                && skill.effectTargetSide == EffectTargetSide.Self)
+                return actor;
+
             var actorPos = Field.FindUnit(actor);
             int physicalSide = actorPos[0];
             int ownerSide = Field.GetSide(actor);
             var actorCell = new Vector2Int(actorPos[1], actorPos[2]);
 
             EffectTargetSide targetSide = skill.effectTargetSide;
+            // Confusion: 味方と敵の認識が反転
+            if (actor.HasActiveEffect(StatusEffectType.Confusion))
+            {
+                if (targetSide == EffectTargetSide.Enemy) targetSide = EffectTargetSide.Self;
+                else if (targetSide == EffectTargetSide.Self) targetSide = EffectTargetSide.Enemy;
+            }
             List<SpaceJourneyUnit> candidates;
 
             // 所属ベースで味方/敵を判定 (敵陣侵入中でも正しく動くように)
@@ -1551,11 +2490,15 @@ namespace SteraCube.SpaceJourney
 
             if (candidates.Count == 0) return null;
 
-            // GridRangePattern による射程フィルタ (4方向回転対応)
-            // 射程判定は物理位置ベース (actor の現在いる物理side から見た距離)
-            if (skill.targetRange != null && skill.targetRange.Offsets.Count > 0)
+            // 射程フィルタ: targetRange 優先、空なら SelfArea スキルでは effectRange を使う
+            GridRangePattern rng = (skill.targetRange != null && skill.targetRange.Offsets.Count > 0)
+                ? skill.targetRange
+                : (skill.targetingMode == SkillTargetingMode.SelfArea
+                   && skill.effectRange != null && skill.effectRange.Offsets.Count > 0
+                   ? skill.effectRange : null);
+            if (rng != null)
             {
-                candidates = candidates.Where(c => IsInRange(actorCell, physicalSide, c, skill.targetRange, actor)).ToList();
+                candidates = candidates.Where(c => IsInRange(actorCell, physicalSide, c, rng, actor)).ToList();
                 if (candidates.Count == 0) return null;
             }
 
@@ -1590,7 +2533,57 @@ namespace SteraCube.SpaceJourney
         private static Vector2Int GridToBFOffset(Vector2Int gridOffset)
             => new Vector2Int(-gridOffset.y, gridOffset.x);
 
+        /// <summary>Grid座標オフセットを rotation (0-3, CW90) で回転させる。</summary>
+        private static Vector2Int RotateGridOffset(Vector2Int o, int rotation)
+        {
+            int r = ((rotation % 4) + 4) % 4;
+            switch (r)
+            {
+                case 1: return new Vector2Int(o.y, -o.x);    // CW90
+                case 2: return new Vector2Int(-o.x, -o.y);   // 180
+                case 3: return new Vector2Int(-o.y, o.x);    // CCW90
+                default: return o;
+            }
+        }
+
         /// <summary>対象が射程パターン内にいるか判定 (4方向回転対応)</summary>
+        /// <summary>指定 rotation (0-3) での射程判定。ContainsRotated は使わず、その回転だけチェック。</summary>
+        private bool IsInRangeAtRotation(Vector2Int actorCell, int actorSide, SpaceJourneyUnit target,
+            GridRangePattern range, int rotation)
+        {
+            var bfOffset = CalcBFOffset(actorCell, actorSide, target);
+            if (!bfOffset.HasValue) return false;
+            var gridOffset = BFToGridOffset(bfOffset.Value);
+            foreach (var po in range.GetRotatedOffsets(rotation))
+                if (po.x == gridOffset.x && po.y == gridOffset.y) return true;
+            return false;
+        }
+
+        /// <summary>Direct 攻撃用: 4方向のうち敵数最大の rotation と対象リストを返す。</summary>
+        private (int bestRot, List<SpaceJourneyUnit> targets) PickBestRotation(
+            UnitBattleState state, SkillDefinition skill, GridRangePattern pattern)
+        {
+            var actor = state.Unit;
+            var actorPos = Field.FindUnit(actor);
+            int physicalSide = actorPos[0];
+            int ownerSide = Field.GetSide(actor);
+            var actorCell = new Vector2Int(actorPos[1], actorPos[2]);
+            List<SpaceJourneyUnit> candidates;
+            if (skill.effectTargetSide == EffectTargetSide.Self)
+                candidates = Field.GetAllAlive(ownerSide).Where(u => u != actor).ToList();
+            else
+                candidates = Field.GetAllAlive(BattleField.OppositeSide(ownerSide));
+
+            int bestRot = actor.Facing;
+            List<SpaceJourneyUnit> bestTargets = new();
+            for (int rot = 0; rot < 4; rot++)
+            {
+                var hits = candidates.Where(c => IsInRangeAtRotation(actorCell, physicalSide, c, pattern, rot)).ToList();
+                if (hits.Count > bestTargets.Count) { bestTargets = hits; bestRot = rot; }
+            }
+            return (bestRot, bestTargets);
+        }
+
         private bool IsInRange(Vector2Int actorCell, int actorSide, SpaceJourneyUnit target, GridRangePattern range)
             => IsInRange(actorCell, actorSide, target, range, null);
 
@@ -1630,6 +2623,132 @@ namespace SteraCube.SpaceJourney
         }
 
         /// <summary>actor から target への BattleField 座標オフセットを計算</summary>
+        /// <summary>
+        /// visual 用: スキルの効果範囲セルを計算して追加する。
+        /// 単体攻撃 → ターゲット1マスのみ
+        /// AoE攻撃  → effectRange (または targetRange) 全範囲
+        /// ImpactLanding → target 中心に effectRange
+        /// SelfArea → actor 中心に effectRange
+        /// </summary>
+        private void ComputeRangeCellsForVisual(
+            SpaceJourneyUnit actor, SkillDefinition skill, SpaceJourneyUnit primaryTarget,
+            List<(int side, Vector2Int cell)> output)
+        {
+            if (actor == null || skill == null) return;
+            var apos = Field.FindUnit(actor);
+            if (apos.x < 0) return;
+            int aSide = apos[0];
+            var aCell = new Vector2Int(apos[1], apos[2]);
+            int facing = actor.Facing;
+
+            bool isAoE = skill.selectAllInRange
+                || (skill.targetingMode == SkillTargetingMode.MultiSingle
+                    && skill.multiSinglePickMode == MultiSinglePickMode.AllInRange)
+                || skill.maxTargets > 1;
+
+            // ImpactLanding: ターゲット中心に effectRange (着弾型は必ず範囲展開)
+            if (skill.EffectPattern == SkillEffectPattern.ImpactLanding && primaryTarget != null)
+            {
+                var tpos = Field.FindUnit(primaryTarget);
+                if (tpos.x < 0) return;
+                int tSide = tpos[0];
+                var tCell = new Vector2Int(tpos[1], tpos[2]);
+
+                if (skill.effectRange != null && skill.effectRange.Offsets.Count > 0)
+                {
+                    foreach (var off in skill.effectRange.Offsets)
+                        output.Add((tSide, tCell + off));
+                }
+                else
+                {
+                    output.Add((tSide, tCell));
+                }
+                return;
+            }
+
+            // SelfArea: actor 中心に effectRange 展開
+            if (skill.targetingMode == SkillTargetingMode.SelfArea)
+            {
+                var pattern = skill.effectRange;
+                if (pattern != null && pattern.Offsets.Count > 0)
+                {
+                    foreach (var off in pattern.GetRotatedOffsets(facing))
+                        AddCellWithSideCrossing(output, aSide, aCell, off);
+                }
+                else
+                {
+                    output.Add((aSide, aCell));
+                }
+                return;
+            }
+
+            // 単体Direct (非AoE): ターゲットのセル1つだけ
+            if (!isAoE)
+            {
+                if (primaryTarget != null)
+                {
+                    var tpos = Field.FindUnit(primaryTarget);
+                    if (tpos.x >= 0)
+                        output.Add((tpos[0], new Vector2Int(tpos[1], tpos[2])));
+                }
+                else
+                {
+                    output.Add((aSide, aCell)); // フォールバック (対象不在時は actor)
+                }
+                return;
+            }
+
+            // AoE Direct: effectRange (or targetRange) 全体を actor 基準で展開
+            GridRangePattern aoePattern = null;
+            if (skill.effectRange != null && skill.effectRange.Offsets.Count > 0)
+                aoePattern = skill.effectRange;
+            else if (skill.targetRange != null && skill.targetRange.Offsets.Count > 0)
+                aoePattern = skill.targetRange;
+
+            if (aoePattern != null)
+            {
+                foreach (var off in aoePattern.GetRotatedOffsets(facing))
+                    AddCellWithSideCrossing(output, aSide, aCell, off);
+            }
+            else if (primaryTarget != null)
+            {
+                var tpos = Field.FindUnit(primaryTarget);
+                if (tpos.x >= 0)
+                    output.Add((tpos[0], new Vector2Int(tpos[1], tpos[2])));
+            }
+            else
+            {
+                output.Add((aSide, aCell));
+            }
+        }
+
+        /// <summary>
+        /// actor からのオフセットを side またぎ込みで絶対セルに変換し output に追加。
+        /// off.y = actor の前方向距離 (+=敵側へ)、off.x = 側方。
+        /// </summary>
+        private void AddCellWithSideCrossing(
+            List<(int side, Vector2Int cell)> output,
+            int actorSide, Vector2Int actorCell, Vector2Int off)
+        {
+            int forward = off.y;
+            int lateral = off.x;
+            int newY = actorCell.y + lateral;
+
+            // 前方距離適用 (actor の x から forward 分減らすイメージ)
+            int effectiveX = actorCell.x - forward;
+            if (effectiveX >= 0)
+            {
+                output.Add((actorSide, new Vector2Int(effectiveX, newY)));
+            }
+            else
+            {
+                // 敵陣へ侵入: enemyX = forward - actorCell.x - 1
+                int enemyX = -effectiveX - 1;
+                int enemySide = 1 - actorSide;
+                output.Add((enemySide, new Vector2Int(enemyX, newY)));
+            }
+        }
+
         private Vector2Int? CalcBFOffset(Vector2Int actorCell, int actorSide, SpaceJourneyUnit target)
         {
             var targetPos = Field.FindUnit(target);
@@ -1732,7 +2851,10 @@ namespace SteraCube.SpaceJourney
             var tgtCell = new Vector2Int(tgtPos[1], tgtPos[2]);
 
             if (Field.MoveUnit(target, destCell))
+            {
                 Log.Add($"    [{GetLabel(target)}] ノックバック ({tgtCell.x},{tgtCell.y})→({destCell.x},{destCell.y})");
+                ForcedMovedThisTick.Add(target);
+            }
         }
 
         /// <summary>
@@ -1921,7 +3043,7 @@ namespace SteraCube.SpaceJourney
 
         private float CalcSideHpRate(int side)
         {
-            var all = Field.GetAllUnits(side);
+            var all = Field.GetAllUnits(side).Where(u => !u.IsBarricade).ToList();
             if (all.Count == 0) return 0f;
             int totalHp = all.Sum(u => u.IsDead ? 0 : u.CurrentHp);
             int totalMax = all.Sum(u => u.MaxHp);
@@ -1930,8 +3052,9 @@ namespace SteraCube.SpaceJourney
 
         private void CheckVictory()
         {
-            bool side0Alive = Field.GetAllAlive(0).Count > 0;
-            bool side1Alive = Field.GetAllAlive(1).Count > 0;
+            // バリケードは生死判定から除外 (バリケードだけ残ってても勝ちにしない)
+            bool side0Alive = Field.GetAllAlive(0).Any(u => !u.IsBarricade);
+            bool side1Alive = Field.GetAllAlive(1).Any(u => !u.IsBarricade);
 
             if (!side0Alive && !side1Alive)
             {

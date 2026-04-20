@@ -79,6 +79,22 @@ namespace SteraCube.SpaceJourney
         public bool PlaceUnit(SpaceJourneyUnit unit, int side, int x, int y)
             => PlaceUnit(unit, side, new Vector2Int(x, y));
 
+        /// <summary>指定ユニットを盤面から除去 (owner情報は保持)。</summary>
+        public bool RemoveUnit(SpaceJourneyUnit unit)
+        {
+            (int side, Vector2Int cell)? found = null;
+            foreach (var kvp in grid)
+            {
+                if (kvp.Value == unit) { found = kvp.Key; break; }
+            }
+            if (found == null) return false;
+            grid.Remove(found.Value);
+            return true;
+        }
+
+        /// <summary>RandomizeAllPositions 等で使用: 全ユニットを盤面から退避 (owner情報は保持)。</summary>
+        public void ClearGrid() { grid.Clear(); }
+
         /// <summary>
         /// ユニットの位置を返す。見つからなければ (-1,-1,-1)。
         /// 戻り値: Vector3Int(side, cell.x, cell.y)

@@ -60,7 +60,7 @@ namespace SteraCube.SpaceJourney
         {
             if (cube == null) return;
 
-            var runtime = UnityEngine.Object.FindObjectOfType<WorldStateRuntime>();
+            var runtime = UnityEngine.Object.FindFirstObjectByType<WorldStateRuntime>();
             if (runtime == null) return;
 
             var world = runtime.CurrentWorld;

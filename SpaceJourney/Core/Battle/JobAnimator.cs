@@ -77,8 +77,15 @@ namespace SteraCube.SpaceJourney
 
         public void PlayDie()
         {
-            if (!hasDie || animator == null) return;
-            animator.SetTrigger(PARAM_DIE);
+            if (animator == null) return;
+            // 他 trigger を全部 Reset してから Die を立てる (同フレーム内の Damage 遷移が優先されるのを防ぐ)
+            if (hasMoving) animator.SetBool(PARAM_MOVING, false);
+            if (hasAttack) animator.ResetTrigger(PARAM_ATTACK);
+            if (hasDamage) animator.ResetTrigger(PARAM_DAMAGE);
+            if (hasVictory) animator.ResetTrigger(PARAM_VICTORY);
+            if (hasDefeat) animator.ResetTrigger(PARAM_DEFEAT);
+            if (hasDie) animator.SetTrigger(PARAM_DIE);
+            else animator.CrossFade("Death", 0.1f);
         }
 
         /// <summary>勝利ポーズ</summary>

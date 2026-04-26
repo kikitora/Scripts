@@ -52,5 +52,22 @@ namespace SteraCube.SpaceJourney
         public void Swing(AnimationEvent e) { }
         public void WeaponTrail() { }
         public void WeaponTrail(AnimationEvent e) { }
+
+        // ─── 弓射系 (SteraCube 互換) ───
+        /// <summary>矢を手に表示 (事前配置した子を Active)</summary>
+        public void ArrowEqOn()
+        {
+            var rtu = GetComponentInParent<Realtime.RealtimeBattleUnit>();
+            rtu?.ArrowEqOn();
+        }
+        public void ArrowEqOn(AnimationEvent e) { ArrowEqOn(); }
+
+        /// <summary>矢を放つ (複製して飛翔、元は非表示)</summary>
+        public void ArrowEqOff()
+        {
+            var rtu = GetComponentInParent<Realtime.RealtimeBattleUnit>();
+            rtu?.ArrowEqOff();
+        }
+        public void ArrowEqOff(AnimationEvent e) { ArrowEqOff(); }
     }
 }

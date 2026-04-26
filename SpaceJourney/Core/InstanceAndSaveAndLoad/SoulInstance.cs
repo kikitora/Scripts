@@ -119,7 +119,7 @@ namespace SteraCube.SpaceJourney
         {
             if (soul == null) return;
 
-            var runtime = UnityEngine.Object.FindObjectOfType<WorldStateRuntime>();
+            var runtime = UnityEngine.Object.FindFirstObjectByType<WorldStateRuntime>();
             if (runtime == null) return;
 
             var world = runtime.CurrentWorld;
@@ -651,11 +651,6 @@ namespace SteraCube.SpaceJourney
                 // ★ AT/DF/AGI/MAT/MDF を 0..4 に対応させたいので、+1 してキャスト
                 StatKind kind = (StatKind)(i + 1);
 
-                // 転生イベント補正：eventFactorsが渡されていればstat別倍率、なければ仮定数
-                float eventFactor = (eventFactors != null && eventFactors.Length > i)
-                    ? eventFactors[i]
-                    : SpaceJourneyConstants.TempInitialReincarnationEventFactor;
-
                 // Lv1 ステータス
                 if (hasCustomLv1)
                 {
@@ -665,7 +660,7 @@ namespace SteraCube.SpaceJourney
                 {
                     float jobMul = jobDef != null ? jobDef.GetMultiplier(kind) : 1f;
                     float baseStat = SpaceJourneyStatMath.CalcBaseStat(data.rank, jobMul);
-                    float potential = SpaceJourneyStatMath.CalcPotentialStat(baseStat, talentFactor, eventFactor);
+                    float potential = SpaceJourneyStatMath.CalcPotentialStat(baseStat, talentFactor, eventFactors, i);
                     int lv1 = SpaceJourneyStatMath.CalcLv1Stat(potential);
                     data.lv1Stats[i] = lv1;
                 }

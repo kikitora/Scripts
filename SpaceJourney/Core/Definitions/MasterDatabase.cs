@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using SteraCube.SpaceJourney.Realtime;
 
 namespace SteraCube.SpaceJourney
 {
@@ -72,6 +73,10 @@ namespace SteraCube.SpaceJourney
         [Header("ソウルジョブスキル定義リスト")]
         [Tooltip("全ソウルジョブのスキルをIDで引き出すためのマスターテーブル")]
         [SerializeField] private SkillDefinition[] soulJobSkills;
+
+        [Header("━━━━━━━━━━ リアルタイム戦闘用 武器 ━━━━━━━━━━")]
+        [Tooltip("リアルタイム戦闘で装備する武器定義。RealtimeBattleStarter が jobId 別に選択")]
+        [SerializeField] private RealtimeWeaponDefinition[] realtimeWeapons;
 
         // ※ WeaponDefinition / SkillDefinition の登録欄はここには不要。
         //   各 BodyJobDefinition の baseSkills / weaponCandidates に直接 SO を登録すること。
@@ -164,6 +169,93 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public IReadOnlyList<ReinLifeEvent> ReinLifeEvents => ReinLifeEventBundle.All;
         public SkillDefinition[] SoulJobSkills => soulJobSkills;
+
+        public RealtimeWeaponDefinition[] RealtimeWeapons => realtimeWeapons;
+
+        /// <summary>weaponId から RealtimeWeaponDefinition を取得。</summary>
+        public RealtimeWeaponDefinition GetRealtimeWeaponById(string id)
+        {
+            if (string.IsNullOrEmpty(id) || realtimeWeapons == null) return null;
+            foreach (var w in realtimeWeapons)
+                if (w != null && w.weaponId == id) return w;
+            return null;
+        }
+
+        /// <summary>jobId に装備可能な武器の一覧を返す。</summary>
+        public List<RealtimeWeaponDefinition> GetRealtimeWeaponsForJob(string jobId)
+        {
+            var result = new List<RealtimeWeaponDefinition>();
+            if (string.IsNullOrEmpty(jobId) || realtimeWeapons == null) return result;
+            foreach (var w in realtimeWeapons)
+            {
+                if (w == null || w.allowedJobIds == null) continue;
+                if (w.allowedJobIds.Contains(jobId)) result.Add(w);
+            }
+            return result;
+        }
+
+        /// <summary>rarity ごとの抽選重み (1=10, 2=5, 3=2, 4=1)。</summary>
+        private static int RarityWeight(int rarity)
+        {
+            switch (rarity)
+            {
+                case 1: return 10;
+                case 2: return 5;
+                case 3: return 2;
+                case 4: return 1;
+                default: return 1;
+            }
+        }
+
+        /// <summary>
+        /// jobId で装備可能、かつ minAreaLevel &lt;= maxAreaRank な武器から rarity 重みで抽選。
+        /// テスト段階用。将来的にはエリア+取得方法で絞り込み予定。
+        /// </summary>
+        public RealtimeWeaponDefinition PickRealtimeWeaponForJob(string jobId, int maxAreaRank, System.Random rng = null)
+        {
+            var pool = GetRealtimeWeaponsForJob(jobId);
+            return PickByRarityWeighted(pool, maxAreaRank, null, rng);
+        }
+
+        /// <summary>
+        /// jobId + kind (例: Knight + Shield) に限定した rarity 重み抽選。
+        /// </summary>
+        public RealtimeWeaponDefinition PickRealtimeWeaponForJobKind(
+            string jobId, Realtime.WeaponKind kind, int maxAreaRank, System.Random rng = null)
+        {
+            var pool = GetRealtimeWeaponsForJob(jobId);
+            return PickByRarityWeighted(pool, maxAreaRank, kind, rng);
+        }
+
+        private static RealtimeWeaponDefinition PickByRarityWeighted(
+            List<RealtimeWeaponDefinition> pool, int maxAreaRank,
+            Realtime.WeaponKind? kindFilter, System.Random rng)
+        {
+            if (pool == null || pool.Count == 0) return null;
+            rng = rng ?? new System.Random();
+
+            // filter
+            var candidates = new List<RealtimeWeaponDefinition>();
+            foreach (var w in pool)
+            {
+                if (w == null) continue;
+                if (w.minAreaLevel > maxAreaRank) continue;
+                if (kindFilter.HasValue && w.kind != kindFilter.Value) continue;
+                candidates.Add(w);
+            }
+            if (candidates.Count == 0) return null;
+
+            int total = 0;
+            foreach (var w in candidates) total += Mathf.Max(1, RarityWeight(w.rarity));
+            int r = rng.Next(total);
+            foreach (var w in candidates)
+            {
+                int wt = Mathf.Max(1, RarityWeight(w.rarity));
+                if (r < wt) return w;
+                r -= wt;
+            }
+            return candidates[candidates.Count - 1];
+        }
 
         /// <summary>
         /// skillId から SkillDefinition を取得する（ソウルジョブスキル用）。

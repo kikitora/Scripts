@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using SteraCube.SpaceJourney.Realtime;
 
 namespace SteraCube.SpaceJourney
 {
@@ -21,9 +22,13 @@ namespace SteraCube.SpaceJourney
         [TextArea]
         public string description;
 
-        [Header("種族スキル")]
+        [Header("種族スキル (旧ターン制)")]
         [Tooltip("この種族固有のパッシブスキル。SkillDefinition SO を直接登録する。")]
         public SkillDefinition racialSkill;
+
+        [Header("種族パッシブ (リアルタイム戦闘)")]
+        [Tooltip("リアルタイム戦闘でのトリガー発動パッシブ。複数可。")]
+        public List<RealtimePassiveDefinition> realtimePassives = new List<RealtimePassiveDefinition>();
 
         [Header("出現ランク")]
         [Tooltip("この種族が候補に入る最低ボディランク。\n-1 = ユニーク（イベントなど特殊入手限定、通常抽選には出現しない）。")]

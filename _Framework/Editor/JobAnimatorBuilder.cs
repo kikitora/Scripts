@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UAnim = UnityEditor.Animations;
@@ -45,7 +46,20 @@ namespace SteraCube._Framework.Editor
 
                 var idle    = FindClip(folder, $"{prefix}@Idle.FBX") ?? FindClip(folder, $"{prefix}@Idle1.FBX");
                 var walk    = FindClip(folder, $"{prefix}@Walk.FBX") ?? FindClip(folder, $"{prefix}@Run.FBX") ?? FindClip(folder, $"{prefix}@DashForward.FBX");
-                var attack  = FindClip(folder, $"{prefix}@Attack1.FBX");
+                // Archer は弓射 (ArrowAt1 / RangeAttack1) を基本攻撃モーションに。
+                // ユーザー編集の standalone .anim を最優先 (AnimationEvents 保持のため)。
+                AnimationClip attack;
+                if (jobKey == "Archer")
+                {
+                    attack = AssetDatabase.LoadAssetAtPath<AnimationClip>(
+                            "Assets/0SteraCube/Copy/ExplosiveLLC/Archer Warrior Mecanim Animation Pack/Animations/ArrowAt1.anim")
+                          ?? FindClip(folder, $"{prefix}@RangeAttack1.FBX")
+                          ?? FindClip(folder, $"{prefix}@Attack1.FBX");
+                }
+                else
+                {
+                    attack = FindClip(folder, $"{prefix}@Attack1.FBX");
+                }
                 var damage  = FindClip(folder, $"{prefix}@LightHit.FBX");
                 var death   = FindClip(folder, $"{prefix}@Death.FBX");
                 // Victory/Defeat は各職の Revive / Stunned を代用 (Humanoid motion 確実)
@@ -86,12 +100,28 @@ namespace SteraCube._Framework.Editor
             AnimationClip damage, AnimationClip death,
             AnimationClip victory = null, AnimationClip defeat = null)
         {
-            // 既存があれば削除して作り直す
-            if (AssetDatabase.LoadAssetAtPath<UAnim.AnimatorController>(outPath) != null)
-                AssetDatabase.DeleteAsset(outPath);
-
-            // Unity の公式 API で新規作成
-            var ac = UAnim.AnimatorController.CreateAnimatorControllerAtPath(outPath);
+            // 既存があれば中身だけクリア (GUID/参照を保つため DeleteAsset は使わない)
+            var ac = AssetDatabase.LoadAssetAtPath<UAnim.AnimatorController>(outPath);
+            if (ac != null)
+            {
+                // Parameters 全削除
+                while (ac.parameters != null && ac.parameters.Length > 0)
+                    ac.RemoveParameter(0);
+                // 既存 layer 内の stateMachine をクリア
+                var sm0 = ac.layers[0].stateMachine;
+                // AnyState transitions
+                foreach (var t in sm0.anyStateTransitions.ToArray()) sm0.RemoveAnyStateTransition(t);
+                // Entry transitions
+                foreach (var t in sm0.entryTransitions.ToArray()) sm0.RemoveEntryTransition(t);
+                // States
+                foreach (var cs in sm0.states.ToArray()) sm0.RemoveState(cs.state);
+                // SubStateMachines
+                foreach (var ss in sm0.stateMachines.ToArray()) sm0.RemoveStateMachine(ss.stateMachine);
+            }
+            else
+            {
+                ac = UAnim.AnimatorController.CreateAnimatorControllerAtPath(outPath);
+            }
 
             // パラメータ
             ac.AddParameter("Moving", AnimatorControllerParameterType.Bool);

@@ -95,7 +95,7 @@ public class TestCharaMake : MonoBehaviour
 
         Debug.Log(sb.ToString());
 #if UNITY_EDITOR
-        FindObjectOfType<WorldStateRuntime>()?.RefreshDebugLists();
+        FindFirstObjectByType<WorldStateRuntime>()?.RefreshDebugLists();
 #endif
         Debug.Log(
             $"[TestCharaMake] Soul:{soul.SoulName} / " +

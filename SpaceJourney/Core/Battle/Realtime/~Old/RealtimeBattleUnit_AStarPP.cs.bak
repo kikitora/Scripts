@@ -62,22 +62,6 @@ namespace SteraCube.SpaceJourney.Realtime
         [Tooltip("装備武器の weaponPassives が実行時にここに積まれる。")]
         public List<RealtimePassiveDefinition> activePassives = new List<RealtimePassiveDefinition>();
 
-        // ===== Buff 系一時状態 =====
-        // 戦士 rank 5 Charge: 次の通常攻撃ダメ 1.5x、1回消費
-        [HideInInspector] public bool chargeActive = false;
-
-        // ===== ボディスキル パッシブ (rank 取得で常時有効) =====
-        // 戦士 rank 3 追加攻撃: 通常攻撃ヒット時に同 target に 0.3x の追撃
-        [HideInInspector] public bool hasExtraAttack = false;
-        // ランサー rank 3 遠突: 通常攻撃 (Thrust) の range/length に +1m
-        [HideInInspector] public bool hasLongThrust = false;
-        // ランサー rank 5 ひるみ突き: 通常攻撃ヒット時に flinch 付与
-        [HideInInspector] public bool hasFlinchBasic = false;
-        // アーチャー rank 3 貫通射撃: 通常攻撃が直線上の敵を全員貫通
-        [HideInInspector] public bool hasPierceShot = false;
-        // アーチャー rank 5 トライアロー (Tri-Arrow): 通常攻撃が扇状 ±15° (合計 30°) に 3 本同時発射、各 0.9x
-        [HideInInspector] public bool hasTripleArrow = false;
-
         // ===== Passive 由来 状態 (AlwaysWhileActive で装備武器から設定) =====
         [HideInInspector] public float basicAttackMul = 1.0f;
         [HideInInspector] public float skillMul = 1.0f;
@@ -109,8 +93,7 @@ namespace SteraCube.SpaceJourney.Realtime
 
         // 内部状態
         private float nextAttackTime = 0f;
-        // ContinuousMover.IsAnchored から参照されるため internal に
-        internal float attackingUntil = 0f; // この時刻まで移動禁止
+        private float attackingUntil = 0f; // この時刻まで移動禁止
         private float[] skillNextReadyTime; // skills と同じ長さで各スキルCT管理
         private float nextDecisionTime = 0f;
         private int lastDominantIndex = -1;
@@ -646,16 +629,16 @@ namespace SteraCube.SpaceJourney.Realtime
             public Vector3 castOrigin;
             public Vector3 castAim;
             public Vector3 castDir;
-            public float damageMul; // トライアローの側矢などで 0.9 倍にする用 (default 1.0)
         }
         private RealtimeBattleUnit currentTarget;
-        internal RealtimeBattleManager manager;
+        private RealtimeBattleManager manager;
         private JobAnimator anim;
         private bool wasMoving;
         private float stuckTime; // 立ち止まり累積時間
 
-        // 連続座標移動コントローラ (ContinuousMover)
-        public SteraCube.SpaceJourney.Realtime.Pathfinding.ContinuousMover mover;
+        // A* Pathfinding Project 連携
+        private Pathfinding.AIPath aiPath;
+        private Pathfinding.RVO.RVOController rvoCtrl;
 
         // 生死状態切替用: 生存時の Layer をキャッシュ (死亡時 Default に変え、復活で復元)
         private int _aliveLayer = -1;
@@ -686,13 +669,18 @@ namespace SteraCube.SpaceJourney.Realtime
             if (anim == null) anim = gameObject.AddComponent<JobAnimator>();
             anim.RefreshParams();
 
-            // ContinuousMover 参照キャッシュ
-            mover = GetComponent<SteraCube.SpaceJourney.Realtime.Pathfinding.ContinuousMover>();
-            if (mover == null)
-                mover = gameObject.AddComponent<SteraCube.SpaceJourney.Realtime.Pathfinding.ContinuousMover>();
-            mover.Init(this);
-            mover.maxSpeed = walkSpeed;
-            mover.simulateMovement = false;
+            // A* PP コンポーネント参照キャッシュ
+            aiPath = GetComponent<Pathfinding.AIPath>();
+            rvoCtrl = GetComponent<Pathfinding.RVO.RVOController>();
+            if (aiPath != null)
+            {
+                aiPath.maxSpeed = walkSpeed;
+                aiPath.simulateMovement = false;
+            }
+            if (rvoCtrl != null)
+            {
+                rvoCtrl.radius = bodyRadius;
+            }
 
             // スキル CT 配列を用意 (opening CT 分先送り)
             skillNextReadyTime = new float[skills != null ? skills.Count : 0];
@@ -701,40 +689,8 @@ namespace SteraCube.SpaceJourney.Realtime
                 var s = skills[i];
                 skillNextReadyTime[i] = BT + (s != null ? s.openingCooldownSec : 0f);
             }
-
-            // ボディスキル パッシブ flag を job に応じて設定 (rank 3/5 で習得想定、現状は常時有効)
-            ApplyBodyJobPassives(u);
-
             // スキル毎の手装備アタッチ (弓射の矢 等) を事前配置
             SpawnHandAttachments();
-        }
-
-        /// <summary>job ID に応じて rank 3/5 のパッシブを有効化 (現状は常時 ON)。
-        /// 将来的には Soul の rank に応じて条件分岐する想定。</summary>
-        private void ApplyBodyJobPassives(SpaceJourneyUnit u)
-        {
-            // BodyJob (ScriptableObject 参照) は [NonSerialized] cachedBodyJob 経由で
-            // Resolve(db) が呼ばれた後でないと null になるため、Body.BodyJobId (serialized string)
-            // を直接使う。
-            string jobId = u?.Body?.BodyJobId ?? u?.Body?.BodyJob?.bodyJobId ?? "";
-            switch (jobId)
-            {
-                case "Warrior":
-                    hasExtraAttack = true;  // rank 3
-                    break;
-                case "Lancer":
-                    hasLongThrust = true;  // rank 3 (range +1m)
-                    rangeBonus += 1f;
-                    shapeSizeBonus += 1f;
-                    hasFlinchBasic = true; // rank 5
-                    break;
-                case "Archer":
-                    hasPierceShot = true;  // rank 3
-                    hasTripleArrow = true; // rank 5
-                    break;
-                // Knight: Provoke / Defend / Barricade はスキル枠で扱うので flag 不要
-                // Mage: IceBall / HealingWave はスキル枠で扱うので flag 不要
-            }
         }
 
         /// <summary>skills に handAttachmentPrefab があるものを該当ボーン配下に事前配置 (初期非表示)</summary>
@@ -811,7 +767,8 @@ namespace SteraCube.SpaceJourney.Realtime
 
             if (manager == null || manager.IsFinished)
             {
-                if (mover != null) mover.simulateMovement = false;
+                // 戦闘終了: AIPath を止めないと LateUpdate で動き続ける
+                if (aiPath != null) aiPath.simulateMovement = false;
                 return;
             }
             if (manager.IsCountdown) return; // カウントダウン中は unit AI 停止
@@ -835,23 +792,24 @@ namespace SteraCube.SpaceJourney.Realtime
             Vector3 targetPos = currentTarget.transform.position;
             Vector3 toTarget = targetPos - myPos;
             toTarget.y = 0f;
-            // 連続座標ベースの Euclid 距離 (XZ 平面)
-            float dist = new Vector2(toTarget.x, toTarget.z).magnitude;
+            float dist = toTarget.magnitude;
             float preferred = GetPreferredRangeWorld();
 
             // 攻撃アニメ中 + postAttackLockSec 猶予まで「アニメ中」として扱う
-            // (回転再開・終端付近の変な向きジャンプを防ぐ)
+            // (回転/AIPath を再開させず、終端付近の変な向きジャンプを防ぐ)
             bool isAttacking = BT < attackingUntil + postAttackLockSec;
-            bool isFlinching = IsFlinching;
 
             bool moving = false;
-            if (isAttacking || isFlinching)
+            if (isAttacking)
             {
-                // 攻撃アニメ中 / 被弾怯み中: 完全停止
-                if (mover != null) mover.simulateMovement = false;
+                // 攻撃アニメ中: 完全停止 + RVO で押されないようロック
+                if (aiPath != null) aiPath.simulateMovement = false;
+                if (rvoCtrl != null) rvoCtrl.locked = true;
             }
             else
             {
+                // アニメ中以外: 通常の RVO 挙動に戻す
+                if (rvoCtrl != null) rvoCtrl.locked = false;
                 var list = (actionList != null && actionList.Count > 0)
                     ? actionList
                     : DefaultActionList();
@@ -865,28 +823,27 @@ namespace SteraCube.SpaceJourney.Realtime
                 }
             }
 
-            // 向き制御:
-            //   - 攻撃中 / のけぞり中 → 何もしない (Animation の Root Motion 任せ)
-            //   - 移動中 (velocity > 0) → 必ず進行方向を向く
-            //   - 静止中 (velocity ≈ 0、攻撃でもない) → target 向き
-            if (!isAttacking && !isFlinching)
+            // 向き制御: 攻撃アニメ中はルートモーション任せで固定しない
+            // AIPath は LateUpdate で動くので Update 内の transform.position delta は常に 0。
+            // 実際の移動方向は aiPath.velocity から取る (迂回時は target 方向と異なる)。
+            if (!isAttacking)
             {
                 Vector3 moveDir = Vector3.zero;
-                if (mover != null && mover.simulateMovement)
+                if (aiPath != null)
                 {
-                    Vector3 v = mover.velocity; v.y = 0f;
-                    if (v.sqrMagnitude > 0.01f) moveDir = v.normalized;
+                    Vector3 v = aiPath.velocity; v.y = 0f;
+                    if (v.sqrMagnitude > 0.0001f) moveDir = v.normalized;
                 }
-
                 Vector3 facingDir;
-                if (moveDir.sqrMagnitude > 0.5f)
+                if (moveDir.sqrMagnitude > 0.5f && toTarget.sqrMagnitude > 0.01f)
                 {
-                    // 移動中は進行方向のみを向く (例外なし)
-                    facingDir = moveDir;
+                    float dot = Vector3.Dot(moveDir, toTarget.normalized);
+                    facingDir = (dot < -0.1f)
+                        ? toTarget.normalized       // 後退 → target 向き
+                        : moveDir;                  // 前進/迂回/横移動 → 実移動方向向き
                 }
                 else if (toTarget.sqrMagnitude > 0.01f)
                 {
-                    // 静止中で target がいれば target 向き
                     facingDir = toTarget.normalized;
                 }
                 else
@@ -900,13 +857,12 @@ namespace SteraCube.SpaceJourney.Realtime
             // フィールド境界クランプ (5x5 × 2 side = 幅5×奥行10)
             ClampToField();
 
-            // moving 判定を mover の state から取り直す
-            // velocity と transit 中フラグで判定 → 「simulateMovement=false でも transit 残り」を移動扱いに
-            if (mover != null)
+            // moving 判定を AIPath の state から取り直す (AIPath は LateUpdate で動くので
+            // posBefore-posAfter delta は Update 内では 0。AIPath.velocity を信用する)
+            if (aiPath != null)
             {
-                Vector3 v = mover.velocity; v.y = 0f;
-                bool moverActive = mover.simulateMovement || mover.IsInTransit;
-                moving = moverActive && !mover.reachedDestination && v.sqrMagnitude > 0.0001f;
+                Vector3 v = aiPath.velocity; v.y = 0f;
+                moving = aiPath.simulateMovement && !aiPath.reachedDestination && v.sqrMagnitude > 0.0001f;
             }
             stuckTime = 0f;
 
@@ -941,11 +897,12 @@ namespace SteraCube.SpaceJourney.Realtime
             rDot = Mathf.Clamp(rDot, -w * 0.5f, w * 0.5f);
             Vector3 clamped = center + fwd * fDot + right * rDot;
             clamped.y = pos.y;
-            // 0.5m 以上大きくズレた時だけ安全ネットとして clamp + mover に位置同期
+            // AIPath が constrainInsideGraph で処理してくれるので、ClampToField は
+            // 0.5m 以上大きくズレた時だけ安全ネットとして作動 (毎フレーム clamp → AIPath と競合 防止)
             if ((clamped - pos).sqrMagnitude > 0.25f)
             {
                 transform.position = clamped;
-                if (mover != null) mover.Teleport(clamped, true);
+                if (aiPath != null) aiPath.Teleport(clamped, false);
             }
         }
 
@@ -971,50 +928,7 @@ namespace SteraCube.SpaceJourney.Realtime
             return bodyRadius + other.bodyRadius;
         }
 
-        [Tooltip("怯みデフォルト秒数 (ApplyFlinch の引数省略時に使う)")]
-        public float flinchDurationSec = 0.4f;
-        // ContinuousMover.IsAnchored から参照されるため internal に
-        internal float flinchUntil = 0f;
-        public bool IsFlinching => BT < flinchUntil;
-
-        /// <summary>Knight rank 5 Barricade: caster の前 1.5m に 3m 幅の壁を設置。
-        /// 位置検証 (フィールド境界 / 既存壁衝突 / 味方衝突 / 敵押し出し可否) して OK なら配置、敵を押し出す。
-        /// Python tools/battle_sim/unit.py._place_barricade の 1:1 移植。</summary>
-        public bool PlaceBarricade()
-        {
-            if (manager == null) return false;
-            // 設置位置: caster の forward 方向 1.5m 前
-            Vector3 facing = transform.forward; facing.y = 0f;
-            if (facing.sqrMagnitude < 0.001f) facing = Vector3.forward;
-            facing.Normalize();
-            Vector3 center = transform.position + facing * 1.5f;
-            center.y = transform.position.y;
-            float radius = (mover != null) ? mover.radius : 0.36f;
-            var result = Barricade.CanPlace(center, facing, this, manager, radius);
-            if (result != Barricade.PlacementResult.Ok)
-            {
-                manager.BattleLog.Add($"[{BT:F2}s] {displayName} Barricade 設置失敗 ({result})");
-                return false;
-            }
-            var bar = Barricade.Spawn(this, center, facing, BT);
-            manager.barricades.Add(bar);
-            Barricade.PushEnemiesAside(manager, bar, radius);
-            manager.BattleLog.Add($"[{BT:F2}s] {displayName} Barricade 設置 (HP {bar.hp}, 5s)");
-            return true;
-        }
-
-        /// <summary>怯み攻撃を受けた時のみ呼ぶ。指定秒数の間 Damage アニメ + 完全行動不能 (移動/向き変更/攻撃 全て NG)。</summary>
-        public void ApplyFlinch(float durationSec = -1f)
-        {
-            if (durationSec <= 0f) durationSec = flinchDurationSec;
-            flinchUntil = BT + durationSec;
-            anim?.PlayDamage();
-            // 進行中の transit を含めて移動を完全停止
-            if (mover != null) mover.StopMovement();
-        }
-
-        /// <summary>被弾時に外部から呼ぶ。attacker 情報で lastAttacker を更新 (ターゲット切替用)。
-        /// Damage アニメは再生しない (怯み攻撃なら別途 ApplyFlinch を呼ぶ)。</summary>
+        /// <summary>被弾時に外部から呼ぶ。attacker 情報で lastAttacker を更新 (ターゲット切替用)</summary>
         public void OnHit(bool died, RealtimeBattleUnit attacker = null)
         {
             if (died) anim?.PlayDie();
@@ -1026,60 +940,28 @@ namespace SteraCube.SpaceJourney.Realtime
             }
         }
 
-        [Header("死亡演出")]
-        [Tooltip("死亡アニメ本体の長さ (秒)。これ + deathFadeDelaySec の経過後に盤面から消去される")]
-        public float deathAnimDurationSec = 1.5f;
-        [Tooltip("死亡アニメ終了後、消去までの猶予 (秒)")]
-        public float deathFadeDelaySec = 1.0f;
-        private float _deathTime = -1f;          // 死亡瞬間の BT
-        private bool _deathRemoved = false;       // 消去済フラグ
-
-        /// <summary>生死が切り替わった瞬間に同期する。
-        /// 死亡: mover 停止。占有はアニメ終了 + delay 経過まで維持 (障害物扱い)、その後解放して GameObject 非アクティブ化。
-        /// 復活: 移動再開可能に。</summary>
+        /// <summary>生死が切り替わった瞬間に RVO / Layer を同期する。
+        /// 死亡: RVO 無効 + Layer を Default (0) に変えて GridGraph collisionCheck の対象外にする。
+        /// 復活: 元の Layer に復元 + RVO 有効化。
+        /// DynamicObstacle が checkTime 経過後に graph 更新するので walkable 化は少し遅延する。</summary>
         private void SyncAliveState()
         {
             bool alive = IsAlive();
-            if (_prevAlive != alive)
-            {
-                if (mover != null)
-                {
-                    if (alive)
-                    {
-                        mover.simulateMovement = false; // 復活時は idle スタート
-                        // 復活: もし以前消去済なら GameObject 復帰 + 占有再登録
-                        if (_deathRemoved)
-                        {
-                            gameObject.SetActive(true);
-                            _deathRemoved = false;
-                        }
-                    }
-                    else
-                    {
-                        mover.StopMovement();
-                        _deathTime = BT;          // 死亡開始時刻を記録
-                        _deathRemoved = false;
-                    }
-                }
-                _prevAlive = alive;
-            }
+            if (_prevAlive == alive) return;
 
-            // 死亡から所定時間経過したら盤面から消去 (occupant 解放 + GameObject 非表示)
-            if (!alive && !_deathRemoved && _deathTime > 0f)
+            if (alive)
             {
-                float elapsed = BT - _deathTime;
-                if (elapsed >= deathAnimDurationSec + deathFadeDelaySec)
-                {
-                    if (mover != null)
-                    {
-                        // mover を無効化 (死亡消去後は移動不要)
-                        mover.Detach();
-                        mover.enabled = false;
-                    }
-                    gameObject.SetActive(false);
-                    _deathRemoved = true;
-                }
+                if (_aliveLayer >= 0) gameObject.layer = _aliveLayer;
+                if (rvoCtrl != null) rvoCtrl.enabled = true;
             }
+            else
+            {
+                if (_aliveLayer < 0) _aliveLayer = gameObject.layer;
+                gameObject.layer = 0; // Default: graph mask (UnitObstacle) 外 → 邪魔にならない
+                if (rvoCtrl != null) rvoCtrl.enabled = false;
+                if (aiPath != null) aiPath.simulateMovement = false;
+            }
+            _prevAlive = alive;
         }
 
         // ─────────────────────────────────
@@ -1391,80 +1273,26 @@ namespace SteraCube.SpaceJourney.Realtime
             }
             if (candidates.Count == 0) return null;
 
-            // requireRoute: LineOfSight で経路確保できる候補のみに絞る (連続移動版)
-            if (e.requireRoute && manager != null)
-            {
-                var bm = manager.barricadeMap;
-                if (bm != null)
-                {
-                    var routable = new List<RealtimeBattleUnit>();
-                    foreach (var u in candidates)
-                    {
-                        if (bm.LineOfSight(transform.position, u.transform.position))
-                            routable.Add(u);
-                    }
-                    if (routable.Count > 0) candidates = routable;
-                    // 全部到達不能なら絞らずに元の candidates を残す (詰みより無理にでも狙う)
-                }
-            }
-
-            // target sticky: 現 target が候補の中に居る場合、ヒステリシス付きで優先する。
-            // 同距離・微差で switch して向きが左右に振れるのを防ぐ。
-            // 新候補が現 target より閾値以上 worse でないと switch しない。
-            const float stickyHysteresis = 1.5f; // 1.5 cell 分以上良くないと switch しない
-            RealtimeBattleUnit candidate;
             switch (e.targetSelect)
             {
                 case RealtimeTargetSelect.Self: return this;
                 case RealtimeTargetSelect.Random:
                     return candidates[Random.Range(0, candidates.Count)];
                 case RealtimeTargetSelect.LowestHp:
-                    candidate = BestBy(candidates, u => u.unit != null ? (float)u.unit.CurrentHp / Mathf.Max(1, u.unit.MaxHp) : 1f, false);
-                    return PreferCurrentIfSimilar(candidate, candidates, u => u.unit != null ? (float)u.unit.CurrentHp / Mathf.Max(1, u.unit.MaxHp) : 1f, false, 0.05f);
+                    return BestBy(candidates, u => u.unit != null ? (float)u.unit.CurrentHp / Mathf.Max(1, u.unit.MaxHp) : 1f, false);
                 case RealtimeTargetSelect.HighestHp:
-                    candidate = BestBy(candidates, u => u.unit != null ? (float)u.unit.CurrentHp / Mathf.Max(1, u.unit.MaxHp) : 1f, true);
-                    return PreferCurrentIfSimilar(candidate, candidates, u => u.unit != null ? (float)u.unit.CurrentHp / Mathf.Max(1, u.unit.MaxHp) : 1f, true, 0.05f);
+                    return BestBy(candidates, u => u.unit != null ? (float)u.unit.CurrentHp / Mathf.Max(1, u.unit.MaxHp) : 1f, true);
                 case RealtimeTargetSelect.Farthest:
-                    candidate = BestBy(candidates, u => Vector3.Distance(transform.position, u.transform.position), true);
-                    return PreferCurrentIfSimilar(candidate, candidates, u => Vector3.Distance(transform.position, u.transform.position), true, stickyHysteresis);
+                    return BestBy(candidates, u => Vector3.Distance(transform.position, u.transform.position), true);
                 default: // Nearest
-                    candidate = BestBy(candidates, u => Vector3.Distance(transform.position, u.transform.position), false);
-                    return PreferCurrentIfSimilar(candidate, candidates, u => Vector3.Distance(transform.position, u.transform.position), false, stickyHysteresis);
+                    return BestBy(candidates, u => Vector3.Distance(transform.position, u.transform.position), false);
             }
-        }
-
-        /// <summary>新候補と現 target の差が threshold 以下なら現 target を維持 (sticky)。</summary>
-        private RealtimeBattleUnit PreferCurrentIfSimilar(
-            RealtimeBattleUnit newBest,
-            List<RealtimeBattleUnit> candidates,
-            System.Func<RealtimeBattleUnit, float> metric,
-            bool higherIsBetter,
-            float threshold)
-        {
-            if (currentTarget == null || !currentTarget.IsAlive()) return newBest;
-            if (!candidates.Contains(currentTarget)) return newBest;
-            if (newBest == currentTarget) return currentTarget;
-            float curScore = metric(currentTarget);
-            float newScore = metric(newBest);
-            // higherIsBetter=true のとき newScore > curScore なら新が良い、その差が閾値超えてれば switch
-            // higherIsBetter=false (Nearest 等) なら newScore < curScore なら新が良い
-            float improvement = higherIsBetter ? (newScore - curScore) : (curScore - newScore);
-            return improvement >= threshold ? newBest : currentTarget;
         }
 
         private bool ExecuteAction(RealtimeActionEntry entry, Vector3 toTarget, float dist, float preferred, out bool committed)
         {
             committed = true; // 既定: 発火完了 (break)
             var act = entry.action;
-
-            // セル間移動中 (transit) なら攻撃系は抑止 (セル中央で止まってから撃つ)
-            bool isAttackAction = act == RealtimeAction.BasicAttack || act == RealtimeAction.CastSkill;
-            if (isAttackAction && mover != null && mover.IsInTransit)
-            {
-                committed = false;
-                return false; // 次の優先度 (移動アクション等) にフォールスルー
-            }
-
             switch (act)
             {
                 case RealtimeAction.Wait:
@@ -1477,14 +1305,12 @@ namespace SteraCube.SpaceJourney.Realtime
                     if (skills != null && skills.Count > 0 && skills[0] != null)
                     {
                         committed = CastSkill(0); // 失敗なら次優先度へ fall-through
-                        if (committed && mover != null) mover.StopMovement();
                     }
                     else if (BT >= nextAttackTime && dist <= GetAttackRangeMass())
                     {
                         FireBasicAttack(currentTarget);
                         nextAttackTime = BT + basicAttackCooldownSec;
                         attackingUntil = BT + attackAnimDurationSec;
-                        if (mover != null) mover.StopMovement(); // 攻撃発動と同フレで即停止
                     }
                     else
                     {
@@ -1494,7 +1320,6 @@ namespace SteraCube.SpaceJourney.Realtime
 
                 case RealtimeAction.CastSkill:
                     committed = CastSkill(entry.actionSkillIndex);
-                    if (committed && mover != null) mover.StopMovement();
                     return false;
 
                 case RealtimeAction.MoveToTarget:
@@ -1522,46 +1347,29 @@ namespace SteraCube.SpaceJourney.Realtime
             return false;
         }
 
-        /// <summary>target の世界座標を返す。連続移動では transform.position 直返し。</summary>
-        private Vector3 GetStableTargetWorldPos(RealtimeBattleUnit t)
-        {
-            if (t == null) return Vector3.zero;
-            return t.transform.position;
-        }
-
-        // Python _move_to_distance のヒステリシス定数
-        // 移動停止条件のヒステリシス。
-        // HoldEpsilonIn 負値 → 攻撃距離 (preferred) より 0.15 内側で停止。
-        // これで停止後の dist 微振動でも `dist <= range_max` (attack range) を満たし
-        // 確実に攻撃発火する。
-        // HoldEpsilonOut → 大きく離れた時のみ再追跡を始める (zigzag 抑制)。
-        private const float HoldEpsilonIn = -0.15f;
-        private const float HoldEpsilonOut = 0.40f;
-
         /// <summary>ターゲットとの距離を targetDist 以下まで詰める。
-        /// Python _move_to_distance のヒステリシス方式 1:1 移植。
-        /// 停止中なら (targetDist + HoldEpsilonOut) 以内は動かない。
-        /// 移動中なら (targetDist + HoldEpsilonIn) 以内で停止。</summary>
+        /// A* Pathfinding Project (AIPath + RVO) に委譲。</summary>
         private bool MoveToDistance(Vector3 toTarget, float dist, float targetDist)
         {
-            if (currentTarget == null || mover == null) return false;
-
-            float threshold = targetDist + (mover.simulateMovement ? HoldEpsilonIn : HoldEpsilonOut);
-            if (dist <= threshold)
+            if (dist <= targetDist)
             {
-                mover.simulateMovement = false;
+                if (aiPath != null) aiPath.simulateMovement = false;
                 return false;
             }
-
-            mover.destination = GetStableTargetWorldPos(currentTarget);
-            mover.endReachedDistance = targetDist;
-            mover.maxSpeed = walkSpeed;
-            mover.ignoreOccupant = null;
-            mover.simulateMovement = true;
-            return !mover.reachedDestination;
+            if (currentTarget == null || aiPath == null) return false;
+            // destination は target が動いた時のみ更新 (path 再計算頻度を下げる)
+            Vector3 newDest = currentTarget.transform.position;
+            if (Vector3.SqrMagnitude(newDest - aiPath.destination) > 0.25f) // 0.5m 以上差
+            {
+                aiPath.destination = newDest;
+            }
+            aiPath.endReachedDistance = targetDist;
+            aiPath.maxSpeed = walkSpeed;
+            aiPath.simulateMovement = true;
+            return !aiPath.reachedDestination;
         }
 
-        /// <summary>ターゲット距離を targetDist 以下 0.3m 以内に維持。</summary>
+        /// <summary>ターゲット距離を targetDist 以下 0.3m 以内に維持。AIPath に委譲。</summary>
         private bool MaintainDistance(Vector3 toTarget, float dist, float targetDist)
         {
             const float tolerance = 0.3f;
@@ -1569,45 +1377,44 @@ namespace SteraCube.SpaceJourney.Realtime
             float minDist = targetDist - tolerance;
             if (dist >= minDist && dist <= maxDist)
             {
-                if (mover != null) mover.simulateMovement = false;
+                if (aiPath != null) aiPath.simulateMovement = false;
                 return false;
             }
-            if (toTarget.sqrMagnitude < 0.01f || mover == null) return false;
+            if (toTarget.sqrMagnitude < 0.01f || aiPath == null) return false;
 
             if (dist > maxDist && currentTarget != null)
             {
-                mover.destination = GetStableTargetWorldPos(currentTarget);
-                mover.endReachedDistance = maxDist;
-                mover.maxSpeed = walkSpeed;
-                mover.ignoreOccupant = null;
-                mover.simulateMovement = true;
+                // 前進: target に向かう
+                aiPath.destination = currentTarget.transform.position;
+                aiPath.endReachedDistance = maxDist;
+                aiPath.maxSpeed = walkSpeed;
+                aiPath.simulateMovement = true;
                 return true;
             }
             // 後退: 反対方向の point を destination に
             Vector3 awayPos = transform.position - toTarget.normalized * (minDist - dist);
-            mover.destination = awayPos;
-            mover.endReachedDistance = 0.1f;
-            mover.maxSpeed = walkSpeed;
-            mover.ignoreOccupant = null;
-            mover.simulateMovement = true;
+            aiPath.destination = awayPos;
+            aiPath.endReachedDistance = 0.1f;
+            aiPath.maxSpeed = walkSpeed;
+            aiPath.simulateMovement = true;
             return true;
         }
 
-        /// <summary>ターゲットから targetDist 以上離れる。</summary>
+        /// <summary>ターゲットから targetDist 以上離れる。AIPath に委譲。</summary>
         private bool MoveAwayToDistance(Vector3 toTarget, float dist, float targetDist)
         {
             if (dist >= targetDist)
             {
-                if (mover != null) mover.simulateMovement = false;
+                if (aiPath != null) aiPath.simulateMovement = false;
                 return false;
             }
-            if (toTarget.sqrMagnitude < 0.01f || mover == null) return false;
+            if (toTarget.sqrMagnitude < 0.01f || aiPath == null) return false;
+            // 反対方向に targetDist まで離れる
             Vector3 awayPos = transform.position - toTarget.normalized * (targetDist - dist);
-            mover.destination = awayPos;
-            mover.endReachedDistance = 0.1f;
-            mover.maxSpeed = walkSpeed;
-            mover.ignoreOccupant = null;
-            mover.simulateMovement = true;
+            aiPath.destination = awayPos;
+            aiPath.endReachedDistance = 0.1f;
+            aiPath.maxSpeed = walkSpeed;
+            aiPath.simulateMovement = true;
             return true;
         }
 
@@ -1690,10 +1497,7 @@ namespace SteraCube.SpaceJourney.Realtime
         private bool IsTargetInSkillRange(int index)
         {
             var s = GetSkill(index);
-            if (s == null) return false;
-            // Self target (バフ等) は常に範囲内
-            if (s.targetSide == RealtimeTargetSide.Self) return true;
-            if (currentTarget == null) return false;
+            if (s == null || currentTarget == null) return false;
             float d = Vector3.Distance(transform.position, currentTarget.transform.position);
             return d >= s.shape.rangeMin && d <= (s.shape.rangeMax + rangeBonus);
         }
@@ -1768,12 +1572,19 @@ namespace SteraCube.SpaceJourney.Realtime
             var primary = SelectSkillTarget(s);
             if (primary == null) return false;
 
-            // basic attack か?
-            bool isBasicCast = skills != null && skills.Count > 0 && s == skills[0];
-            // アーチャー rank 5 トライアロー: basic attack を 3 方向 (±15°、合計 30°扇) に同時発射、各 0.9x
-            bool useTriple = isBasicCast && hasTripleArrow;
-            // アーチャー rank 3 貫通射撃: basic attack の FirstEnemyInLine 制限を解除
-            bool usePierce = isBasicCast && hasPierceShot;
+            // 形状範囲内の全ヒット対象
+            var hits = CollectSkillTargets(s, primary);
+            // FirstEnemyInLine モード: 射線上で最初に遭遇する敵に命中差替
+            if (s.projectileHitMode == ProjectileHitMode.FirstEnemyInLine && hits.Count > 0)
+            {
+                var firstInLine = FindFirstEnemyInLine(primary);
+                if (firstInLine != null && firstInLine != primary)
+                {
+                    hits.Clear();
+                    hits.Add(firstInLine);
+                }
+            }
+            if (hits.Count == 0) return false;
 
             // 向きを primary に
             Vector3 toP = primary.transform.position - transform.position;
@@ -1781,99 +1592,51 @@ namespace SteraCube.SpaceJourney.Realtime
             if (toP.sqrMagnitude > 0.01f)
                 transform.rotation = Quaternion.LookRotation(toP.normalized, Vector3.up);
 
-            // メイン dir
+            // スナップショット (timeline 用)
             Vector3 castOrigin = transform.position;
             Vector3 castAim = primary.transform.position;
-            Vector3 mainDir = (castAim - castOrigin); mainDir.y = 0;
-            if (mainDir.sqrMagnitude < 0.01f) mainDir = transform.forward;
-            mainDir.Normalize();
+            Vector3 castDir = (castAim - castOrigin); castDir.y = 0;
+            if (castDir.sqrMagnitude < 0.01f) castDir = transform.forward;
+            castDir.Normalize();
 
-            // 発射 specs: (方向, ダメ倍率)。トライアローなら 3 個、通常 1 個
-            var shotSpecs = new List<(Vector3 dir, float mul)>();
-            if (useTriple)
-            {
-                shotSpecs.Add((Quaternion.AngleAxis(-15f, Vector3.up) * mainDir, 0.9f));
-                shotSpecs.Add((mainDir, 0.9f));
-                shotSpecs.Add((Quaternion.AngleAxis(15f, Vector3.up) * mainDir, 0.9f));
-            }
-            else
-            {
-                shotSpecs.Add((mainDir, 1f));
-            }
-
-            bool anyHit = false;
+            // timeline 処理
             bool hasDealDamage = false;
-
-            foreach (var (shotDir, dmgMul) in shotSpecs)
+            float projectileDistanceDelay = 0f;
+            if (s.projectileSpeed > 0f)
             {
-                List<RealtimeBattleUnit> shotHits;
-                if ((shotDir - mainDir).sqrMagnitude < 1e-6f)
+                float dist = Vector3.Distance(castOrigin, castAim);
+                projectileDistanceDelay = dist / s.projectileSpeed;
+            }
+            if (s.timeline != null && s.timeline.Count > 0)
+            {
+                foreach (var ev in s.timeline)
                 {
-                    // メイン dir = primary 経由収集
-                    shotHits = CollectSkillTargets(s, primary);
-                }
-                else
-                {
-                    // 側矢: 方向ベースで収集
-                    shotHits = CollectTargetsInDirection(s, shotDir);
-                }
-                // FirstEnemyInLine フィルタ: 貫通でなければ最近敵のみ
-                if (s.projectileHitMode == ProjectileHitMode.FirstEnemyInLine
-                    && shotHits.Count > 0 && !usePierce)
-                {
-                    RealtimeBattleUnit first = null;
-                    float bestD = float.MaxValue;
-                    foreach (var u in shotHits)
+                    if (ev == null) continue;
+                    if (ev.kind == RealtimeSkillEventKind.DealDamage) hasDealDamage = true;
+                    // DealDamage だけ projectileSpeed による距離分遅延を加算
+                    float extraDelay = (ev.kind == RealtimeSkillEventKind.DealDamage) ? projectileDistanceDelay : 0f;
+                    pendingEvents.Add(new PendingSkillEvent
                     {
-                        float d = Vector3.Distance(transform.position, u.transform.position);
-                        if (d < bestD) { bestD = d; first = u; }
-                    }
-                    shotHits.Clear();
-                    if (first != null) shotHits.Add(first);
-                }
-                if (shotHits.Count == 0) continue;
-                anyHit = true;
-
-                // shot 用 castAim を計算 (projectile delay 用)
-                Vector3 shotAim = castOrigin + shotDir * s.shape.rangeMax;
-                float projectileDistanceDelay = 0f;
-                if (s.projectileSpeed > 0f)
-                {
-                    projectileDistanceDelay = Vector3.Distance(castOrigin, shotAim) / s.projectileSpeed;
-                }
-                if (s.timeline != null && s.timeline.Count > 0)
-                {
-                    foreach (var ev in s.timeline)
-                    {
-                        if (ev == null) continue;
-                        if (ev.kind == RealtimeSkillEventKind.DealDamage) hasDealDamage = true;
-                        float extraDelay = (ev.kind == RealtimeSkillEventKind.DealDamage) ? projectileDistanceDelay : 0f;
-                        pendingEvents.Add(new PendingSkillEvent
-                        {
-                            fireTime = BT + Mathf.Max(0f, ev.timeSec) + extraDelay,
-                            ev = ev,
-                            skill = s,
-                            primaryTarget = primary,
-                            hitTargets = shotHits,
-                            castOrigin = castOrigin,
-                            castAim = shotAim,
-                            castDir = shotDir,
-                            damageMul = dmgMul,
-                        });
-                    }
-                }
-                else
-                {
-                    // DealDamage イベントが timeline に無ければ即時適用 (後方互換)
-                    foreach (var tgt in shotHits)
-                    {
-                        ApplySkillEffect(s, tgt, dmgMul);
-                    }
+                        fireTime = BT + Mathf.Max(0f, ev.timeSec) + extraDelay,
+                        ev = ev,
+                        skill = s,
+                        primaryTarget = primary,
+                        hitTargets = hits,
+                        castOrigin = castOrigin,
+                        castAim = castAim,
+                        castDir = castDir,
+                    });
                 }
             }
-            if (!anyHit) return false;
-            // hits 変数 (旧コード参照用に primary だけのプレースホルダ)
-            var hits = new List<RealtimeBattleUnit> { primary };
+
+            // DealDamage イベントが timeline に無ければ即時適用 (後方互換)
+            if (!hasDealDamage)
+            {
+                foreach (var tgt in hits)
+                {
+                    ApplySkillEffect(s, tgt);
+                }
+            }
 
             // アニメ (現状 Attack Trigger 流用。スキル固有は今後)
             anim?.PlayAttack();
@@ -1906,125 +1669,65 @@ namespace SteraCube.SpaceJourney.Realtime
             activeAttachment.SetActive(true);
         }
 
-        /// <summary>矢を複製して飛翔させ、元の矢は非表示に戻す。
-        /// アーチャー rank 3 貫通射撃 / rank 5 トライアロー対応。</summary>
+        /// <summary>矢を複製して飛翔させ、元の矢は非表示に戻す</summary>
         public void ArrowEqOff()
         {
             if (activeAttachment == null) return;
             var orig = activeAttachment;
             if (!orig.activeSelf) return;
 
-            // basic attack か & passive 判定
-            bool isBasicCast = activeCastSkill != null
-                && skills != null && skills.Count > 0 && activeCastSkill == skills[0];
-            bool useTriple = isBasicCast && hasTripleArrow;
-            bool usePierce = isBasicCast && hasPierceShot;
-
-            // メイン方向 + currentTarget までの距離
-            Vector3 origPos = orig.transform.position;
-            Vector3 mainTargetPos = (currentTarget != null && currentTarget.IsAlive())
-                ? currentTarget.transform.position
-                : origPos + transform.forward * 10f;
-            Vector3 mainDir = (mainTargetPos - origPos); mainDir.y = 0;
-            if (mainDir.sqrMagnitude < 0.01f) mainDir = transform.forward;
-            float mainDist = mainDir.magnitude;
-            mainDir.Normalize();
-
-            // 飛ばす方向リスト (トライアローなら 3 つ、通常 1 つ)
-            Vector3[] dirs = useTriple
-                ? new[] {
-                    Quaternion.AngleAxis(-15f, Vector3.up) * mainDir,
-                    mainDir,
-                    Quaternion.AngleAxis(15f, Vector3.up) * mainDir,
-                }
-                : new[] { mainDir };
-
-            // 元矢を非表示
+            // 複製: nock 状態の world pos/rot をそのまま引き継ぐ (ジャンプ防止)
+            var copy = Instantiate(orig, orig.transform.position, orig.transform.rotation, null);
+            copy.transform.localScale = orig.transform.lossyScale;
+            copy.SetActive(true);
+            // Driver/Rotator を複製側では無効化 (飛翔に干渉させない)
+            var drv = copy.GetComponent<AttachmentCurveDriver>();
+            if (drv != null) Destroy(drv);
+            var rotComp = copy.GetComponent<AttachmentRotator>();
+            if (rotComp != null) Destroy(rotComp);
             orig.SetActive(false);
+            // 発光: Point Light を子に追加
+            var lightGo = new GameObject("ArrowLight");
+            lightGo.transform.SetParent(copy.transform, false);
+            lightGo.transform.localPosition = Vector3.zero;
+            var lt = lightGo.AddComponent<Light>();
+            lt.type = LightType.Point;
+            lt.color = new Color(1f, 0.85f, 0.4f); // 暖色
+            lt.intensity = 2f;
+            lt.range = 3f;
 
+            // ターゲット位置 + aim rotation
+            Vector3 targetPos = (currentTarget != null && currentTarget.IsAlive())
+                ? currentTarget.transform.position
+                : copy.transform.position + transform.forward * 10f;
+            Quaternion aimRot = Quaternion.LookRotation((targetPos - copy.transform.position).normalized, Vector3.up);
+            if (activeCastSkill != null)
+                aimRot *= Quaternion.Euler(activeCastSkill.handAttachmentEulerOffset);
+
+            float dist = Vector3.Distance(copy.transform.position, targetPos);
             float spd = (activeCastSkill != null && activeCastSkill.projectileSpeed > 0f)
                 ? activeCastSkill.projectileSpeed : 15f;
+            float flyTime = Mathf.Max(0.05f, dist / spd);
+            float rotBlend = activeCastSkill != null ? activeCastSkill.flyRotationBlendTime : 0.2f;
+
+            // 位置: target へ線形移動 (倍速適用)
             float spdMul = RealtimeBattleManager.GlobalSpeed;
-
-            foreach (var dir in dirs)
+            var moveT = DOTween.To(() => copy.transform.position,
+                    x => copy.transform.position = x,
+                    targetPos, flyTime)
+                .SetEase(Ease.Linear)
+                .OnComplete(() => { if (copy != null) Destroy(copy); });
+            moveT.timeScale = spdMul;
+            // 回転は既に aim 済 (AttachmentRotator により nock 中に完了)、微補正のみ
+            if (rotBlend > 0.001f)
             {
-                // 飛行終点を決定:
-                //   貫通: 終点 = self + dir * mainDist (ターゲット相当位置、敵を貫く)
-                //   通常: 終点 = 直線上で最初に当たる敵の位置、なければ self + dir * mainDist
-                Vector3 ideal = origPos + dir * mainDist;
-                Vector3 endpoint = ideal;
-                if (!usePierce)
-                {
-                    var firstEnemy = FindFirstEnemyInArrowPath(origPos, dir, mainDist);
-                    if (firstEnemy != null)
-                        endpoint = firstEnemy.transform.position;
-                }
-
-                // 矢複製
-                var copy = Instantiate(orig, origPos, Quaternion.LookRotation(dir, Vector3.up), null);
-                copy.transform.localScale = orig.transform.lossyScale;
-                copy.SetActive(true);
-                var drv = copy.GetComponent<AttachmentCurveDriver>();
-                if (drv != null) Destroy(drv);
-                var rotComp = copy.GetComponent<AttachmentRotator>();
-                if (rotComp != null) Destroy(rotComp);
-
-                // 発光
-                var lightGo = new GameObject("ArrowLight");
-                lightGo.transform.SetParent(copy.transform, false);
-                lightGo.transform.localPosition = Vector3.zero;
-                var lt = lightGo.AddComponent<Light>();
-                lt.type = LightType.Point;
-                lt.color = new Color(1f, 0.85f, 0.4f);
-                lt.intensity = 2f;
-                lt.range = 3f;
-
-                // 飛翔
-                Quaternion aimRot = Quaternion.LookRotation(dir, Vector3.up);
-                if (activeCastSkill != null)
-                    aimRot *= Quaternion.Euler(activeCastSkill.handAttachmentEulerOffset);
-                float dist = Vector3.Distance(origPos, endpoint);
-                float flyTime = Mathf.Max(0.05f, dist / spd);
-                float rotBlend = activeCastSkill != null ? activeCastSkill.flyRotationBlendTime : 0.2f;
-
-                var moveT = DOTween.To(() => copy.transform.position,
-                        x => copy.transform.position = x,
-                        endpoint, flyTime)
-                    .SetEase(Ease.Linear)
-                    .OnComplete(() => { if (copy != null) Destroy(copy); });
-                moveT.timeScale = spdMul;
-                if (rotBlend > 0.001f)
-                {
-                    var rotT = copy.transform.DORotateQuaternion(aimRot, Mathf.Min(flyTime, rotBlend)).SetEase(Ease.OutQuad);
-                    rotT.timeScale = spdMul;
-                }
-                else
-                {
-                    copy.transform.rotation = aimRot;
-                }
+                var rotT = copy.transform.DORotateQuaternion(aimRot, Mathf.Min(flyTime, rotBlend)).SetEase(Ease.OutQuad);
+                rotT.timeScale = spdMul;
             }
-        }
-
-        /// <summary>caster (origPos) から dir 方向に maxDist までの間で最初に当たる敵を返す。
-        /// 矢の通常着弾位置決定用 (vis のみ)。線幅は約 0.5m。</summary>
-        private RealtimeBattleUnit FindFirstEnemyInArrowPath(Vector3 origPos, Vector3 dir, float maxDist)
-        {
-            if (manager == null) return null;
-            origPos.y = 0;
-            RealtimeBattleUnit best = null;
-            float bestT = float.MaxValue;
-            const float lineHalfWidth = 0.4f;
-            foreach (var u in manager.AllUnits)
+            else
             {
-                if (u == null || u == this || !u.IsAlive() || u.ownerSide == ownerSide) continue;
-                Vector3 rel = u.transform.position - origPos; rel.y = 0;
-                float along = Vector3.Dot(rel, dir);
-                if (along < 0.1f || along > maxDist + 0.5f) continue;
-                Vector3 perpVec = rel - dir * along;
-                if (perpVec.magnitude > lineHalfWidth) continue;
-                if (along < bestT) { bestT = along; best = u; }
+                copy.transform.rotation = aimRot;
             }
-            return best;
         }
 
         /// <summary>保留中イベントを時刻到達で発火</summary>
@@ -2051,13 +1754,12 @@ namespace SteraCube.SpaceJourney.Realtime
                         // basic attack 発射時は MultiShot (日本刀=2 / トリデントアーチャー=3 等) を適用
                         bool isBasicCast = skills != null && skills.Count > 0 && pe.skill == skills[0];
                         int hitCount = isBasicCast ? Mathf.Max(1, multiShotCount) : 1;
-                        float dmgMul = pe.damageMul > 0f ? pe.damageMul : 1f;
                         foreach (var tgt in pe.hitTargets)
                         {
                             if (tgt == null || !tgt.IsAlive()) continue;
                             for (int shot = 0; shot < hitCount && tgt.IsAlive(); shot++)
                             {
-                                ApplySkillEffect(pe.skill, tgt, dmgMul);
+                                ApplySkillEffect(pe.skill, tgt);
                             }
                         }
                     }
@@ -2256,7 +1958,7 @@ namespace SteraCube.SpaceJourney.Realtime
             return basePos + right * pe.ev.offset.x + Vector3.up * pe.ev.offset.y + pe.castDir * pe.ev.offset.z;
         }
 
-        private void ApplySkillEffect(RealtimeSkillDefinition s, RealtimeBattleUnit tgt, float extraMul = 1f)
+        private void ApplySkillEffect(RealtimeSkillDefinition s, RealtimeBattleUnit tgt)
         {
             if (tgt == null || tgt.unit == null || unit == null) return;
 
@@ -2289,14 +1991,6 @@ namespace SteraCube.SpaceJourney.Realtime
                         }
                         // BasicAttackMul / SkillMul を適用
                         float mul = isBasicHere ? basicAttackMul : skillMul;
-                        // Charge 効果: 次の通常攻撃のみ 1.5x (1回消費)
-                        if (isBasicHere && chargeActive)
-                        {
-                            mul *= 1.5f;
-                            chargeActive = false;
-                            manager?.BattleLog.Add($"[{BT:F2}s] {displayName} Charge 消費!");
-                        }
-                        mul *= extraMul; // トライアローの側矢 0.9x など
                         raw = Mathf.RoundToInt(raw * mul);
                         int dmg = Mathf.Max(1, raw);
 
@@ -2322,23 +2016,6 @@ namespace SteraCube.SpaceJourney.Realtime
                             ? DamagePopupSpawner.PopupKind.Magic
                             : DamagePopupSpawner.PopupKind.Damage;
                         SpawnDamagePopup(tgt.transform.position, dmg, kind);
-
-                        // 戦士 rank 3 追加攻撃 (小): 通常攻撃ヒット時に AT × 0.3 の追撃 (DF 引かない)
-                        if (isBasicHere && hasExtraAttack && tgt.IsAlive())
-                        {
-                            int extra = Mathf.Max(1, Mathf.RoundToInt(at * 0.3f));
-                            int extraBefore = tgt.unit.CurrentHp;
-                            tgt.unit.TakeDamage(extra);
-                            tgt.OnHit(tgt.unit.IsDead);
-                            manager?.OnAttack(this, tgt, extra, extraBefore, tgt.unit.CurrentHp);
-                            SpawnDamagePopup(tgt.transform.position, extra, DamagePopupSpawner.PopupKind.Damage);
-                        }
-
-                        // ランサー rank 5 ひるみ突き: 通常攻撃ヒット時に flinch
-                        if (isBasicHere && hasFlinchBasic && tgt.IsAlive() && tgt != this)
-                        {
-                            tgt.ApplyFlinch();
-                        }
 
                         // ===== Passive トリガ =====
                         // 攻撃者側: OnDealDamage + basic の時のみ N 回目 + 連続命中
@@ -2380,18 +2057,6 @@ namespace SteraCube.SpaceJourney.Realtime
                     break;
 
                 case RealtimeSkillType.Buff:
-                    // 自己バフ系 skill_id で個別効果を分岐
-                    if (s.skillId == "Charge")
-                    {
-                        chargeActive = true;
-                        manager?.BattleLog.Add($"[{BT:F2}s] {displayName} Charge 発動 (次の通常攻撃 1.5x)");
-                    }
-                    else if (s.skillId == "Barricade")
-                    {
-                        PlaceBarricade();
-                    }
-                    ApplyStatusEffects(s, tgt);
-                    break;
                 case RealtimeSkillType.Debuff:
                     ApplyStatusEffects(s, tgt);
                     break;
@@ -2435,8 +2100,7 @@ namespace SteraCube.SpaceJourney.Realtime
             MovePreventOverlap(tgt, dir, dist);
         }
 
-        /// <summary>他 unit と重ならないよう連続位置ベースで動かす。knockback/pull 共通処理。
-        /// 連続移動版: 0.1m ステップで WouldOverlap チェックしながら進む。</summary>
+        /// <summary>他unitと重なる寸前まで stepwise に動かす。knockback/pull/teleport 共通処理</summary>
         private static void MovePreventOverlap(RealtimeBattleUnit unit, Vector3 dir, float dist)
         {
             if (unit == null || dist <= 0f) return;
@@ -2452,7 +2116,8 @@ namespace SteraCube.SpaceJourney.Realtime
                 remaining -= s;
             }
             unit.transform.position = currentPos;
-            if (unit.mover != null) unit.mover.Teleport(currentPos, true);
+            // AIPath に位置同期 (ないと path が旧位置ベースのまま計算される)
+            if (unit.aiPath != null) unit.aiPath.Teleport(currentPos, false);
         }
 
         /// <summary>Move スキル: 現在ターゲット方向 (あれば) or 前方に shape.rangeMax 瞬間移動</summary>
@@ -2564,37 +2229,6 @@ namespace SteraCube.SpaceJourney.Realtime
                 if ((max && v > bestVal) || (!max && v < bestVal)) { bestVal = v; best = u; }
             }
             return best;
-        }
-
-        /// <summary>指定方向 dir に対して shape 内の対象を取得 (トライアローの側矢用)</summary>
-        private List<RealtimeBattleUnit> CollectTargetsInDirection(RealtimeSkillDefinition s, Vector3 dir)
-        {
-            var result = new List<RealtimeBattleUnit>();
-            if (manager == null) return result;
-            Vector3 selfPos = transform.position; selfPos.y = 0;
-            Vector3 dn = dir; dn.y = 0;
-            if (dn.sqrMagnitude < 0.01f) return result;
-            dn.Normalize();
-            // aim 点は self から dir 方向に rangeMax 距離
-            Vector3 aim = selfPos + dn * s.shape.rangeMax;
-            foreach (var u in manager.AllUnits)
-            {
-                if (u == null || !u.IsAlive()) continue;
-                switch (s.targetSide)
-                {
-                    case RealtimeTargetSide.Enemy:
-                        if (u.ownerSide == ownerSide) continue; break;
-                    case RealtimeTargetSide.Ally:
-                        if (u.ownerSide != ownerSide || u == this) continue; break;
-                    case RealtimeTargetSide.Self:
-                        if (u != this) continue; break;
-                    case RealtimeTargetSide.AnyAllyIncludingSelf:
-                        if (u.ownerSide != ownerSide) continue; break;
-                }
-                if (IsInShape(s.shape, selfPos, aim, dn, u.transform.position))
-                    result.Add(u);
-            }
-            return result;
         }
 
         /// <summary>スキル形状内に入る対象全員を取得 (primary 方向基準)</summary>

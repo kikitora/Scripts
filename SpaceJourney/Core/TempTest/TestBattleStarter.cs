@@ -35,9 +35,17 @@ namespace SteraCube.SpaceJourney
         public int batchCount = 1;
         [Tooltip("バッチ実行時、各戦闘でチーム構成をランダムにする")]
         public bool randomizeTeams = true;
+        [Tooltip("配置を完全ランダム化する (PickPreferredRow を無視、5x5 のどのセルにも配置)")]
+        public bool randomizePlacement = true;
         [Tooltip("チームサイズ (1戦あたりのユニット数)")]
         [Range(3, 10)]
         public int teamSize = 5;
+        [Tooltip("Realtime バッチ実行時、戦闘間の待機秒数 (勝利モーション確認用)")]
+        [Range(0f, 5f)]
+        public float batchInterBattlePauseSec = 2f;
+        [Tooltip("Realtime バッチ実行時、1 戦の最大実時間 (タイムリミット)。これを超えたら強制次戦へ")]
+        [Range(10f, 180f)]
+        public float batchMaxRealSecPerBattle = 60f;
 
         [Header("味方チーム")]
         public BattleTactic allyTactic = BattleTactic.Balanced;
@@ -164,8 +172,149 @@ namespace SteraCube.SpaceJourney
         private void Start()
         {
             if (!autoStart) return;
+            // Realtime バッチ: useActionRpgProto && batchCount > 1
+            if (useActionRpgProto && batchCount > 1)
+            {
+                StartCoroutine(RunRealtimeBatchCoroutine());
+                return;
+            }
             if (batchCount > 1) RunBatch();
             else RunTestBattle();
+        }
+
+        [ContextMenu("Realtime バッチ戦闘実行")]
+        public void RunRealtimeBatch()
+        {
+            StartCoroutine(RunRealtimeBatchCoroutine());
+        }
+
+        /// <summary>Realtime 戦闘を batchCount 回連続実行、ログを 1 ファイルに集約。
+        /// チーム/配置ランダム、戦闘間に勝利モーション確認の小休止。</summary>
+        private System.Collections.IEnumerator RunRealtimeBatchCoroutine()
+        {
+            if (realtimeStarter == null)
+            {
+                Debug.LogError("[TestBattleStarter] realtimeStarter 未設定 (Inspector)");
+                yield break;
+            }
+            var startWallClock = System.DateTime.Now;
+            var sessionLogs = new List<string>();
+            int allyWins = 0, enemyWins = 0, draws = 0;
+            float totalBattleTime = 0f;
+
+            sessionLogs.Add($"=== Realtime バッチ開始 {batchCount} 戦 ({startWallClock:yyyy-MM-dd HH:mm:ss}) ===");
+            sessionLogs.Add($"teamSize={teamSize} randomizeTeams={randomizeTeams} randomizePlacement={randomizePlacement} rank={rank}");
+
+            for (int i = 0; i < batchCount; i++)
+            {
+                var allyTends = randomizeTeams ? PickRandomTeam(teamSize) : allyMembers;
+                var enemyTends = randomizeTeams ? PickRandomTeam(teamSize) : enemyMembers;
+
+                var startData = new BattleStartData
+                {
+                    fieldLayout = BattleFieldLayout.Default5x5(),
+                    allyUnits = CreatePlacements(rank, level, allyTends, allyTactic),
+                    enemyUnits = CreatePlacements(rank, level, enemyTends, enemyTactic),
+                    initiativeSide = initiativeSide,
+                    allyMorale = allyMorale,
+                    enemyMorale = enemyMorale,
+                };
+
+                sessionLogs.Add($"\n========== 戦 {i + 1}/{batchCount} ==========");
+                sessionLogs.Add($"味方: {string.Join(",", allyTends)}");
+                sessionLogs.Add($"敵  : {string.Join(",", enemyTends)}");
+
+                // 前戦の残骸クリーンアップ (初回は no-op)
+                CleanupRealtimeBattle();
+                yield return null; // Destroy 反映を待つ 1 フレーム
+
+                realtimeStarter.StartRealtimeBattle(startData);
+                var manager = realtimeStarter.manager;
+                if (manager == null)
+                {
+                    sessionLogs.Add("  [ERROR] manager null、スキップ");
+                    continue;
+                }
+
+                // IsFinished 待機 (実時間タイムアウトで強制終了)
+                float t0 = Time.realtimeSinceStartup;
+                while (!manager.IsFinished)
+                {
+                    yield return null;
+                    if (Time.realtimeSinceStartup - t0 > batchMaxRealSecPerBattle)
+                    {
+                        sessionLogs.Add($"  [WARN] 実時間 {batchMaxRealSecPerBattle}s 超過、強制中断");
+                        break;
+                    }
+                }
+
+                // ログ収集 + 集計
+                sessionLogs.AddRange(manager.BattleLog);
+                int ws = manager.WinningSide;
+                if (ws == 0) allyWins++;
+                else if (ws == 1) enemyWins++;
+                else draws++;
+                totalBattleTime += manager.ElapsedSec;
+
+                sessionLogs.Add($"--- 戦{i + 1} 結果: {(ws == 0 ? "味方勝" : ws == 1 ? "敵勝" : "引分")} (戦闘時間 {manager.ElapsedSec:F1}s) ---");
+
+                if (batchInterBattlePauseSec > 0f)
+                    yield return new WaitForSeconds(batchInterBattlePauseSec);
+            }
+
+            // 最終クリーンアップ
+            CleanupRealtimeBattle();
+
+            // サマリ
+            sessionLogs.Add($"\n========== バッチ完了 ==========");
+            sessionLogs.Add($"味方勝利: {allyWins} ({100f * allyWins / batchCount:F1}%)");
+            sessionLogs.Add($"敵勝利  : {enemyWins} ({100f * enemyWins / batchCount:F1}%)");
+            sessionLogs.Add($"引き分け: {draws} ({100f * draws / batchCount:F1}%)");
+            sessionLogs.Add($"平均戦闘時間: {totalBattleTime / Mathf.Max(1, batchCount):F2}s");
+            sessionLogs.Add($"実行時間: {(System.DateTime.Now - startWallClock).TotalSeconds:F1}s (実時刻)");
+
+            resultLog = string.Join("\n", sessionLogs);
+            Debug.Log(resultLog);
+
+            string ts = startWallClock.ToString("yyyyMMdd_HHmmss");
+            string path = System.IO.Path.Combine(Application.dataPath, $"../__realtime_batch_{ts}.txt");
+            try
+            {
+                System.IO.File.WriteAllLines(path, sessionLogs, System.Text.Encoding.UTF8);
+                Debug.Log($"[TestBattleStarter] Realtime バッチログ保存: {path}");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[TestBattleStarter] ログ保存失敗: {e.Message}");
+            }
+        }
+
+        /// <summary>Realtime 戦闘の残骸 (ユニット/バリケード) を全削除し、manager 状態を次戦用にリセット。
+        /// 次戦の SpawnSide → Setup() で BT=0 が見えるよう ResetForNextBattle() を呼ぶ。</summary>
+        private void CleanupRealtimeBattle()
+        {
+            if (realtimeStarter == null) return;
+            var mgr = realtimeStarter.manager;
+            if (mgr != null)
+            {
+                foreach (var u in mgr.AllUnits)
+                {
+                    if (u != null && u.gameObject != null) Destroy(u.gameObject);
+                }
+                mgr.AllUnits.Clear();
+                if (mgr.barricades != null)
+                {
+                    foreach (var b in mgr.barricades)
+                    {
+                        if (b != null && b.gameObject != null) Destroy(b.gameObject);
+                    }
+                    mgr.barricades.Clear();
+                }
+                mgr.BattleLog.Clear();
+                // 前戦の BattleTime をリセット (これをやらないと次戦の Setup 内 skillNextReadyTime が
+                // 前戦の終了時刻を起点に計算され、CT が永遠に明かないバグが発生する)
+                mgr.ResetForNextBattle();
+            }
         }
 
         [ContextMenu("テスト戦闘実行 (1戦)")]
@@ -442,15 +591,30 @@ namespace SteraCube.SpaceJourney
             int memberIdx = 0;
             foreach (var tendency in members)
             {
-                int row = PickPreferredRow(tendency);
-                if (row >= maxRow) row = maxRow - 1;
-                // 指定列が満杯なら前後を順に探す
-                if (rowSlots[row].Count == 0)
+                // 配置ロジック: randomizePlacement なら preferred row 無視、
+                //               偏らず空きセルからランダムで pick
+                int row;
+                if (randomizePlacement)
                 {
+                    // 空き row のうちランダム
+                    var openRows = new List<int>();
                     for (int r = 0; r < maxRow; r++)
-                        if (rowSlots[r].Count > 0) { row = r; break; }
+                        if (rowSlots[r].Count > 0) openRows.Add(r);
+                    if (openRows.Count == 0) break;
+                    row = openRows[Random.Range(0, openRows.Count)];
                 }
-                if (rowSlots[row].Count == 0) break;
+                else
+                {
+                    row = PickPreferredRow(tendency);
+                    if (row >= maxRow) row = maxRow - 1;
+                    // 指定列が満杯なら前後を順に探す
+                    if (rowSlots[row].Count == 0)
+                    {
+                        for (int r = 0; r < maxRow; r++)
+                            if (rowSlots[r].Count > 0) { row = r; break; }
+                    }
+                    if (rowSlots[row].Count == 0) break;
+                }
 
                 int yIdx = Random.Range(0, rowSlots[row].Count);
                 int y = rowSlots[row][yIdx];

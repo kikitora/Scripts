@@ -28,6 +28,9 @@ namespace SteraCube.SpaceJourney.Realtime
         [Tooltip("ジョブ絞り込み (空=全職)")]
         public BodyJobDefinition[] jobFilter;
 
+        [Tooltip("true の時はグリッド上で経路が確保できる候補のみを対象とする (味方や壁に塞がれて到達不能な対象は除外)。false ならルート無くても選び、迂回路を探す。")]
+        public bool requireRoute = false;
+
         [Tooltip("備考 (デバッグ用)")]
         public string label = "";
     }

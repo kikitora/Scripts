@@ -20,26 +20,26 @@ namespace SteraCube.SpaceJourney.Realtime
         public float warriorWalkSpeed = 1.2f;
         [Tooltip("騎士: 普通")]
         public float knightWalkSpeed = 1.0f;
-        [Tooltip("ランサー: 機動")]
-        public float lancerWalkSpeed = 1.1f;
-        [Tooltip("射手: 機動")]
-        public float archerWalkSpeed = 1.1f;
+        [Tooltip("ランサー: 普通")]
+        public float lancerWalkSpeed = 1.0f;
+        [Tooltip("射手: 普通")]
+        public float archerWalkSpeed = 1.0f;
         [Tooltip("魔術師: 遅い")]
-        public float mageWalkSpeed = 0.8f;
+        public float mageWalkSpeed = 0.7f;
         [Tooltip("速度全体係数")]
         public float walkSpeedCoefficient = 1f;
 
-        [Header("攻撃CT (職別、秒) — castAnim 込み (発動瞬間からカウント)")]
-        [Tooltip("戦士 基本攻撃CT (Slash, 3秒)")]
-        public float warriorAttackCooldown = 3.0f;
-        [Tooltip("騎士 基本攻撃CT (Slash, 3秒)")]
-        public float knightAttackCooldown = 3.0f;
-        [Tooltip("ランサー 基本攻撃CT (Thrust, 4秒)")]
-        public float lancerAttackCooldown = 4.0f;
-        [Tooltip("射手 基本攻撃CT (ArrowShot, 4秒)")]
-        public float archerAttackCooldown = 4.0f;
-        [Tooltip("魔術師 基本攻撃CT (Burst, 5秒)")]
-        public float mageAttackCooldown = 5.0f;
+        [Header("攻撃CT (職別、秒)")]
+        [Tooltip("戦士 基本攻撃CT (元 cost=2 → 2秒)")]
+        public float warriorAttackCooldown = 2.0f;
+        [Tooltip("騎士 基本攻撃CT (cost=2)")]
+        public float knightAttackCooldown = 2.0f;
+        [Tooltip("ランサー 基本攻撃CT (cost=3)")]
+        public float lancerAttackCooldown = 3.0f;
+        [Tooltip("射手 基本攻撃CT (cost=3)")]
+        public float archerAttackCooldown = 3.0f;
+        [Tooltip("魔術師 基本攻撃CT (cost=4)")]
+        public float mageAttackCooldown = 4.0f;
 
         [Header("AGI 個人差")]
         [Tooltip("AGI の基準値 (この値でCT倍率 1.0)")]
@@ -87,7 +87,15 @@ namespace SteraCube.SpaceJourney.Realtime
         public RuntimeAnimatorController mageAnimator;
         public RuntimeAnimatorController lancerAnimator;
 
-        // 連続座標移動方式 (ContinuousMover) を使用。GridState/GridUnitMover は old/ に退避済。
+        [Header("A* Pathfinding Graph")]
+        [Tooltip("GridGraph セルサイズ (m)。戦闘フィールドのマスと合わせると桂馬移動っぽく見える (1.0 推奨)")]
+        public float astarCellSize = 1.0f;
+        [Tooltip("collision 判定 capsule 直径 (cellSize 比率)。小さいほど path が狭い gap を通る。cellSize=1 なら 0.5 推奨")]
+        public float astarCollisionDiameter = 0.5f;
+        [Tooltip("true: 4方向のみ (マス目に沿った移動)、false: 8方向 (斜め含む)")]
+        public bool astarFourDirectional = true;
+        [Tooltip("フィールド端からの歩行禁止マージン (m)。この幅分 graph を縮めてキューブの縁に立てなくする")]
+        public float astarFieldMargin = 0.5f;
 
         [Header("職別 基礎スキル (skills[0] として割り当て)")]
         public RealtimeSkillDefinition warriorBasicSkill;
@@ -107,27 +115,86 @@ namespace SteraCube.SpaceJourney.Realtime
             RealtimeBattleUnit.RangeFarMass = rangeFarMass;
             RealtimeBattleUnit.RangeMaxFarMass = rangeMaxFarMass;
 
-            // manager 初期化 (BeginBattle はまだ呼ばない。unit 登録 + SimpleGrid Init 後に呼ぶ)
+            // manager 初期化
             if (manager == null) manager = gameObject.AddComponent<RealtimeBattleManager>();
+            manager.BeginBattle();
 
-            // SimpleGrid 初期化 (spawn 配置 + 境界クランプのみ)。BeginBattle 前に必ず Active 化
-            if (fieldVisualizer != null)
-            {
-                Pathfinding.SimpleGrid.Init(fieldVisualizer.gridWidth, fieldVisualizer.gridDepth, fieldVisualizer.cellSize, fieldVisualizer);
-                Debug.Log($"[RealtimeBattleStarter] SimpleGrid initialized: depth={fieldVisualizer.gridDepth*2} width={fieldVisualizer.gridWidth} cellSize={fieldVisualizer.cellSize}");
-            }
-            else
-            {
-                Debug.LogError("[RealtimeBattleStarter] fieldVisualizer is null; SimpleGrid not initialized");
-            }
+            // unit spawn の前に、現在のフィールド位置から GridGraph を再構築。
+            // Play 時に BattleFieldVisualizer がキューブを移動させるので、
+            // Edit モードで保存された graph とはズレる。ここで追従させる。
+            SetupAstarGraphFromBattleGround();
 
-            // unitSpawner を使って3Dモデル配置 + RealtimeBattleUnit 登録
+            // unitSpawner を使って3Dモデル配置 (内部で BattleManager.InitBattle も必要)
+            // ここでは視覚スポーン + ユニット作成のみ自前実装
             SpawnSide(data.allyUnits, 0, data.allyMorale);
             SpawnSide(data.enemyUnits, 1, data.enemyMorale);
+        }
 
-            // BeginBattle (この時点で unit が全登録済み + SimpleGrid.Active 設定済み)
-            // → 内部の AttachAllMovers で全 mover が attach され、移動開始可能になる
-            manager.BeginBattle();
+        /// <summary>Layer "BattleGround" の GameObject から bounds/rotation を算出して
+        /// GridGraph を現在のフィールド位置に合わせ、Scan する。</summary>
+        private void SetupAstarGraphFromBattleGround()
+        {
+            var astar = AstarPath.active;
+            if (astar == null) { Debug.LogWarning("[RealtimeBattleStarter] AstarPath not in scene; skip graph setup"); return; }
+            var gg = astar.data?.gridGraph;
+            if (gg == null) { Debug.LogWarning("[RealtimeBattleStarter] GridGraph not found; skip"); return; }
+
+            int layerIdx = LayerMask.NameToLayer("BattleGround");
+            if (layerIdx < 0) { Debug.LogWarning("[RealtimeBattleStarter] Layer 'BattleGround' not registered"); return; }
+
+            Bounds? combined = null;
+            foreach (var go in FindObjectsOfType<GameObject>())
+            {
+                if (go.layer != layerIdx) continue;
+                var rend = go.GetComponentInChildren<Renderer>();
+                if (rend == null) continue;
+                if (combined == null) combined = rend.bounds;
+                else { var b = combined.Value; b.Encapsulate(rend.bounds); combined = b; }
+            }
+            if (combined == null) { Debug.LogWarning("[RealtimeBattleStarter] no BattleGround GameObject; skip"); return; }
+
+            Vector3 fwd = fieldVisualizer != null ? fieldVisualizer.Forward : Vector3.forward;
+            Vector3 right = fieldVisualizer != null ? fieldVisualizer.RightAxis : Vector3.right;
+            if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
+            if (right.sqrMagnitude < 0.01f) right = Vector3.right;
+
+            var b2 = combined.Value;
+            // cellSize は戦闘フィールドのマス (BattleFieldVisualizer.cellSize、デフォルト 1m) を優先。
+            // Inspector の astarCellSize は override 用 (0 以下なら field を使う)。
+            float fieldCellSize = fieldVisualizer != null && fieldVisualizer.cellSize > 0.01f
+                ? fieldVisualizer.cellSize : 1.0f;
+            float cellSize = astarCellSize > 0.01f ? astarCellSize : fieldCellSize;
+            float worldWidth = Mathf.Abs(right.x) * b2.size.x + Mathf.Abs(right.z) * b2.size.z;
+            float worldDepth = Mathf.Abs(fwd.x)   * b2.size.x + Mathf.Abs(fwd.z)   * b2.size.z;
+            // margin 分 (両端) graph を縮める
+            float margin = Mathf.Max(0f, astarFieldMargin);
+            worldWidth = Mathf.Max(cellSize, worldWidth - margin * 2f);
+            worldDepth = Mathf.Max(cellSize, worldDepth - margin * 2f);
+            int gridW = Mathf.Max(1, Mathf.RoundToInt(worldWidth / cellSize));
+            int gridD = Mathf.Max(1, Mathf.RoundToInt(worldDepth / cellSize));
+
+            gg.center = new Vector3(b2.center.x, b2.max.y, b2.center.z);
+            gg.rotation = new Vector3(0f, Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg, 0f);
+            gg.SetDimensions(gridW, gridD, cellSize);
+
+            // 4方向 or 8方向。4方向なら unit がマス目に沿ってのみ移動する (斜め不可)
+            gg.neighbours = astarFourDirectional
+                ? Pathfinding.NumNeighbours.Four
+                : Pathfinding.NumNeighbours.Eight;
+
+            // Collision: unit (Layer UnitObstacle) を検知して blocked 化するため明示的に設定。
+            // diameter/height は cellSize 比率。diameter 小さいほど path が狭い gap を通れる。
+            int obstacleLayer = LayerMask.NameToLayer("UnitObstacle");
+            int mask = obstacleLayer >= 0 ? (1 << obstacleLayer) : 0;
+            gg.collision.collisionCheck = true;
+            gg.collision.heightCheck = false;
+            gg.collision.mask = mask;
+            gg.collision.type = Pathfinding.Graphs.Grid.ColliderType.Capsule;
+            gg.collision.diameter = astarCollisionDiameter;
+            gg.collision.height = Mathf.Max(1f, 2.5f / cellSize); // unit height 2.5m を cellSize 比に
+
+            astar.Scan();
+            Debug.Log($"[RealtimeBattleStarter] GridGraph rebuilt: {gridW}x{gridD} cellSize={cellSize} center={gg.center} yaw={gg.rotation.y:F1}° mask=0x{mask:X}");
         }
 
         private void SpawnSide(List<BattleUnitPlacement> placements, int side, float morale)
@@ -190,10 +257,6 @@ namespace SteraCube.SpaceJourney.Realtime
                 var animatorComp = go.GetComponentInChildren<Animator>();
                 if (animatorComp != null)
                 {
-                    // ルートモーション無効化 (Warrior Slash 等の攻撃アニメで前進するのを防ぐ。
-                    // 連続移動は ContinuousMover 側で完全制御するためアニメから transform は触らせない)
-                    animatorComp.applyRootMotion = false;
-
                     var ag = animatorComp.gameObject;
                     if (ag.GetComponent<AnimationEventReceiver>() == null)
                         ag.AddComponent<AnimationEventReceiver>();
@@ -214,12 +277,58 @@ namespace SteraCube.SpaceJourney.Realtime
                     }
                 }
 
-                // ContinuousMover アタッチ (連続座標移動。occupant 不使用)
-                // Setup() 内でも AddComponent するが、先に存在させることで Setup が GetComponent で取得できる。
-                var preMover = go.GetComponent<Pathfinding.ContinuousMover>() ?? go.AddComponent<Pathfinding.ContinuousMover>();
-                preMover.maxSpeed = speed;
-                preMover.endReachedDistance = 1.0f;
-                preMover.simulateMovement = false; // 初期停止、Unit 側で適宜制御
+                // A* Pathfinding Project コンポーネント追加 (移動は AIPath + RVO 任せ)
+                var seeker = go.GetComponent<Pathfinding.Seeker>() ?? go.AddComponent<Pathfinding.Seeker>();
+                var aiPath = go.GetComponent<Pathfinding.AIPath>() ?? go.AddComponent<Pathfinding.AIPath>();
+                var rvoCtrl = go.GetComponent<Pathfinding.RVO.RVOController>() ?? go.AddComponent<Pathfinding.RVO.RVOController>();
+                aiPath.maxSpeed = speed;
+                aiPath.endReachedDistance = 0.1f;
+                aiPath.slowdownDistance = 0.6f;
+                aiPath.enableRotation = false; // 回転は既存ロジックに任せる
+                aiPath.simulateMovement = false;       // 初期は停止、Unit が適宜制御
+                aiPath.gravity = Vector3.zero; // 重力 OFF (地面 raycast 無効 = 落下防止)
+                // constrainInsideGraph は DynamicObstacle 更新と競合して駒送り化するため off。
+                // field 外への逸脱は ClampToField が安全ネットとして拾う。
+                aiPath.constrainInsideGraph = false;
+                rvoCtrl.radius = 0.45f;       // bodyRadius 相当
+                // lockWhenNotMoving = true にすると停止中の unit を RVO が固定し、
+                // 迂回中の unit がその脇を通れずひっかかる。false で押し退け可能にする。
+                rvoCtrl.lockWhenNotMoving = false;
+
+                // A* level 障害物化: CapsuleCollider + Kinematic Rigidbody + DynamicObstacle
+                // GridGraph が collisionCheck で unit を「壁」として認識 → 他 unit の path が迂回される
+                const int unitObstacleLayer = 6; // "UnitObstacle"
+                go.layer = unitObstacleLayer;
+
+                var col = go.GetComponent<CapsuleCollider>();
+                if (col == null) col = go.AddComponent<CapsuleCollider>();
+                if (col != null)
+                {
+                    col.radius = 0.45f;
+                    col.height = 2.5f;  // graph plane を確実に跨ぐよう拡大
+                    col.center = new Vector3(0f, 0.5f, 0f);  // feet の少し上〜上方 1.75m
+                    col.direction = 1; // Y軸
+                }
+
+                var rb = go.GetComponent<Rigidbody>();
+                if (rb == null) rb = go.AddComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.isKinematic = true; // 物理影響なし (moving static collider 警告回避)
+                    rb.useGravity = false;
+                }
+                else
+                {
+                    Debug.LogWarning($"[RealtimeBattleStarter] {go.name}: Rigidbody AddComponent returned null");
+                }
+
+                var dynObs = go.GetComponent<Pathfinding.DynamicObstacle>();
+                if (dynObs == null) dynObs = go.AddComponent<Pathfinding.DynamicObstacle>();
+                if (dynObs != null)
+                {
+                    dynObs.updateError = 0.5f; // 0.5m 動いたら graph 更新
+                    dynObs.checkTime = 0.2f;
+                }
 
                 // RealtimeBattleUnit アタッチ
                 var rtu = go.AddComponent<RealtimeBattleUnit>();
@@ -476,12 +585,6 @@ namespace SteraCube.SpaceJourney.Realtime
                             action = RealtimeAction.CastSkill, actionSkillIndex = 2,
                             label = "弱い味方が狙われてる → Provoke"
                         },
-                        new RealtimeActionEntry { // 接敵 (Slash 射程 = 1m 内) かつ Barricade CT 空 → Barricade 設置
-                            condition = RealtimeCondition.TargetInSkillRange,
-                            conditionSkillIndex = 0, // Slash の射程 (近接) で接敵判定流用
-                            action = RealtimeAction.CastSkill, actionSkillIndex = 3,
-                            label = "接敵中 → Barricade"
-                        },
                         new RealtimeActionEntry { // 敵2体以上内に AND CT空 → Defend
                             condition = RealtimeCondition.EnemiesHitCountGe,
                             conditionSkillIndex = 2, conditionParam = 2f, // Provokeのshape (自分中心2m) で2体判定流用
@@ -495,24 +598,15 @@ namespace SteraCube.SpaceJourney.Realtime
                 case "Archer":
                     return new List<RealtimeActionEntry>
                     {
-                        // 1. 近接 1m 内 + DaggerStab CT 空 → 短剣突き
-                        new RealtimeActionEntry {
+                        new RealtimeActionEntry { // 攻撃優先: 1m内 + CT空なら DaggerStab
                             condition = RealtimeCondition.CanCastSkill,
                             conditionSkillIndex = 1,
                             action = RealtimeAction.CastSkill, actionSkillIndex = 1,
                             label = "1m内 DaggerStab"
                         },
-                        // 2. 弓射程 (2-5m) + ArrowShot CT 空 → 弓射
                         new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "ArrowShot"),
-                        // 3. 弓射程内 (CT 中) → 維持 (近寄らず後退もせず)
-                        new RealtimeActionEntry {
-                            condition = RealtimeCondition.TargetInSkillRange,
-                            conditionSkillIndex = 0,
-                            action = RealtimeAction.MoveToOwnRange,
-                            label = "弓射程内 → 待機"
-                        },
-                        // 4. 弓射程外 (= dead zone 1-2m or far >5m) → 近接距離まで詰める
-                        new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToCloseRange, "近接 (1m) まで詰める"),
+                        new RealtimeActionEntry(RealtimeCondition.TargetWithinClose, RealtimeAction.MoveAwayToMid, "攻撃できない + 近接 → 離れる"),
+                        new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToOwnRangeKeep, "射程維持 (5m)"),
                     };
 
                 case "Lancer":
@@ -531,46 +625,18 @@ namespace SteraCube.SpaceJourney.Realtime
                 case "Mage":
                     return new List<RealtimeActionEntry>
                     {
-                        // 1. 味方HP<50% → HealingWave (skill[2])
-                        new RealtimeActionEntry {
+                        new RealtimeActionEntry { // 味方HP<50% → HealingWave (CT無ければ fall-through)
                             condition = RealtimeCondition.AllyHpBelowPercent,
                             conditionParam = 50f,
-                            action = RealtimeAction.CastSkill, actionSkillIndex = 2,
+                            action = RealtimeAction.CastSkill, actionSkillIndex = 1,
                             label = "味方HP<50 → HealingWave"
                         },
-                        // 2. 近接 1m 内 + Bash CT 空 → 殴打
-                        new RealtimeActionEntry {
-                            condition = RealtimeCondition.CanCastSkill,
-                            conditionSkillIndex = 1,
-                            action = RealtimeAction.CastSkill, actionSkillIndex = 1,
-                            label = "1m内 Bash"
-                        },
-                        // 3. 魔法射程 (2-5m) + Burst CT 空 → 通常魔法
-                        new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "Burst"),
-                        // 4. 魔法射程内 (CT 中) → 維持
-                        new RealtimeActionEntry {
-                            condition = RealtimeCondition.TargetInSkillRange,
-                            conditionSkillIndex = 0,
-                            action = RealtimeAction.MoveToOwnRange,
-                            label = "魔法射程内 → 待機"
-                        },
-                        // 5. 射程外 (dead zone or far) → 近接距離まで詰める
-                        new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToCloseRange, "近接 (1m) まで詰める"),
+                        new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "Burst (3-5m)"),
+                        new RealtimeActionEntry(RealtimeCondition.TargetWithinClose, RealtimeAction.MoveAwayToFar, "攻撃できない + 近接 → 離れる"),
+                        new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToOwnRangeKeep, "射程維持 (5m)"),
                     };
 
                 case "Warrior":
-                    return new List<RealtimeActionEntry>
-                    {
-                        new RealtimeActionEntry { // CT 整ったら Charge (次の通常攻撃 1.5x)
-                            condition = RealtimeCondition.CanCastSkill,
-                            conditionSkillIndex = 1,
-                            action = RealtimeAction.CastSkill, actionSkillIndex = 1,
-                            label = "Charge (次の通常攻撃 1.5x)"
-                        },
-                        new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "Slash"),
-                        new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToOwnRange, "接近"),
-                    };
-
                 default:
                     return null; // デフォルト使用 (skills[2]→[1]→basic→Move)
             }

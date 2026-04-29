@@ -704,7 +704,7 @@ namespace SteraCube.SpaceJourney
                     soul.SetActionList(bodyJobId, actionList);
                 }
 
-                Debug.Log($"[TestBattleStarter] 生��: {tendency} → Body={body.BodyJobId} Race={body.RaceId} Weapon={body.WeaponId}");
+                Debug.Log($"[TestBattleStarter] 生成: {tendency} → Body={body.BodyJobId} Race={body.RaceId}");
 
                 placements.Add(new BattleUnitPlacement(soul, body, cell));
                 memberIdx++;
@@ -744,18 +744,6 @@ namespace SteraCube.SpaceJourney
         private static List<SkillDefinition> CollectAllSkills(SoulInstance soul, BodyInstance body, MasterDatabase db)
         {
             var skills = new List<SkillDefinition>();
-
-            // ボディ職基本スキル
-            var bodyJob = db.GetBodyJobById(body.BodyJobId);
-            if (bodyJob?.baseSkills != null)
-            {
-                foreach (var skill in bodyJob.baseSkills)
-                    if (skill != null) skills.Add(skill);
-            }
-
-            // 武器パッシブ
-            var weapon = db.GetWeaponById(body.WeaponId);
-            if (weapon?.effectSkill != null) skills.Add(weapon.effectSkill);
 
             // 種族パッシブ
             var race = db.GetRaceById(body.RaceId);

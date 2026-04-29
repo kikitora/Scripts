@@ -63,6 +63,22 @@ namespace SteraCube.SpaceJourney
             animator.SetBool(PARAM_MOVING, moving);
         }
 
+        /// <summary>方向転換アニメ。WalkRight/WalkLeft state があれば CrossFade、無ければ Walk fallback。
+        /// 戻り値: 専用 state を再生できたら true、Walk fallback なら false。</summary>
+        public bool PlayTurn(bool right)
+        {
+            if (animator == null) return false;
+            string state = right ? "WalkRight" : "WalkLeft";
+            if (HasState(state))
+            {
+                // 専用 state 再生 (Walk と同レイヤーなので Moving=false にして競合回避)
+                if (hasMoving) animator.SetBool(PARAM_MOVING, false);
+                animator.CrossFadeInFixedTime(state, 0.08f);
+                return true;
+            }
+            return false;
+        }
+
         public void PlayAttack()
         {
             if (!hasAttack || animator == null) return;

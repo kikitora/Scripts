@@ -54,6 +54,9 @@ namespace SteraCube.SpaceJourney.Realtime
         TargetInSkillRange,      // 現在ターゲットが skills[i] の射程内
         CanCastSkill,            // CT空 AND 射程内 (合成、一番よく使う条件)
         EnemiesHitCountGe,       // skills[i] を今撃てば conditionParam 体以上ヒット
+        AnyEnemyInSkillRange,    // currentTarget に縛られず、誰か敵が skills[i] 射程内に居る (currentTarget が射程外でも別の敵を撃ちに行ける)
+        CanCastSkillAny,         // CT空 AND skills[i] 射程内に敵 1 体以上 (= AnyEnemyInSkillRange + IsSkillReady)
+        TargetOutsideSkillRange, // currentTarget が skills[i] の射程外 (= TargetInSkillRange の否定)
         SelfHpBelowPercent,      // 自HP < conditionParam%
         AllyHpBelowPercent,      // HP < conditionParam% の味方が存在
         CurrentTargetIsAlly,     // currentTarget が味方陣営
@@ -61,7 +64,7 @@ namespace SteraCube.SpaceJourney.Realtime
         FragileAllyTargetedByEnemy, // 弓/魔/槍 味方が敵に狙われてる (Knight用)
         WasAttackedRecently,     // 直近3秒以内に被弾 (lastAttacker が有効)
         AttackedAndNoEnemyInBasicRange, // 被弾直近 AND preferredRange 内に敵なし
-        AttackerCloserThanCurrentTarget, // 被弾直近 AND attacker が現ターゲットより近い
+        AttackerCloserThanCurrentTarget, // 被弾直近 AND attacker が現ターゲットより近い AND currentTarget が skills[0] 射程外
     }
 
     public enum RealtimeAction

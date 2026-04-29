@@ -117,6 +117,10 @@ namespace SteraCube.SpaceJourney.Realtime
         public float lifeSec = 2f;
         [Tooltip("親子化する子オブジェクト名 (例: WeaponPoint)。空なら world 座標に固定")]
         public string attachBoneName = "";
+        [Tooltip("true: attachBoneName が見つからない場合 Effect spawn を skip (fallback しない)。" +
+                 "false: 見つからない場合 Weapon_Root_R 等に fallback。" +
+                 "TrailTip 等「装備武器に依存」する Effect では true 推奨。")]
+        public bool requireBone = false;
         [Tooltip("SE (kind=PlaySound 時)")]
         public AudioClip sound;
         public string label;

@@ -78,6 +78,7 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
         private SteraCube.SpaceJourney.Realtime.RealtimeBattleUnit _owner;
         private List<Vector3> _path;
         private float _pathComputedAt = -999f;
+        private float _stuckTime = 0f;  // velocity ≈ 0 が続いた累積時間 (エスケープ判定用)
 
         // ======================== 初期化 ========================
 
@@ -167,6 +168,29 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             // Barricade に向かう velocity 成分を削る (壁通過防止)
             v = ClampVelocityAgainstBarricades(v);
 
+            // スタック検出 + 強制エスケープ:
+            // 動こうとしてるのに velocity が 0 近辺 (= clamp で全部削れた) が 0.8s 続いたら、
+            // clamp 無視で横方向に強制ステップ (1 フレ分だけ無理やり押し抜ける)。
+            const float stuckEscapeThreshold = 0.8f;
+            if (v.sqrMagnitude < 0.01f * maxSpeed * maxSpeed)
+            {
+                _stuckTime += dt;
+                if (_stuckTime > stuckEscapeThreshold)
+                {
+                    // 90° サイドステップ: ID で左右決定論的に、push-out で次フレに重なり解消
+                    Vector3 baseDir = dir.sqrMagnitude > 0.01f ? dir : transform.forward;
+                    int preferRight = (GetInstanceID() & 1);
+                    float angle = preferRight == 0 ? 90f : -90f;
+                    Vector3 escape = Quaternion.AngleAxis(angle, Vector3.up) * baseDir;
+                    v = escape.normalized * maxSpeed * 0.6f;
+                    _stuckTime = 0f;  // リセット
+                }
+            }
+            else
+            {
+                _stuckTime = 0f;
+            }
+
             velocity = v;
 
             // 候補位置 (y 軸は固定)
@@ -235,10 +259,11 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
 
             // 検出半径 / steer 強度を大きめにとる。
             // 「前にキャラがいてルートが塞がっている」場合、早めに横に振って回り込ませる。
-            float avoidR = radius * 6f;
-            float weightMul = 3f;
+            float avoidR = radius * 9f;       // 検出半径拡張 (6r → 9r)
+            float weightMul = 6f;              // sideways 重み強化 (3 → 6)
             float biasX = 0f;
             float biasZ = 0f;
+            int blockingCount = 0;             // 前方ブロッカー数 (デッドロック検出)
             Vector3 myPos = transform.position;
 
             int ownerSide = _owner.ownerSide;
@@ -258,35 +283,54 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
                 // 前方判定: 進行方向との内積が正のときのみ avoid
                 float forward = rx * desiredDir.x + rz * desiredDir.z;
                 if (forward <= 0f) continue;
+                blockingCount++;
 
-                // cross product (rel × desired) で左右を決定
-                float cross = rx * desiredDir.z - rz * desiredDir.x;
-                if (Mathf.Abs(cross) < 0.05f * dval)
-                {
-                    // 真正面: ID ベースで安定 tiebreak
-                    int tie = (GetInstanceID() - u.mover.GetInstanceID()) & 1;
-                    cross = (tie == 0) ? -1f : 1f;
-                }
+                AccumulateAvoidanceBias(desiredDir, rx, rz, dval, forward, avoidR, weightMul,
+                    u.mover.GetInstanceID(), myPos, ref biasX, ref biasZ);
+            }
 
-                // tangent 方向 (相手の反対側に滑る)
-                float tx, tz;
-                if (cross > 0f)
+            // バリケード回避 (Active barricade を obstacle として扱う、closest point on wall で位置算出)
+            if (_owner.manager.barricades != null)
+            {
+                foreach (var b in _owner.manager.barricades)
                 {
-                    tx = -desiredDir.z;
-                    tz = desiredDir.x;
+                    if (b == null || !b.IsActive) continue;
+                    Vector3 closestOnWall = b.ClosestPointOnWall(myPos);
+                    float rx = closestOnWall.x - myPos.x;
+                    float rz = closestOnWall.z - myPos.z;
+                    float dval = Mathf.Sqrt(rx * rx + rz * rz);
+                    if (dval < 1e-6f || dval > avoidR) continue;
+                    float forward = rx * desiredDir.x + rz * desiredDir.z;
+                    if (forward <= 0f) continue;
+                    blockingCount++;
+                    AccumulateAvoidanceBias(desiredDir, rx, rz, dval, forward, avoidR, weightMul,
+                        b.GetInstanceID(), myPos, ref biasX, ref biasZ);
                 }
-                else
-                {
-                    tx = desiredDir.z;
-                    tz = -desiredDir.x;
-                }
+            }
 
-                // 強さ: 近距離 & 高い前方度合いほど強
-                float closeW = 1f - dval / avoidR;
-                float forwardW = forward / Mathf.Max(0.01f, dval); // 0..1 (cosine 相当)
-                float weight = closeW * forwardW * weightMul;
-                biasX += tx * weight;
-                biasZ += tz * weight;
+            // デッドロック対策: ブロッカー有るのに左右バイアスが相殺されてゼロに近い場合、
+            // ID ベースで決まった preferred side に強制的に横振り
+            if (blockingCount > 0)
+            {
+                float biasMag = Mathf.Sqrt(biasX * biasX + biasZ * biasZ);
+                if (biasMag < 0.5f)
+                {
+                    // 0 or 拮抗 → 強制サイドステップ
+                    int preferRight = (GetInstanceID() & 1);
+                    float forceTx, forceTz;
+                    if (preferRight == 0)
+                    {
+                        forceTx = -desiredDir.z;
+                        forceTz = desiredDir.x;
+                    }
+                    else
+                    {
+                        forceTx = desiredDir.z;
+                        forceTz = -desiredDir.x;
+                    }
+                    biasX += forceTx * 1.5f;
+                    biasZ += forceTz * 1.5f;
+                }
             }
 
             float newX = desiredDir.x + biasX;
@@ -294,6 +338,52 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             float len = Mathf.Sqrt(newX * newX + newZ * newZ);
             if (len < 1e-9f) return desiredDir;
             return new Vector3(newX / len, 0f, newZ / len);
+        }
+
+        /// <summary>obstacle (rx, rz, dval) に対して左右どちらに sidestep するか決め、bias を加算。
+        /// field 端で open space が無い側は反対へ自動 flip (デッドエンド回避)。</summary>
+        private void AccumulateAvoidanceBias(
+            Vector3 desiredDir, float rx, float rz, float dval, float forward,
+            float avoidR, float weightMul, int obstacleId, Vector3 myPos,
+            ref float biasX, ref float biasZ)
+        {
+            // cross product で左右決定
+            float cross = rx * desiredDir.z - rz * desiredDir.x;
+            if (Mathf.Abs(cross) < 0.05f * dval)
+            {
+                int tie = (GetInstanceID() - obstacleId) & 1;
+                cross = (tie == 0) ? -1f : 1f;
+            }
+
+            // 左 tangent / 右 tangent
+            Vector3 tangentLeft = new Vector3(-desiredDir.z, 0f, desiredDir.x);
+            Vector3 tangentRight = new Vector3(desiredDir.z, 0f, -desiredDir.x);
+            Vector3 chosen = cross > 0f ? tangentLeft : tangentRight;
+
+            // フィールド端 open space チェック: 1.5m 進んだ位置が field 内かどうか
+            // 選んだ側が field 外 → 反対側に flip
+            const float probeDist = 1.5f;
+            if (_grid != null)
+            {
+                Vector3 probe = myPos + chosen * probeDist;
+                Vector3 clamped = _grid.ClampToField(probe);
+                bool chosenBlocked = (Mathf.Abs(probe.x - clamped.x) > 0.1f || Mathf.Abs(probe.z - clamped.z) > 0.1f);
+                if (chosenBlocked)
+                {
+                    Vector3 alt = (chosen == tangentLeft) ? tangentRight : tangentLeft;
+                    Vector3 altProbe = myPos + alt * probeDist;
+                    Vector3 altClamped = _grid.ClampToField(altProbe);
+                    bool altBlocked = (Mathf.Abs(altProbe.x - altClamped.x) > 0.1f || Mathf.Abs(altProbe.z - altClamped.z) > 0.1f);
+                    if (!altBlocked) chosen = alt; // 反対側が空いてるなら flip
+                    // 両側ブロックされてる場合は元のまま (stuck escape に任せる)
+                }
+            }
+
+            float closeW = 1f - dval / avoidR;
+            float forwardW = forward / Mathf.Max(0.01f, dval);
+            float weight = closeW * forwardW * weightMul;
+            biasX += chosen.x * weight;
+            biasZ += chosen.z * weight;
         }
 
         // ======================== velocity clamp ========================

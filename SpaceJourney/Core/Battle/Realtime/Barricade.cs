@@ -128,10 +128,10 @@ namespace SteraCube.SpaceJourney.Realtime
         /// <summary>円 (中心 p, 半径 radius) と壁の重なり判定 (XZ)。</summary>
         public bool OverlapsCircle(Vector3 p, float radius) => DistanceTo(p) < radius;
 
-        /// <summary>点 p が「caster〜壁前面 corridor」内に居るか。
-        /// 居る場合 (true, push_dist)。push_dist は壁前面 + radius + 0.05 までの距離。
+        /// <summary>点 p が「壁の footprint + 前方 1m 以内」のノックバック範囲内に居るか。
+        /// 居る場合 (true, push_dist)。push_dist は壁の遠側 + radius + 0.05 までの距離。
         /// 「前面」= caster と反対側 (= facing 方向側、along_facing > 0)。
-        /// Python barricade.Barricade._in_push_corridor の 1:1 移植。</summary>
+        /// 範囲外 (壁から遠い、壁の後ろ等) の敵は影響を受けない。</summary>
         public bool TryGetPushCorridor(Vector3 p, Vector3 ownerPos, float radius, out float pushDist)
         {
             pushDist = 0f;
@@ -140,16 +140,17 @@ namespace SteraCube.SpaceJourney.Realtime
             float lateral = rel.x * along.x + rel.z * along.z;
             float alongFacing = rel.x * facing.x + rel.z * facing.z;
 
-            float ox = ownerPos.x - center.x;
-            float oz = ownerPos.z - center.z;
-            float ownerAlongFacing = ox * facing.x + oz * facing.z;
-
+            // 横軸: 壁の長さ範囲内 (3m 幅) + radius
             if (Mathf.Abs(lateral) > LENGTH * 0.5f + radius) return false;
 
-            float frontLimit = THICKNESS * 0.5f + radius;
-            float backLimit = ownerAlongFacing - radius;
+            // 縦軸: 壁の back face (-THICKNESS/2 - radius) 〜 壁の前方 1m + radius
+            // (壁の後ろの敵は対象外、前方 1 マスを超える敵も対象外)
+            const float pushBufferForward = 1.0f;
+            float backLimit = -THICKNESS * 0.5f - radius;
+            float frontLimit = THICKNESS * 0.5f + radius + pushBufferForward;
             if (alongFacing < backLimit || alongFacing > frontLimit) return false;
 
+            // 押し先: 壁の遠い側 + radius + 0.05
             float targetAlong = THICKNESS * 0.5f + radius + 0.05f;
             float dist = targetAlong - alongFacing;
             if (dist <= 0f) return false;

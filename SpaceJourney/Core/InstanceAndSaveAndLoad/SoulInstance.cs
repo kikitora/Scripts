@@ -778,13 +778,6 @@ namespace SteraCube.SpaceJourney
 
                 var skills = new List<SkillDefinition>();
 
-                // ボディ職基本スキル
-                if (bodyJob.baseSkills != null)
-                {
-                    foreach (var skill in bodyJob.baseSkills)
-                        if (skill != null) skills.Add(skill);
-                }
-
                 // ソウル生業スキル (習得済み)
                 if (learnedIds != null)
                 {

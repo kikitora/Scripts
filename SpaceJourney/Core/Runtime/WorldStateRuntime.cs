@@ -174,7 +174,6 @@ namespace SteraCube.SpaceJourney
             var playerBody = new BodyInstance(
                 raceId: "",
                 bodyJobId: "",
-                weaponId: "",
                 maxHp: hpBase,
                 at: otherBase,
                 df: otherBase,

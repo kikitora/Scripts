@@ -26,9 +26,6 @@ namespace SteraCube.SpaceJourney
         [Tooltip("空なら MasterDatabase からランダム選択。")]
         [SerializeField] private string bodyJobId;
 
-        [Tooltip("空なら BodyJobDefinition.weaponCandidateIds から minRank を考慮して抽選。")]
-        [SerializeField] private string weaponId;
-
         public string DefinitionId => definitionId;
 
         public BodyInstance CreateBodyInstance()
@@ -38,8 +35,7 @@ namespace SteraCube.SpaceJourney
             return BodyFactory.CreateRandom(
                 rank: rank,
                 raceId: string.IsNullOrEmpty(raceId) ? null : raceId,
-                bodyJobId: string.IsNullOrEmpty(bodyJobId) ? null : bodyJobId,
-                weaponId: string.IsNullOrEmpty(weaponId) ? null : weaponId
+                bodyJobId: string.IsNullOrEmpty(bodyJobId) ? null : bodyJobId
             );
         }
     }

@@ -574,6 +574,15 @@ namespace SteraCube.SpaceJourney.Realtime
                 // 明示的に違う値が設定されてる場合のみ上書き
                 if (w.attachScale != Vector3.one)
                     weaponGo.transform.localScale = w.attachScale;
+
+                // TrailTip 自動生成 (trailTipLocalPosition が指定されてる時のみ)
+                if (w.trailTipLocalPosition != Vector3.zero)
+                {
+                    var tipGo = new GameObject("TrailTip");
+                    tipGo.transform.SetParent(weaponGo.transform, false);
+                    tipGo.transform.localPosition = w.trailTipLocalPosition;
+                    tipGo.transform.localRotation = Quaternion.identity;
+                }
             }
 
             // 両手持ち：左手 IK セットアップ
@@ -643,15 +652,21 @@ namespace SteraCube.SpaceJourney.Realtime
             public RealtimeSkillDefinition skill;
             public RealtimeBattleUnit primaryTarget;
             public List<RealtimeBattleUnit> hitTargets;
+            public Barricade barricadeTarget;       // 非 null なら DealDamage はバリケードに ApplyFixedHit (近接 Slash 用)
             public Vector3 castOrigin;
             public Vector3 castAim;
             public Vector3 castDir;
             public float damageMul; // トライアローの側矢などで 0.9 倍にする用 (default 1.0)
         }
         private RealtimeBattleUnit currentTarget;
+        // 基本スキル射程内に敵バリケードがあれば優先攻撃 (Warrior/Knight 等の近接職向け)。
+        // currentTarget (RealtimeBattleUnit) と独立に管理。
+        private Barricade currentBarricadeTarget;
         internal RealtimeBattleManager manager;
         private JobAnimator anim;
         private bool wasMoving;
+        private bool _isTurning;       // 方向転換中フラグ (Walk アニメ流して回転を見せる用)
+        private bool _turnRight;       // 旋回方向 (true=右回り、false=左回り)
         private float stuckTime; // 立ち止まり累積時間
 
         // 連続座標移動コントローラ (ContinuousMover)
@@ -829,7 +844,10 @@ namespace SteraCube.SpaceJourney.Realtime
 
             // ターゲット維持: 挑発優先 → targetList 再評価 (1秒毎 or target死亡)
             MaintainCurrentTarget();
-            if (currentTarget == null) return; // 選べる対象なし
+            // 基本スキル射程内に敵バリケードがあれば優先攻撃 (Warrior/Knight 等)
+            UpdateBarricadeTarget();
+            // 通常 currentTarget が null でもバリケードが居れば BasicAttack 可能なので continue
+            if (currentTarget == null && currentBarricadeTarget == null) return;
 
             Vector3 myPos = transform.position;
             Vector3 targetPos = currentTarget.transform.position;
@@ -894,7 +912,21 @@ namespace SteraCube.SpaceJourney.Realtime
                     facingDir = transform.forward;
                 }
                 Quaternion faceRot = Quaternion.LookRotation(facingDir, Vector3.up);
+                // 方向転換中フラグ (Slerp 前の差分で判定 = 今フレ内に転換が必要かどうか)
+                _isTurning = (moveDir.sqrMagnitude <= 0.5f) && Quaternion.Angle(transform.rotation, faceRot) > 5f;
+                if (_isTurning)
+                {
+                    // 旋回方向 (右回り or 左回り) を cross product で判定
+                    Vector3 fwd = transform.forward;
+                    Vector3 toFace = faceRot * Vector3.forward;
+                    float crossY = fwd.x * toFace.z - fwd.z * toFace.x;
+                    _turnRight = crossY < 0f;  // XZ 平面: 負 = 右回り (時計周り)
+                }
                 transform.rotation = Quaternion.Slerp(transform.rotation, faceRot, 6f * BDT);
+            }
+            else
+            {
+                _isTurning = false;
             }
 
             // フィールド境界クランプ (5x5 × 2 side = 幅5×奥行10)
@@ -911,6 +943,27 @@ namespace SteraCube.SpaceJourney.Realtime
             stuckTime = 0f;
 
             // アニメ反映
+            // 1. 方向転換中: WalkLeft/WalkRight の専用 state があればそれを再生 (CrossFade)。
+            //    無ければ Walk アニメ (moving=true) で fallback。
+            // 2. 通常移動: SetMoving で Walk/Idle 切替。
+            if (_isTurning && !moving)
+            {
+                bool playedTurn = anim != null && anim.PlayTurn(_turnRight);
+                if (playedTurn)
+                {
+                    // CrossFade で WalkLeft/WalkRight 直接再生 → SetMoving(false) で安定
+                    if (wasMoving)
+                    {
+                        wasMoving = false;
+                        // SetMoving は PlayTurn 内で呼ばれてる
+                    }
+                    moving = false;
+                }
+                else
+                {
+                    moving = true;
+                }
+            }
             if (moving != wasMoving)
             {
                 wasMoving = moving;
@@ -1000,6 +1053,13 @@ namespace SteraCube.SpaceJourney.Realtime
             manager.barricades.Add(bar);
             Barricade.PushEnemiesAside(manager, bar, radius);
             manager.BattleLog.Add($"[{BT:F2}s] {displayName} Barricade 設置 (HP {bar.hp}, 5s)");
+            // 全ユニットの target/path を即時再評価 (バリケード出現で迂回開始)
+            foreach (var u in manager.AllUnits)
+            {
+                if (u == null || !u.IsAlive()) continue;
+                u.nextDecisionTime = 0f;
+                if (u.mover != null) u.mover.simulateMovement = false;  // 旧 destination 解除、次フレで AI が方向再決定
+            }
             return true;
         }
 
@@ -1150,6 +1210,12 @@ namespace SteraCube.SpaceJourney.Realtime
                     return IsSkillReady(entry.conditionSkillIndex) && IsTargetInSkillRange(entry.conditionSkillIndex);
                 case RealtimeCondition.EnemiesHitCountGe:
                     return CountSkillHits(entry.conditionSkillIndex) >= Mathf.RoundToInt(entry.conditionParam);
+                case RealtimeCondition.AnyEnemyInSkillRange:
+                    return AnyEnemyInSkillRange(entry.conditionSkillIndex);
+                case RealtimeCondition.CanCastSkillAny:
+                    return IsSkillReady(entry.conditionSkillIndex) && AnyEnemyInSkillRange(entry.conditionSkillIndex);
+                case RealtimeCondition.TargetOutsideSkillRange:
+                    return currentTarget != null && !IsTargetInSkillRange(entry.conditionSkillIndex);
                 case RealtimeCondition.SelfHpBelowPercent:
                     return unit != null && unit.CurrentHp * 100f < unit.MaxHp * entry.conditionParam;
                 case RealtimeCondition.AllyHpBelowPercent:
@@ -1175,11 +1241,14 @@ namespace SteraCube.SpaceJourney.Realtime
             return lastAttacker != null && lastAttacker.IsAlive() && BT < lastAttackerUntil;
         }
 
-        /// <summary>被弾直近 AND lastAttacker が現ターゲットより近い</summary>
+        /// <summary>被弾直近 AND lastAttacker が現ターゲットより近い AND currentTarget が基本スキル(skills[0])射程外。
+        /// (currentTarget が射程内なら攻撃継続が優先で、attacker への切替は行わない)</summary>
         private bool IsAttackerCloserThanCurrentTarget()
         {
             if (!IsLastAttackerValid()) return false;
             if (currentTarget == null || !currentTarget.IsAlive()) return true; // target 無し → attacker 優先
+            // currentTarget が基本スキル射程内なら切替不要 (そのまま攻撃継続)
+            if (IsTargetInSkillRange(0)) return false;
             float dTarget = Vector3.Distance(transform.position, currentTarget.transform.position);
             float dAttacker = Vector3.Distance(transform.position, lastAttacker.transform.position);
             return dAttacker < dTarget;
@@ -1222,6 +1291,13 @@ namespace SteraCube.SpaceJourney.Realtime
 
         private void MaintainCurrentTarget()
         {
+            // 攻撃アニメ中 / のけぞり中はターゲット切替を凍結
+            // (攻撃発動時に向きを固定したまま振り終えるため、anim 中に対象が死亡しても切替えない)
+            // 解除されたフレームで targetGone (=対象死亡) なら直後の判定で即時再選択ルートに入るので
+            // anim 終了後の切替は確実に発生する。
+            bool isAttacking = BT < attackingUntil + postAttackLockSec;
+            if (isAttacking || IsFlinching) return;
+
             // 1. 挑発: 強制ターゲット固定 (有効期間中)
             if (forcedTarget != null && forcedTarget.IsAlive() && BT < forcedUntil)
             {
@@ -1240,19 +1316,22 @@ namespace SteraCube.SpaceJourney.Realtime
             bool timeToReEval = BT >= nextDecisionTime;
             if (!targetGone && !timeToReEval) return; // 維持
 
-            // 3. targetList 上から評価して dominant entry を特定
+            // 3. targetList 上から評価して、条件マッチ AND 有効候補が居る最初の entry を採用。
+            // (rangeFilterSkillIndex で候補ゼロなら次のルールへフォールスルー)
             var list = GetEffectiveTargetList();
             int dominantIdx = -1;
             RealtimeTargetEntry dominant = null;
+            RealtimeBattleUnit picked = null;
             for (int i = 0; i < list.Count; i++)
             {
                 var e = list[i];
-                if (EvalTargetCondition(e))
-                {
-                    dominantIdx = i;
-                    dominant = e;
-                    break;
-                }
+                if (!EvalTargetCondition(e)) continue;
+                var t = SelectTargetByEntry(e);
+                if (t == null) continue;  // 候補無し → 次優先度へ
+                dominantIdx = i;
+                dominant = e;
+                picked = t;
+                break;
             }
 
             nextDecisionTime = BT + decisionIntervalSec;
@@ -1264,15 +1343,97 @@ namespace SteraCube.SpaceJourney.Realtime
                 return;
             }
 
-            // 4. dominant が前回と同じで currentTarget が生きてれば維持
+            // 4. dominant が前回と同じで currentTarget が生きてれば維持 (振動防止)
             if (dominantIdx == lastDominantIndex && currentTarget != null && currentTarget.IsAlive())
             {
                 return;
             }
 
             // 5. 新 dominant or target 死亡 → 再選択
-            currentTarget = SelectTargetByEntry(dominant);
+            currentTarget = picked;
             lastDominantIndex = dominantIdx;
+        }
+
+        /// <summary>基本スキル (skills[0]) を barricade に発動。timeline の DealDamage 時刻で ApplyFixedHit (1 ダメ固定)。
+        /// status/knockback は barricade に効かない (DealDamage 経路で barricadeTarget を見て ApplyFixedHit のみ走る)。</summary>
+        private bool CastBasicAttackOnBarricade(Barricade target)
+        {
+            if (target == null || !target.IsActive) return false;
+            if (skills == null || skills.Count == 0) return false;
+            var s = skills[0];
+            if (s == null) return false;
+            if (BT < skillNextReadyTime[0]) return false;
+
+            // 向き合わせ
+            Vector3 toB = target.center - transform.position;
+            toB.y = 0f;
+            if (toB.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.LookRotation(toB.normalized, Vector3.up);
+
+            anim?.PlayAttack();
+            skillNextReadyTime[0] = BT + s.cooldownSec * skillCooldownMul * cooldownMul;
+            attackingUntil = BT + s.castAnimSec;
+            activeCastSkill = s;
+
+            // timeline 経由で発動 (DealDamage 時刻に barricade hit、PlaySound などもそのまま発火)
+            if (s.timeline != null && s.timeline.Count > 0)
+            {
+                foreach (var ev in s.timeline)
+                {
+                    if (ev == null) continue;
+                    pendingEvents.Add(new PendingSkillEvent
+                    {
+                        fireTime = BT + Mathf.Max(0f, ev.timeSec),
+                        ev = ev,
+                        skill = s,
+                        primaryTarget = null,
+                        hitTargets = null,
+                        barricadeTarget = ev.kind == RealtimeSkillEventKind.DealDamage ? target : null,
+                        castOrigin = transform.position,
+                        castAim = target.center,
+                        castDir = toB.sqrMagnitude > 0.01f ? toB.normalized : transform.forward,
+                        damageMul = 1f,
+                    });
+                }
+            }
+            else
+            {
+                // timeline 無しの場合は即時 1 ダメ
+                int b4 = target.hp;
+                int dlt = target.ApplyFixedHit();
+                manager?.OnAttackBarricade(this, target, dlt, b4, target.hp);
+            }
+            return true;
+        }
+
+        /// <summary>基本スキル (skills[0]) 射程内に敵側バリケードがあれば currentBarricadeTarget にセット。
+        /// CanBasicAttack / ExecuteAction.BasicAttack でこちらを優先攻撃。
+        /// 主に Warrior/Knight (近接 Slash) で機能。Archer/Mage は DealDamage 経路でバリケードに自動衝突する。</summary>
+        private void UpdateBarricadeTarget()
+        {
+            currentBarricadeTarget = null;
+            if (manager?.barricades == null || manager.barricades.Count == 0) return;
+            if (skills == null || skills.Count == 0) return;
+            var basicSkill = skills[0];
+            if (basicSkill == null) return;
+            float reachMax = GetShapeMaxReach(basicSkill.shape);
+            Barricade closest = null;
+            float closestDist = float.MaxValue;
+            Vector3 myPos = transform.position;
+            foreach (var b in manager.barricades)
+            {
+                if (b == null || !b.IsActive) continue;
+                // 自陣バリケードは攻撃しない
+                if (b.owner != null && b.owner.ownerSide == ownerSide) continue;
+                float d = b.DistanceTo(myPos);
+                if (d > reachMax) continue;
+                if (d < closestDist)
+                {
+                    closestDist = d;
+                    closest = b;
+                }
+            }
+            currentBarricadeTarget = closest;
         }
 
         private static readonly List<RealtimeTargetEntry> _defaultTargetList = new()
@@ -1320,6 +1481,12 @@ namespace SteraCube.SpaceJourney.Realtime
                     return currentTarget != null && tdist > RangeMidMass;
                 case RealtimeCondition.TargetOutsideFar:
                     return currentTarget != null && tdist > RangeFarMass;
+                case RealtimeCondition.TargetOutsideSkillRange:
+                    return currentTarget != null && !IsTargetInSkillRange(e.conditionSkillIndex);
+                case RealtimeCondition.AnyEnemyInSkillRange:
+                    return AnyEnemyInSkillRange(e.conditionSkillIndex);
+                case RealtimeCondition.CanCastSkillAny:
+                    return IsSkillReady(e.conditionSkillIndex) && AnyEnemyInSkillRange(e.conditionSkillIndex);
                 case RealtimeCondition.FragileAllyTargetedByEnemy:
                     return IsFragileAllyTargetedByEnemy();
                 case RealtimeCondition.WasAttackedRecently:
@@ -1386,6 +1553,17 @@ namespace SteraCube.SpaceJourney.Realtime
                     foreach (var j in e.jobFilter)
                         if (j != null && j.bodyJobId == jid) { match = true; break; }
                     if (!match) continue;
+                }
+                // rangeFilterSkillIndex が指定されてれば、その skill の射程内の敵だけ通す
+                if (e.rangeFilterSkillIndex >= 0)
+                {
+                    var s = GetSkill(e.rangeFilterSkillIndex);
+                    if (s != null)
+                    {
+                        float d = Vector3.Distance(transform.position, u.transform.position);
+                        float maxReach = GetShapeMaxReach(s.shape);
+                        if (d < s.shape.rangeMin || d > maxReach) continue;
+                    }
                 }
                 candidates.Add(u);
             }
@@ -1473,6 +1651,14 @@ namespace SteraCube.SpaceJourney.Realtime
                 case RealtimeAction.BasicAttack:
                     // DisableBasicAttack (アルカナマキシマス等) 有効なら basic 攻撃をスキップ
                     if (basicAttackDisabled) { committed = false; break; }
+                    // 隣接バリケード優先 (Warrior/Knight 等の近接職)
+                    if (currentBarricadeTarget != null && currentBarricadeTarget.IsActive)
+                    {
+                        committed = CastBasicAttackOnBarricade(currentBarricadeTarget);
+                        if (committed && mover != null) mover.StopMovement();
+                        if (committed) return false;
+                        // 失敗 (CT 中等) なら通常 currentTarget の攻撃に fall-through
+                    }
                     // skills[0] があれば新スキルとして発動、なければ内蔵処理
                     if (skills != null && skills.Count > 0 && skills[0] != null)
                     {
@@ -1706,6 +1892,24 @@ namespace SteraCube.SpaceJourney.Realtime
             if (currentTarget == null) return 0;
             var hits = CollectSkillTargets(s, currentTarget);
             return hits.Count;
+        }
+
+        /// <summary>currentTarget に縛られず、敵が skills[i] の射程内に 1 体でも居るか。
+        /// (Archer の「弓射程内に敵居れば currentTarget=隣接敵でも矢を撃つ」用)</summary>
+        private bool AnyEnemyInSkillRange(int index)
+        {
+            var s = GetSkill(index);
+            if (s == null || manager == null) return false;
+            float maxReach = GetShapeMaxReach(s.shape);
+            float minReach = s.shape.rangeMin;
+            foreach (var u in manager.AllUnits)
+            {
+                if (u == null || !u.IsAlive()) continue;
+                if (u.ownerSide == ownerSide) continue;
+                float d = Vector3.Distance(transform.position, u.transform.position);
+                if (d >= minReach && d <= maxReach) return true;
+            }
+            return false;
         }
 
         /// <summary>弓/魔法/槍 の味方が敵に狙われているか</summary>
@@ -2005,6 +2209,41 @@ namespace SteraCube.SpaceJourney.Realtime
             }
         }
 
+        /// <summary>射撃経路 (origPos → aimPos) と交差するバリケードの中で、最も caster に近いものを返す。
+        /// 非貫通矢の遮蔽判定用。敵側のバリケード or 自陣のバリケード関係なく、
+        /// 経路上に物理的に存在するなら blocker 扱い。</summary>
+        private Barricade FindBarricadeInArrowPath(Vector3 origPos, Vector3 dir, Vector3 aimPos)
+        {
+            if (manager?.barricades == null || manager.barricades.Count == 0) return null;
+            origPos.y = 0;
+            aimPos.y = 0;
+            Vector3 d = dir; d.y = 0;
+            if (d.sqrMagnitude < 1e-6f) return null;
+            d.Normalize();
+            float maxDist = Vector3.Distance(origPos, aimPos);
+
+            Barricade best = null;
+            float bestT = float.MaxValue;
+            const float lineHalfWidth = 0.4f;  // 矢の判定幅
+            foreach (var b in manager.barricades)
+            {
+                if (b == null || !b.IsActive) continue;
+                Vector3 bcenter = b.center; bcenter.y = 0;
+                Vector3 rel = bcenter - origPos;
+                float along = Vector3.Dot(rel, d);
+                if (along < 0.05f || along > maxDist + 0.5f) continue;
+                Vector3 closestOnLine = origPos + d * along;
+                float distToWall = b.DistanceTo(closestOnLine);
+                if (distToWall > lineHalfWidth) continue;
+                if (along < bestT)
+                {
+                    bestT = along;
+                    best = b;
+                }
+            }
+            return best;
+        }
+
         /// <summary>caster (origPos) から dir 方向に maxDist までの間で最初に当たる敵を返す。
         /// 矢の通常着弾位置決定用 (vis のみ)。線幅は約 0.5m。</summary>
         private RealtimeBattleUnit FindFirstEnemyInArrowPath(Vector3 origPos, Vector3 dir, float maxDist)
@@ -2046,18 +2285,50 @@ namespace SteraCube.SpaceJourney.Realtime
             switch (pe.ev.kind)
             {
                 case RealtimeSkillEventKind.DealDamage:
+                    // 近接 Slash 等で barricade ターゲット直接指定の場合 (ApplyFixedHit のみ、status/knockback 無視)
+                    if (pe.barricadeTarget != null)
+                    {
+                        if (pe.barricadeTarget.IsActive)
+                        {
+                            int b4 = pe.barricadeTarget.hp;
+                            int dlt = pe.barricadeTarget.ApplyFixedHit();
+                            manager?.OnAttackBarricade(this, pe.barricadeTarget, dlt, b4, pe.barricadeTarget.hp);
+                        }
+                        return;
+                    }
                     if (pe.hitTargets == null) return;
                     {
                         // basic attack 発射時は MultiShot (日本刀=2 / トリデントアーチャー=3 等) を適用
                         bool isBasicCast = skills != null && skills.Count > 0 && pe.skill == skills[0];
                         int hitCount = isBasicCast ? Mathf.Max(1, multiShotCount) : 1;
                         float dmgMul = pe.damageMul > 0f ? pe.damageMul : 1f;
-                        foreach (var tgt in pe.hitTargets)
+
+                        // 非貫通の射撃 (FirstEnemyInLine + pierce 不在) で経路にバリケードがあれば、
+                        // 矢はバリケードに当たって停止 (ApplyFixedHit 1ダメ)
+                        bool isProjectileLine = pe.skill != null
+                            && pe.skill.projectileHitMode == ProjectileHitMode.FirstEnemyInLine;
+                        bool blockedByBarricade = false;
+                        if (isProjectileLine && !hasPierceShot && manager?.barricades != null)
                         {
-                            if (tgt == null || !tgt.IsAlive()) continue;
-                            for (int shot = 0; shot < hitCount && tgt.IsAlive(); shot++)
+                            var blocker = FindBarricadeInArrowPath(pe.castOrigin, pe.castDir, pe.castAim);
+                            if (blocker != null)
                             {
-                                ApplySkillEffect(pe.skill, tgt, dmgMul);
+                                int before = blocker.hp;
+                                int dealt = blocker.ApplyFixedHit();
+                                manager?.OnAttackBarricade(this, blocker, dealt, before, blocker.hp);
+                                blockedByBarricade = true;
+                            }
+                        }
+
+                        if (!blockedByBarricade)
+                        {
+                            foreach (var tgt in pe.hitTargets)
+                            {
+                                if (tgt == null || !tgt.IsAlive()) continue;
+                                for (int shot = 0; shot < hitCount && tgt.IsAlive(); shot++)
+                                {
+                                    ApplySkillEffect(pe.skill, tgt, dmgMul);
+                                }
                             }
                         }
                     }
@@ -2073,7 +2344,17 @@ namespace SteraCube.SpaceJourney.Realtime
                         // ボーン子化する場合、親の座標系でオフセットを掛ける
                         if (!string.IsNullOrEmpty(pe.ev.attachBoneName))
                         {
-                            var boneTf = ResolveAttachTransform(pe.ev.attachBoneName);
+                            // requireBone: 厳密検索、fallback 無し。見つからなければ skip。
+                            Transform boneTf;
+                            if (pe.ev.requireBone)
+                            {
+                                boneTf = FindChildByName(transform, pe.ev.attachBoneName);
+                                if (boneTf == null) break; // 装備武器に TrailTip 等が無い → Effect 不発
+                            }
+                            else
+                            {
+                                boneTf = ResolveAttachTransform(pe.ev.attachBoneName);
+                            }
                             if (boneTf != null)
                             {
                                 go = Instantiate(pe.ev.effectPrefab, boneTf);
@@ -2452,7 +2733,22 @@ namespace SteraCube.SpaceJourney.Realtime
                 remaining -= s;
             }
             unit.transform.position = currentPos;
-            if (unit.mover != null) unit.mover.Teleport(currentPos, true);
+            unit.OnForcedDisplacement();
+        }
+
+        /// <summary>強制移動 (knockback / pull / 瞬間移動 / 引き寄せ等) 共通の事後処理。
+        /// - mover を新位置に Teleport (velocity リセット)
+        /// - simulateMovement=false で旧 destination の transit 状態をクリア
+        /// - nextDecisionTime=0 で次フレに即 target/action 再評価
+        /// 棒立ち化バグ予防のため、強制で transform.position を変えた直後に必ず呼ぶ。</summary>
+        public void OnForcedDisplacement()
+        {
+            if (mover != null)
+            {
+                mover.Teleport(transform.position, clearVelocity: true);
+                mover.simulateMovement = false;
+            }
+            nextDecisionTime = 0f;
         }
 
         /// <summary>Move スキル: 現在ターゲット方向 (あれば) or 前方に shape.rangeMax 瞬間移動</summary>
@@ -2537,6 +2833,11 @@ namespace SteraCube.SpaceJourney.Realtime
                 candidates.Add(u);
             }
             if (candidates.Count == 0) return null;
+
+            // currentTarget が候補内なら優先 (向き振り戻し往復を抑止)。
+            // ※ Self skill は targetSide==Self で既に return 済みなのでここには来ない。
+            if (currentTarget != null && currentTarget.IsAlive() && candidates.Contains(currentTarget))
+                return currentTarget;
 
             switch (s.targetSelect)
             {

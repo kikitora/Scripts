@@ -14,9 +14,9 @@ namespace SteraCube.SpaceJourney
     /// - ランダム顔アイコンを「男/女/不明」の3枠で管理（インスペクター）
     /// - ランダム名前はインスペクターに出さず、コード内の static テーブルで管理（直書き）
     ///
-    /// ※ WeaponDefinition / SkillDefinition は BodyJobDefinition が直接 SO 参照で持つため、
+    /// ※ SkillDefinition は BodyJobDefinition が直接 SO 参照で持つため、
     ///    このクラスへの個別登録は不要になりました。
-    ///    GetWeaponById() / GetSkillById() は互換のために残しており、
+    ///    GetSkillById() は互換のために残しており、
     ///    内部で BodyJobDefinitions を横断検索します。
     /// </summary>
     public class MasterDatabase : SceneSingleton<MasterDatabase>
@@ -78,8 +78,8 @@ namespace SteraCube.SpaceJourney
         [Tooltip("リアルタイム戦闘で装備する武器定義。RealtimeBattleStarter が jobId 別に選択")]
         [SerializeField] private RealtimeWeaponDefinition[] realtimeWeapons;
 
-        // ※ WeaponDefinition / SkillDefinition の登録欄はここには不要。
-        //   各 BodyJobDefinition の baseSkills / weaponCandidates に直接 SO を登録すること。
+        // ※ RealtimeSkillDefinition の登録欄はここには不要。
+        //   各 BodyJobDefinition の realtimeSkills に直接 SO を登録すること。
 
 
         // ------------------------------
@@ -240,7 +240,16 @@ namespace SteraCube.SpaceJourney
             {
                 if (w == null) continue;
                 if (w.minAreaLevel > maxAreaRank) continue;
-                if (kindFilter.HasValue && w.kind != kindFilter.Value) continue;
+                if (kindFilter.HasValue)
+                {
+                    // 種別指定あり: kind 厳密一致のみ
+                    if (w.kind != kindFilter.Value) continue;
+                }
+                else
+                {
+                    // 種別指定なし (= 主武器抽選): 盾は除外 (盾は別途 PickRealtimeWeaponForJobKind で抽選される)
+                    if (w.kind == Realtime.WeaponKind.Shield) continue;
+                }
                 candidates.Add(w);
             }
             if (candidates.Count == 0) return null;
@@ -392,36 +401,14 @@ namespace SteraCube.SpaceJourney
         public BodyJobDefinition GetBodyById(string bodyId) => GetBodyJobById(bodyId);
 
         /// <summary>
-        /// WeaponDefinition を weaponId で取得する。
-        /// BodyJobDefinition.weaponCandidates を全職横断で検索する。
-        /// （BodyInstance.ResolveDefinitions など既存の呼び出し元はそのまま動く）
-        /// </summary>
-        public WeaponDefinition GetWeaponById(string id)
-        {
-            if (string.IsNullOrEmpty(id) || bodyJobDefinitions == null) return null;
-            foreach (var job in bodyJobDefinitions)
-            {
-                if (job == null || job.weaponCandidates == null) continue;
-                foreach (var w in job.weaponCandidates)
-                    if (w != null && w.weaponId == id) return w;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// SkillDefinition を skillId で取得する。
-        /// BodyJobDefinition.baseSkills を全職横断で検索する。
-        /// （既存の GetSkillById 呼び出し元はそのまま動く）
+        /// SkillDefinition を skillId で取得する (旧ターン制 BattleManager 互換用)。
+        /// 現状は BodyJob にぶら下がる旧 SkillDefinition は廃止されており、
+        /// 該当スキルが見つからなければ null を返す。
+        /// (新リアル戦闘では RealtimeSkillDefinition を別途参照すること)
         /// </summary>
         public SkillDefinition GetSkillById(string id)
         {
-            if (string.IsNullOrEmpty(id) || bodyJobDefinitions == null) return null;
-            foreach (var job in bodyJobDefinitions)
-            {
-                if (job == null || job.baseSkills == null) continue;
-                foreach (var s in job.baseSkills)
-                    if (s != null && s.SkillId == id) return s;
-            }
+            // 旧 baseSkills は廃止済み。互換 stub。
             return null;
         }
 

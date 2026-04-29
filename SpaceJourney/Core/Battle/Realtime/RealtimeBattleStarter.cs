@@ -15,6 +15,18 @@ namespace SteraCube.SpaceJourney.Realtime
         public BattleUnitSpawner unitSpawner;
         public RealtimeBattleManager manager;
 
+        [Header("デバッグ: ジョブ別 prefab 強制上書き (テスト用、null なら通常の race ベース選択)")]
+        [Tooltip("戦士のキャラ prefab を強制固定 (例: LH01_Swordsman_1)")]
+        public GameObject forceWarriorPrefab;
+        [Tooltip("騎士のキャラ prefab を強制固定")]
+        public GameObject forceKnightPrefab;
+        [Tooltip("ランサーのキャラ prefab を強制固定")]
+        public GameObject forceLancerPrefab;
+        [Tooltip("射手のキャラ prefab を強制固定 (例: LH04_Archer_1 動作テスト用)")]
+        public GameObject forceArcherPrefab;
+        [Tooltip("魔術師のキャラ prefab を強制固定")]
+        public GameObject forceMagePrefab;
+
         [Header("移動速度 (職別、mass/秒)")]
         [Tooltip("戦士: やや速い")]
         public float warriorWalkSpeed = 1.2f;
@@ -190,6 +202,10 @@ namespace SteraCube.SpaceJourney.Realtime
                 var animatorComp = go.GetComponentInChildren<Animator>();
                 if (animatorComp != null)
                 {
+                    // Animator 強制 enable (Skill Timeline Editor の AnimationMode 等で
+                    // 偶然 disable のまま prefab 保存されることがあるので念のため)
+                    if (!animatorComp.enabled) animatorComp.enabled = true;
+
                     // ルートモーション無効化 (Warrior Slash 等の攻撃アニメで前進するのを防ぐ。
                     // 連続移動は ContinuousMover 側で完全制御するためアニメから transform は触らせない)
                     animatorComp.applyRootMotion = false;
@@ -306,9 +322,18 @@ namespace SteraCube.SpaceJourney.Realtime
             if (p.IsEnemyDef) prefab = p.enemyDef.modelPrefab;
             else if (p.body != null)
             {
-                var race = db.GetRaceById(p.body.RaceId);
-                var job = db.GetBodyJobById(p.body.BodyJobId);
-                if (race != null && job != null) prefab = race.GetBodyPrefab(job);
+                // デバッグ: ジョブ別強制 prefab があれば最優先
+                var forced = GetForcedPrefabByJob(p.body.BodyJobId);
+                if (forced != null)
+                {
+                    prefab = forced;
+                }
+                else
+                {
+                    var race = db.GetRaceById(p.body.RaceId);
+                    var job = db.GetBodyJobById(p.body.BodyJobId);
+                    if (race != null && job != null) prefab = race.GetBodyPrefab(job);
+                }
             }
 
             GameObject go;
@@ -324,6 +349,20 @@ namespace SteraCube.SpaceJourney.Realtime
             }
             go.transform.localScale = Vector3.one * unitSpawner.modelScale;
             return go;
+        }
+
+        private GameObject GetForcedPrefabByJob(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId)) return null;
+            switch (jobId)
+            {
+                case "Warrior": return forceWarriorPrefab;
+                case "Knight":  return forceKnightPrefab;
+                case "Lancer":  return forceLancerPrefab;
+                case "Archer":  return forceArcherPrefab;
+                case "Mage":    return forceMagePrefab;
+            }
+            return null;
         }
 
         private float GetWalkSpeedByJob(string jobId)
@@ -405,27 +444,60 @@ namespace SteraCube.SpaceJourney.Realtime
                             targetSelect = RealtimeTargetSelect.LowestHp,
                             label = "味方HP<50 → 最HP低味方"
                         },
-                        new RealtimeTargetEntry { // 現ターゲットが近すぎる場合 → 遠い敵に切替 (遠距離攻撃再開用)
-                            condition = RealtimeCondition.TargetWithinClose,
-                            targetSide = RealtimeTargetSide.Enemy,
-                            targetSelect = RealtimeTargetSelect.Farthest,
-                            label = "敵接近 → 最遠敵に切替"
-                        },
-                        new RealtimeTargetEntry { // 通常: 最寄敵
+                        new RealtimeTargetEntry { // 魔法射程内の最寄敵を最優先 (currentTarget→Burst が即発動)
                             condition = RealtimeCondition.Always,
                             targetSide = RealtimeTargetSide.Enemy,
                             targetSelect = RealtimeTargetSelect.Nearest,
-                            label = "通常: 最寄敵"
+                            rangeFilterSkillIndex = 0,  // Burst 射程
+                            label = "魔法射程内 → 最寄敵"
+                        },
+                        new RealtimeTargetEntry { // 射程内に誰も居なければ最寄敵 (近づいて Bash 用)
+                            condition = RealtimeCondition.Always,
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.Nearest,
+                            label = "射程外しかいない時 → 最寄敵"
                         },
                     };
                 case "Archer":
                     return new List<RealtimeTargetEntry>
                     {
-                        new RealtimeTargetEntry {
-                            condition = RealtimeCondition.TargetWithinClose,
+                        new RealtimeTargetEntry { // 弓射程内の最寄敵を最優先 (currentTarget→ArrowShot が即発動)
+                            condition = RealtimeCondition.Always,
                             targetSide = RealtimeTargetSide.Enemy,
-                            targetSelect = RealtimeTargetSelect.Farthest,
-                            label = "敵接近 → 最遠敵に切替"
+                            targetSelect = RealtimeTargetSelect.Nearest,
+                            rangeFilterSkillIndex = 0,  // ArrowShot 射程
+                            label = "弓射程内 → 最寄敵"
+                        },
+                        new RealtimeTargetEntry { // 射程内に誰も居なければ最寄敵 (近づいて DaggerStab 用)
+                            condition = RealtimeCondition.Always,
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.Nearest,
+                            label = "射程外しかいない時 → 最寄敵"
+                        },
+                    };
+                case "Warrior":
+                case "Knight":
+                    return new List<RealtimeTargetEntry>
+                    {
+                        new RealtimeTargetEntry { // 現 currentTarget が攻撃範囲外 AND 攻撃範囲内に他の敵 → 接敵中の敵に切替
+                            condition = RealtimeCondition.TargetOutsideSkillRange,
+                            conditionSkillIndex = 0,  // 基本スキル (Slash) の射程
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.Nearest,
+                            rangeFilterSkillIndex = 0,  // 攻撃範囲内に居る敵だけ候補
+                            label = "currentTarget 範囲外 → 接敵中の敵に切替"
+                        },
+                        new RealtimeTargetEntry { // 被弾 AND attacker が現ターゲットより近い → 切替
+                            condition = RealtimeCondition.AttackerCloserThanCurrentTarget,
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.LastAttacker,
+                            label = "被弾+attacker近い → 切替"
+                        },
+                        new RealtimeTargetEntry { // 被弾 AND 射程内に敵なし → 反撃
+                            condition = RealtimeCondition.AttackedAndNoEnemyInBasicRange,
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.LastAttacker,
+                            label = "被弾反撃 (射程内敵なし時)"
                         },
                         new RealtimeTargetEntry {
                             condition = RealtimeCondition.Always,
@@ -434,9 +506,9 @@ namespace SteraCube.SpaceJourney.Realtime
                             label = "通常: 最寄敵"
                         },
                     };
-                case "Warrior":
-                case "Knight":
                 case "Lancer":
+                    // Lancer は Warrior/Knight と違い「接敵時の切替」ルール無し。
+                    // 機動性を活かして遠めの敵もそのまま追う設計 (中距離武器で離脱速度が活きる)。
                     return new List<RealtimeTargetEntry>
                     {
                         new RealtimeTargetEntry { // 被弾 AND attacker が現ターゲットより近い → 切替
@@ -495,14 +567,14 @@ namespace SteraCube.SpaceJourney.Realtime
                 case "Archer":
                     return new List<RealtimeActionEntry>
                     {
-                        // 1. 近接 1m 内 + DaggerStab CT 空 → 短剣突き
+                        // 1. currentTarget が DaggerStab 範囲 (≤1m) かつ CT 空 → 短剣 (近接対応)
                         new RealtimeActionEntry {
                             condition = RealtimeCondition.CanCastSkill,
                             conditionSkillIndex = 1,
                             action = RealtimeAction.CastSkill, actionSkillIndex = 1,
-                            label = "1m内 DaggerStab"
+                            label = "近接1m内 DaggerStab"
                         },
-                        // 2. 弓射程 (2-5m) + ArrowShot CT 空 → 弓射
+                        // 2. 弓射程内 + CT 空 → ArrowShot (targetList が射程内の敵を currentTarget にしてくれる前提)
                         new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "ArrowShot"),
                         // 3. 弓射程内 (CT 中) → 維持 (近寄らず後退もせず)
                         new RealtimeActionEntry {
@@ -511,7 +583,7 @@ namespace SteraCube.SpaceJourney.Realtime
                             action = RealtimeAction.MoveToOwnRange,
                             label = "弓射程内 → 待機"
                         },
-                        // 4. 弓射程外 (= dead zone 1-2m or far >5m) → 近接距離まで詰める
+                        // 4. 射程外 → 近接距離まで詰める
                         new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToCloseRange, "近接 (1m) まで詰める"),
                     };
 
@@ -538,14 +610,14 @@ namespace SteraCube.SpaceJourney.Realtime
                             action = RealtimeAction.CastSkill, actionSkillIndex = 2,
                             label = "味方HP<50 → HealingWave"
                         },
-                        // 2. 近接 1m 内 + Bash CT 空 → 殴打
+                        // 2. currentTarget が Bash 範囲 (≤1m) + CT 空 → Bash (近接対応)
                         new RealtimeActionEntry {
                             condition = RealtimeCondition.CanCastSkill,
                             conditionSkillIndex = 1,
                             action = RealtimeAction.CastSkill, actionSkillIndex = 1,
-                            label = "1m内 Bash"
+                            label = "近接1m内 Bash"
                         },
-                        // 3. 魔法射程 (2-5m) + Burst CT 空 → 通常魔法
+                        // 3. 魔法射程内 + CT 空 → Burst (targetList が射程内敵を currentTarget にしてくれる前提)
                         new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "Burst"),
                         // 4. 魔法射程内 (CT 中) → 維持
                         new RealtimeActionEntry {
@@ -554,7 +626,7 @@ namespace SteraCube.SpaceJourney.Realtime
                             action = RealtimeAction.MoveToOwnRange,
                             label = "魔法射程内 → 待機"
                         },
-                        // 5. 射程外 (dead zone or far) → 近接距離まで詰める
+                        // 5. 射程外 → 近接距離まで詰める
                         new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToCloseRange, "近接 (1m) まで詰める"),
                     };
 
@@ -579,12 +651,18 @@ namespace SteraCube.SpaceJourney.Realtime
         /// <summary>ユニット用スキルリストを取得。BodyJobDefinition.realtimeSkills 優先、なければ基礎スキル1個のみ</summary>
         private List<RealtimeSkillDefinition> ResolveSkillsForUnit(SpaceJourneyUnit u)
         {
+            string jobId = u?.Body?.BodyJobId;
             var bj = u?.Body?.BodyJob;
+            // cachedBodyJob ([NonSerialized]) が Resolve 未実行で null の場合、MasterDatabase 経由で取得する。
+            // (BodyJobId は serialized なので必ず取れる。これで Archer の DaggerStab 等 skill[1+] が欠落する不具合を防ぐ)
+            if (bj == null && !string.IsNullOrEmpty(jobId))
+            {
+                bj = MasterDatabase.Instance?.GetBodyJobById(jobId);
+            }
             if (bj != null && bj.realtimeSkills != null && bj.realtimeSkills.Count > 0)
             {
                 return new List<RealtimeSkillDefinition>(bj.realtimeSkills);
             }
-            string jobId = u?.Body?.BodyJobId;
             var basic = ResolveBasicSkillByJobId(jobId);
             var list = new List<RealtimeSkillDefinition>();
             if (basic != null) list.Add(basic);

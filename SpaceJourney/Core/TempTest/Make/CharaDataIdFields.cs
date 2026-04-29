@@ -16,7 +16,6 @@ namespace SteraCube.SpaceJourney.DevTools
         // ── IDキャッシュ ─────────────────────────────────────────
         private static string[] _raceIds;
         private static string[] _bodyJobIds;
-        private static string[] _weaponIds;
         private static string[] _soulJobIds;
         private static string[] _skillIds;
         private static double _lastRefresh = -1;
@@ -33,7 +32,6 @@ namespace SteraCube.SpaceJourney.DevTools
         {
             _raceIds = LoadIds<RaceDefinition>(r => r.raceId);
             _bodyJobIds = LoadIds<BodyJobDefinition>(b => b.bodyJobId);
-            _weaponIds = LoadIds<WeaponDefinition>(w => w.weaponId);
             _soulJobIds = LoadIds<SoulJobDefinition>(s => s.JobId);
             _skillIds = LoadIds<SkillDefinition>(s => s.SkillId);
             _lastRefresh = EditorApplication.timeSinceStartup;
@@ -51,7 +49,6 @@ namespace SteraCube.SpaceJourney.DevTools
         // ── 公開アクセサ ─────────────────────────────────────────
         public static string[] RaceIds { get { RefreshIfNeeded(); return _raceIds ?? Array.Empty<string>(); } }
         public static string[] BodyJobIds { get { RefreshIfNeeded(); return _bodyJobIds ?? Array.Empty<string>(); } }
-        public static string[] WeaponIds { get { RefreshIfNeeded(); return _weaponIds ?? Array.Empty<string>(); } }
         public static string[] SoulJobIds { get { RefreshIfNeeded(); return _soulJobIds ?? Array.Empty<string>(); } }
         public static string[] SkillIds { get { RefreshIfNeeded(); return _skillIds ?? Array.Empty<string>(); } }
 
@@ -70,7 +67,6 @@ namespace SteraCube.SpaceJourney.DevTools
             {
                 case "raceId": return DrawDropdown(prop, RaceIds, "Race ID");
                 case "bodyJobId": return DrawDropdown(prop, BodyJobIds, "Body Job ID");
-                case "weaponId": return DrawDropdown(prop, WeaponIds, "Weapon ID");
                 case "jobId": return DrawDropdown(prop, SoulJobIds, "Soul Job ID");
             }
             return false;

@@ -7,7 +7,7 @@ namespace SteraCube.SpaceJourney
     /// <summary>
     /// このクラスで何をするか：
     /// ボディ個体（JSON保存対象）。
-    /// - raceId / bodyJobId / weaponId / bodyIconId をIDで保持
+    /// - raceId / bodyJobId / bodyIconId をIDで保持
     /// - 確定ステータス（maxHp/at/df/agi/mat/mdf）を保存
     /// - BodyIconSprite / BodyJobIconSprite は NonSerialized（ResolveDefinitions後に有効）
     /// </summary>
@@ -18,7 +18,6 @@ namespace SteraCube.SpaceJourney
         // ===== ID（JSON保存対象）=====
         [SerializeField] private string raceId;
         [SerializeField] private string bodyJobId;
-        [SerializeField] private string weaponId;
         // ===== 確定ステ（JSON保存対象）=====
         [SerializeField] private int maxHp;
         [SerializeField] private int at;
@@ -34,7 +33,6 @@ namespace SteraCube.SpaceJourney
         // ===== 実行時キャッシュ（保存しない）=====
         [NonSerialized] private RaceDefinition cachedRace;
         [NonSerialized] private BodyJobDefinition cachedBodyJob;
-        [NonSerialized] private WeaponDefinition cachedWeapon;
         [NonSerialized] private Sprite cachedBodyIcon;
         // BodyJobIconSprite は cachedBodyJob.Icon から直接取れるので NonSerialized キャッシュ不要
 
@@ -44,7 +42,6 @@ namespace SteraCube.SpaceJourney
         public BodyInstance(
             string raceId,
             string bodyJobId,
-            string weaponId,
             int maxHp,
             int at,
             int df,
@@ -54,7 +51,6 @@ namespace SteraCube.SpaceJourney
         {
             this.raceId = raceId;
             this.bodyJobId = bodyJobId;
-            this.weaponId = weaponId;
             this.maxHp = maxHp;
             this.at = at;
             this.df = df;
@@ -125,7 +121,6 @@ namespace SteraCube.SpaceJourney
             if (db == null) return;
             cachedRace = db.GetRaceById(raceId);
             cachedBodyJob = db.GetBodyJobById(bodyJobId);
-            cachedWeapon = db.GetWeaponById(weaponId);
             cachedBodyIcon = db.GetBodyIconById(bodyIconId);
         }
 
@@ -154,12 +149,10 @@ namespace SteraCube.SpaceJourney
         public string InstanceId => instanceId;
         public string RaceId => raceId;
         public string BodyJobId => bodyJobId;
-        public string WeaponId => weaponId;
         public string BodyIconId => bodyIconId;
 
         public RaceDefinition Race => cachedRace;
         public BodyJobDefinition BodyJob => cachedBodyJob;
-        public WeaponDefinition Weapon => cachedWeapon;
 
         /// <summary>ボディ個体のアイコン（ResolveDefinitions 後に有効）</summary>
         public Sprite BodyIconSprite => cachedBodyIcon;

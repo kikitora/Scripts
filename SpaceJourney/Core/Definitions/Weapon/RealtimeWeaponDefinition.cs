@@ -56,6 +56,13 @@ namespace SteraCube.SpaceJourney.Realtime
         [Tooltip("modelPrefab 内の左手グリップ Transform 名。空なら IK 無効。例: LeftHandGrip")]
         public string leftHandGripName = "";
 
+        [Header("トレイル取付点 (ブレード先端)")]
+        [Tooltip("EquipWeapon で武器インスタンスの子に \"TrailTip\" GameObject を自動生成、ここで指定したローカル座標に配置。" +
+                 "Skill 側の Effect イベント (attachBoneName: TrailTip) でトレイルなどをこの位置に固定できる。" +
+                 "Vector3.zero (デフォルト) なら TrailTip 生成なし → トレイル無効。" +
+                 "例: 大剣で刃先まで約 1.5m なら (0, 1.5, 0) (武器の local +Y が刃方向の場合)")]
+        public Vector3 trailTipLocalPosition = Vector3.zero;
+
         [Header("使用可能ジョブ (body job id)")]
         public List<string> allowedJobIds = new List<string>();
 

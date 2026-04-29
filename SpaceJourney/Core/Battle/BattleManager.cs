@@ -286,13 +286,7 @@ namespace SteraCube.SpaceJourney
             var db = MasterDatabase.Instance;
             if (db == null) return passives;
 
-            // 武器パッシブ
-            if (body != null)
-            {
-                var weapon = db.GetWeaponById(body.WeaponId);
-                if (weapon?.effectSkill != null && weapon.effectSkill.category == SkillCategory.Passive)
-                    passives.Add(weapon.effectSkill);
-            }
+            // 武器パッシブ (旧 WeaponDefinition 廃止につき空配列)
 
             // 種族パッシブ
             if (body != null)

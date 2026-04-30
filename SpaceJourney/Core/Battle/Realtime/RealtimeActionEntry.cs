@@ -65,6 +65,7 @@ namespace SteraCube.SpaceJourney.Realtime
         WasAttackedRecently,     // 直近3秒以内に被弾 (lastAttacker が有効)
         AttackedAndNoEnemyInBasicRange, // 被弾直近 AND preferredRange 内に敵なし
         AttackerCloserThanCurrentTarget, // 被弾直近 AND attacker が現ターゲットより近い AND currentTarget が skills[0] 射程外
+        NoLongRangeAttack,       // 3m+ 射程で使える攻撃スキルを 1 つも所持していない (basic 無効化考慮)
     }
 
     public enum RealtimeAction

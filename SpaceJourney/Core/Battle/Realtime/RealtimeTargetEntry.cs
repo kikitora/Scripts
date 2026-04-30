@@ -32,6 +32,10 @@ namespace SteraCube.SpaceJourney.Realtime
                  "(Archer の「弓射程内の敵を優先」用)。射程内に誰も居なければこの entry は候補なし扱いで次優先度へフォールスルー。")]
         public int rangeFilterSkillIndex = -1;
 
+        [Tooltip("0 以下=フィルタなし。正値ならその距離 (m) 以内の候補のみに絞り込む " +
+                 "(NoLongRangeAttack 時の近接2m切替等)。rangeFilterSkillIndex とは独立に併用可。")]
+        public float rangeFilterMaxDist = 0f;
+
         [Tooltip("true の時はグリッド上で経路が確保できる候補のみを対象とする (味方や壁に塞がれて到達不能な対象は除外)。false ならルート無くても選び、迂回路を探す。")]
         public bool requireRoute = false;
 

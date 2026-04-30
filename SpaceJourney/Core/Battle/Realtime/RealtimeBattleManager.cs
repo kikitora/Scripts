@@ -59,8 +59,8 @@ namespace SteraCube.SpaceJourney.Realtime
         /// MovementPhase で lifetime / HP チェック + 重なり押し出しを行う。</summary>
         public readonly List<Barricade> barricades = new();
 
-        /// <summary>バリケードマップ (Phase 1 は EmptyBarricadeMap = 障害物なし)。
-        /// 将来的に RealtimeBattleStarter から差し替え可能。</summary>
+        /// <summary>バリケードマップ (BeginBattle で SimpleGrid 準拠の GridBarricadeMap を構築)。
+        /// SimpleGrid 未初期化時のフォールバックとして空マップを保持。</summary>
         public IBarricadeMap barricadeMap = new EmptyBarricadeMap();
 
         public void RegisterUnit(RealtimeBattleUnit u)
@@ -122,11 +122,14 @@ namespace SteraCube.SpaceJourney.Realtime
             AttachAllMovers();
         }
 
-        /// <summary>SimpleGrid.Active が存在する場合、全ユニットの mover を attach する。</summary>
+        /// <summary>SimpleGrid.Active が存在する場合、全ユニットの mover を attach する。
+        /// barricadeMap も SimpleGrid に揃えて GridBarricadeMap (A* 経路探索) を構築。</summary>
         private void AttachAllMovers()
         {
             var grid = SimpleGrid.Active;
             if (grid == null) return;
+            // Grid 取得後に GridBarricadeMap 構築 (各 mover に inject)
+            barricadeMap = new GridBarricadeMap(this, grid);
             foreach (var u in AllUnits)
             {
                 if (u == null) continue;
@@ -135,6 +138,17 @@ namespace SteraCube.SpaceJourney.Realtime
                 m.Detach();
                 m.Attach(grid, u.transform.position);
                 m.SetBarricadeMap(barricadeMap);
+            }
+        }
+
+        /// <summary>バリケードの追加/削除後に呼び出す。GridBarricadeMap の blocked セルを再計算し、
+        /// 全 mover のキャッシュ path も破棄して次フレで再計画させる。</summary>
+        public void RebuildBarricadeMap()
+        {
+            if (barricadeMap is GridBarricadeMap gb) gb.Rebuild();
+            foreach (var u in AllUnits)
+            {
+                if (u != null && u.mover != null) u.mover.InvalidatePath();
             }
         }
 
@@ -291,17 +305,20 @@ namespace SteraCube.SpaceJourney.Realtime
             }
 
             // Barricade lifetime チェック (期限 / HP=0 で破棄)
+            bool barricadesChanged = false;
             for (int i = barricades.Count - 1; i >= 0; i--)
             {
                 var b = barricades[i];
-                if (b == null) { barricades.RemoveAt(i); continue; }
+                if (b == null) { barricades.RemoveAt(i); barricadesChanged = true; continue; }
                 if (b.IsExpired(BattleTime))
                 {
                     BattleLog.Add($"[{ElapsedSec:F1}s] {b.owner?.displayName} Barricade 消滅");
                     b.DestroySelf();
                     barricades.RemoveAt(i);
+                    barricadesChanged = true;
                 }
             }
+            if (barricadesChanged) RebuildBarricadeMap();
 
             // push-out 反復 (重なり解消) — unit-unit + unit-barricade。
             for (int iter = 0; iter < 20; iter++)

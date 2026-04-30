@@ -437,6 +437,13 @@ namespace SteraCube.SpaceJourney.Realtime
                 case "Mage":
                     return new List<RealtimeTargetEntry>
                     {
+                        new RealtimeTargetEntry { // 3m+ 攻撃スキル無し AND 2m内に敵 → 緊急近接切替 (アルカナマキシマス装備等)
+                            condition = RealtimeCondition.NoLongRangeAttack,
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.Nearest,
+                            rangeFilterMaxDist = 2f,
+                            label = "遠距離手段無+2m内 → 緊急近接切替"
+                        },
                         new RealtimeTargetEntry { // 味方 HP 低い時はそちら (ヒール用)
                             condition = RealtimeCondition.AllyHpBelowPercent,
                             conditionParam = 50f,

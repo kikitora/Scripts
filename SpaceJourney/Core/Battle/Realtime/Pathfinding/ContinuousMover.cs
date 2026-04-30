@@ -78,7 +78,9 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
         private SteraCube.SpaceJourney.Realtime.RealtimeBattleUnit _owner;
         private List<Vector3> _path;
         private float _pathComputedAt = -999f;
-        private float _stuckTime = 0f;  // velocity ≈ 0 が続いた累積時間 (エスケープ判定用)
+        private float _stuckTime = 0f;  // 動こうとしてるのに動けてない時間累積 (エスケープ判定用)
+        private Vector3 _prevStepStart;       // 前フレーム StepBattle 開始時の position (push-out 含む実効移動測定用)
+        private bool _hasPrevStepStart = false;
 
         // ======================== 初期化 ========================
 
@@ -96,6 +98,8 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             _attached = true;
             _path = null;
             _pathComputedAt = -999f;
+            _hasPrevStepStart = false;
+            _stuckTime = 0f;
         }
 
         public void Detach()
@@ -112,6 +116,8 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             if (clearVelocity) velocity = Vector3.zero;
             reachedDestination = false;
             _path = null;
+            _hasPrevStepStart = false;  // テレポート後の偽スタック検知を抑止
+            _stuckTime = 0f;
         }
 
         public void StopMovement()
@@ -126,6 +132,14 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             _barricadeMap = bm;
         }
 
+        /// <summary>キャッシュされた A* path を破棄して次フレで再計算させる。
+        /// バリケード追加/削除で blocked セルが変わったときに呼ぶ。</summary>
+        public void InvalidatePath()
+        {
+            _path = null;
+            _pathComputedAt = -999f;
+        }
+
         // ======================== メイン更新 ========================
 
         /// <summary>
@@ -134,6 +148,15 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
         /// </summary>
         public void StepBattle(float dt, float currentTime)
         {
+            // フレーム単位の実効移動量を測定 (push-out 含む)。前フレ start → 今フレ start の差分が
+            // 「前フレで実際にどれだけ動けたか」になる (push-out で戻された分は差し引かれる)。
+            Vector3 thisFrameStart = transform.position;
+            float interFrameDelta = -1f;
+            if (_hasPrevStepStart)
+                interFrameDelta = (thisFrameStart - _prevStepStart).magnitude;
+            _prevStepStart = thisFrameStart;
+            _hasPrevStepStart = true;
+
             if (!_attached || !simulateMovement)
             {
                 velocity = Vector3.zero;
@@ -168,37 +191,76 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             // Barricade に向かう velocity 成分を削る (壁通過防止)
             v = ClampVelocityAgainstBarricades(v);
 
+            velocity = v;
+
+            // 候補位置 (y 軸は固定)
+            Vector3 prevPos = transform.position;
+            Vector3 cand = prevPos + v * dt;
+            if (_grid != null) cand = _grid.ClampToField(cand);
+            cand.y = prevPos.y;
+
+            transform.position = cand;
+
             // スタック検出 + 強制エスケープ:
-            // 動こうとしてるのに velocity が 0 近辺 (= clamp で全部削れた) が 0.8s 続いたら、
-            // clamp 無視で横方向に強制ステップ (1 フレ分だけ無理やり押し抜ける)。
+            // 「動こうとしてるのに実際の移動量が極端に小さい」状態が 0.8s 続いたら横方向に強制ステップ。
+            // 検知は OR で 3 系統:
+            //  (a) velocity が clamp で削られて near-zero (= 味方が真前で止まり接触方向成分全部消滅)
+            //  (b) StepBattle 内 displacement (cand - prevPos) が極小 (= field 端 ClampToField で食われた)
+            //  (c) フレーム単位の実効移動量 (前フレ start→今フレ start) が極小 (= push-out が StepBattle の動きを毎フレ取り消してる)
+            // どれかが 0.8s 続けば escape + path 破棄で再計算。
             const float stuckEscapeThreshold = 0.8f;
-            if (v.sqrMagnitude < 0.01f * maxSpeed * maxSpeed)
+            float actualDelta = (cand - prevPos).magnitude;
+            float expectedDelta = v.magnitude * dt;
+            bool velocityNearZero = v.sqrMagnitude < 0.01f * maxSpeed * maxSpeed;                       // (a)
+            bool clampAteMotion = expectedDelta > 0.001f && actualDelta < expectedDelta * 0.1f;        // (b)
+            float frameExpected = maxSpeed * dt;
+            bool pushOutCancellingMotion = interFrameDelta >= 0f
+                && frameExpected > 0.001f
+                && interFrameDelta < frameExpected * 0.1f;                                              // (c)
+            bool effectivelyStuck = velocityNearZero || clampAteMotion || pushOutCancellingMotion;
+            if (effectivelyStuck)
             {
                 _stuckTime += dt;
                 if (_stuckTime > stuckEscapeThreshold)
                 {
-                    // 90° サイドステップ: ID で左右決定論的に、push-out で次フレに重なり解消
+                    // 90° サイドステップ: ID で左右決定論的に、両側 field 内かどうかをプローブして開いている方を選ぶ
                     Vector3 baseDir = dir.sqrMagnitude > 0.01f ? dir : transform.forward;
                     int preferRight = (GetInstanceID() & 1);
-                    float angle = preferRight == 0 ? 90f : -90f;
-                    Vector3 escape = Quaternion.AngleAxis(angle, Vector3.up) * baseDir;
-                    v = escape.normalized * maxSpeed * 0.6f;
-                    _stuckTime = 0f;  // リセット
+                    Vector3 leftDir = new Vector3(-baseDir.z, 0f, baseDir.x);
+                    Vector3 rightDir = new Vector3(baseDir.z, 0f, -baseDir.x);
+                    Vector3 first = preferRight == 0 ? leftDir : rightDir;
+                    Vector3 second = preferRight == 0 ? rightDir : leftDir;
+                    Vector3 escape = first;
+                    if (_grid != null)
+                    {
+                        const float probeDist = 1.0f;
+                        Vector3 probe1 = transform.position + first * probeDist;
+                        Vector3 clamp1 = _grid.ClampToField(probe1);
+                        bool firstBlocked = (Mathf.Abs(probe1.x - clamp1.x) > 0.05f || Mathf.Abs(probe1.z - clamp1.z) > 0.05f);
+                        if (firstBlocked)
+                        {
+                            // 2 つ目を試す。それも塞がってたら baseDir 反転 (180°) を試す
+                            Vector3 probe2 = transform.position + second * probeDist;
+                            Vector3 clamp2 = _grid.ClampToField(probe2);
+                            bool secondBlocked = (Mathf.Abs(probe2.x - clamp2.x) > 0.05f || Mathf.Abs(probe2.z - clamp2.z) > 0.05f);
+                            if (!secondBlocked) escape = second;
+                            else escape = -baseDir;
+                        }
+                    }
+                    Vector3 stepTarget = transform.position + escape.normalized * 0.3f;
+                    if (_grid != null) stepTarget = _grid.ClampToField(stepTarget);
+                    stepTarget.y = transform.position.y;
+                    transform.position = stepTarget;
+                    velocity = escape.normalized * maxSpeed * 0.6f;
+                    _stuckTime = 0f;
+                    // path キャッシュもクリア (現位置から再計算させる)
+                    _path = null;
                 }
             }
             else
             {
                 _stuckTime = 0f;
             }
-
-            velocity = v;
-
-            // 候補位置 (y 軸は固定)
-            Vector3 cand = transform.position + v * dt;
-            if (_grid != null) cand = _grid.ClampToField(cand);
-            cand.y = transform.position.y;
-
-            transform.position = cand;
         }
 
         // ======================== steer_target 解決 ========================

@@ -1051,6 +1051,7 @@ namespace SteraCube.SpaceJourney.Realtime
             }
             var bar = Barricade.Spawn(this, center, facing, BT);
             manager.barricades.Add(bar);
+            manager.RebuildBarricadeMap();   // GridBarricadeMap の blocked セルを更新
             Barricade.PushEnemiesAside(manager, bar, radius);
             manager.BattleLog.Add($"[{BT:F2}s] {displayName} Barricade 設置 (HP {bar.hp}, 5s)");
             // 全ユニットの target/path を即時再評価 (バリケード出現で迂回開始)
@@ -1232,6 +1233,25 @@ namespace SteraCube.SpaceJourney.Realtime
                     return IsLastAttackerValid() && !AnyEnemyInPreferredRange();
                 case RealtimeCondition.AttackerCloserThanCurrentTarget:
                     return IsAttackerCloserThanCurrentTarget();
+                case RealtimeCondition.NoLongRangeAttack:
+                    return !HasLongRangeAttackSkill();
+            }
+            return false;
+        }
+
+        /// <summary>3m 以上の射程で使える攻撃スキル (Attack タイプ・敵対象) を 1 つでも持っていれば true。
+        /// basicAttackDisabled (秘術封印 / アルカナマキシマス等) のとき skills[0] は除外する。</summary>
+        private bool HasLongRangeAttackSkill()
+        {
+            if (skills == null) return false;
+            for (int i = 0; i < skills.Count; i++)
+            {
+                var s = skills[i];
+                if (s == null) continue;
+                if (i == 0 && basicAttackDisabled) continue;     // 基本攻撃無効化されてれば skill[0] 除外
+                if (s.skillType != RealtimeSkillType.Attack) continue;
+                if (s.targetSide != RealtimeTargetSide.Enemy) continue;
+                if (s.shape != null && s.shape.rangeMax >= 3f) return true;
             }
             return false;
         }
@@ -1495,6 +1515,8 @@ namespace SteraCube.SpaceJourney.Realtime
                     return IsLastAttackerValid() && !AnyEnemyInPreferredRange();
                 case RealtimeCondition.AttackerCloserThanCurrentTarget:
                     return IsAttackerCloserThanCurrentTarget();
+                case RealtimeCondition.NoLongRangeAttack:
+                    return !HasLongRangeAttackSkill();
             }
             return false;
         }
@@ -1564,6 +1586,12 @@ namespace SteraCube.SpaceJourney.Realtime
                         float maxReach = GetShapeMaxReach(s.shape);
                         if (d < s.shape.rangeMin || d > maxReach) continue;
                     }
+                }
+                // rangeFilterMaxDist (絶対距離フィルタ) が指定されていればその範囲内のみ
+                if (e.rangeFilterMaxDist > 0f)
+                {
+                    float d = Vector3.Distance(transform.position, u.transform.position);
+                    if (d > e.rangeFilterMaxDist) continue;
                 }
                 candidates.Add(u);
             }
@@ -1695,7 +1723,21 @@ namespace SteraCube.SpaceJourney.Realtime
                         return MoveToDistance(toAlly, toAlly.magnitude, 0.5f);
                     }
 
-                case RealtimeAction.MoveToOwnRange:     return MoveToDistance(toTarget, dist, preferred);
+                case RealtimeAction.MoveToOwnRange:
+                {
+                    // 緊急近接切替: 3m+ で使える攻撃スキル無し AND 敵 2m 内 AND この MoveToOwnRange が no-op になる
+                    // (= 既に preferred 距離以内) → fall-through で次優先度 (近接接近) に切替。
+                    // wouldNoOp ガードで preferred より外側 (= 通常通り近づくべきケース) は影響受けないようにしている。
+                    // 例: Mage with ArcanaMaximus, preferred=4m, dist=2m → wouldNoOp=true → fall-through
+                    //     Warrior preferred=1m, dist=2m → wouldNoOp=false → 通常移動 (1m まで詰める)
+                    float wouldNoOpThreshold = preferred + (mover != null && mover.simulateMovement ? HoldEpsilonIn : HoldEpsilonOut);
+                    bool wouldNoOp = dist <= wouldNoOpThreshold;
+                    if (!HasLongRangeAttackSkill() && dist <= 2f && wouldNoOp)
+                    {
+                        committed = false; return false;
+                    }
+                    return MoveToDistance(toTarget, dist, preferred);
+                }
                 case RealtimeAction.MoveToOwnRangeKeep: return MaintainDistance(toTarget, dist, preferred);
                 case RealtimeAction.MoveToCloseRange:   return MoveToDistance(toTarget, dist, RangeCloseMass);
                 case RealtimeAction.MoveToMidRange:     return MoveToDistance(toTarget, dist, RangeMidMass);

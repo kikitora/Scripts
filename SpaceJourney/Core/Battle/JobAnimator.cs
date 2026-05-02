@@ -85,6 +85,46 @@ namespace SteraCube.SpaceJourney
             animator.SetTrigger(PARAM_ATTACK);
         }
 
+        /// <summary>スキル別アニメ用の発火。
+        /// Skill SO の <c>animStateName</c> が指定されていれば CrossFade (State 名直接指定)、
+        /// 無ければ <c>animTriggerName</c> の Trigger を立てる (Animator Controller 側で AnyState→State 遷移を作っておく前提)。
+        /// どちらも空 or 該当 Parameter/State がない場合はデフォルト Attack に fallback。</summary>
+        public void PlayAttackForSkill(SteraCube.SpaceJourney.Realtime.RealtimeSkillDefinition skill)
+        {
+            if (animator == null) return;
+
+            // 1) animStateName が指定されてて、その State が Animator に存在するなら CrossFade で直接遷移
+            string stateName = skill?.animStateName;
+            if (!string.IsNullOrEmpty(stateName) && HasState(stateName))
+            {
+                if (hasAttack) animator.ResetTrigger(PARAM_ATTACK);
+                animator.CrossFadeInFixedTime(stateName, 0.08f);
+                return;
+            }
+
+            // 2) animTriggerName が指定されてて、Parameter が存在するなら Trigger を立てる
+            string triggerName = skill?.animTriggerName;
+            if (!string.IsNullOrEmpty(triggerName) && HasParameter(triggerName))
+            {
+                animator.SetTrigger(triggerName);
+                return;
+            }
+
+            // 3) fallback: 既定の Attack Trigger
+            if (hasAttack) animator.SetTrigger(PARAM_ATTACK);
+        }
+
+        /// <summary>Animator に指定名の Parameter があるか。AnimatorController の parameters を線形探索。</summary>
+        private bool HasParameter(string name)
+        {
+            if (animator == null || animator.runtimeAnimatorController == null || string.IsNullOrEmpty(name)) return false;
+            foreach (var p in animator.parameters)
+            {
+                if (p.name == name) return true;
+            }
+            return false;
+        }
+
         public void PlayDamage()
         {
             if (!hasDamage || animator == null) return;
@@ -137,6 +177,39 @@ namespace SteraCube.SpaceJourney
             if (animator == null) return false;
             int hash = Animator.StringToHash(stateName);
             return animator.HasState(0, hash);
+        }
+
+        // ──────────────────────────────────────
+        // 「移動可能か判定」用ヘルパ
+        // ──────────────────────────────────────
+
+        // Idle / Walk 系 (移動可能 state) の hash キャッシュ
+        private static readonly int H_Idle = Animator.StringToHash("Idle");
+        private static readonly int H_Walk = Animator.StringToHash("Walk");
+        private static readonly int H_WalkLeft = Animator.StringToHash("WalkLeft");
+        private static readonly int H_WalkRight = Animator.StringToHash("WalkRight");
+
+        /// <summary>Animator が移動と両立しない state (Attack / Damage / Die / Victory / Defeat 等) に
+        /// 居れば true。Idle / Walk / WalkLeft / WalkRight のどれかに居れば false。
+        /// 「攻撃アニメが終わってないのに移動し始める」を防ぐため、castAnimSec 経過後でもこの flag が
+        /// true なら呼び元 (RealtimeBattleUnit) は移動を抑止する。
+        /// Transition 中は遷移先 state が Idle/Walk 系なら抜け始めとみなして false。</summary>
+        public bool IsBusyState()
+        {
+            if (animator == null) return false;
+            var cur = animator.GetCurrentAnimatorStateInfo(0);
+            int curH = cur.shortNameHash;
+            bool curBusy = !(curH == H_Idle || curH == H_Walk || curH == H_WalkLeft || curH == H_WalkRight);
+            if (!curBusy) return false;
+            // Transition で Idle/Walk 系へ抜けつつあるなら busy 解除
+            if (animator.IsInTransition(0))
+            {
+                var nxt = animator.GetNextAnimatorStateInfo(0);
+                int nxtH = nxt.shortNameHash;
+                bool nxtMovable = (nxtH == H_Idle || nxtH == H_Walk || nxtH == H_WalkLeft || nxtH == H_WalkRight);
+                if (nxtMovable) return false;
+            }
+            return true;
         }
     }
 }

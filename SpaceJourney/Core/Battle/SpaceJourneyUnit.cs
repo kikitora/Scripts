@@ -66,6 +66,15 @@ namespace SteraCube.SpaceJourney
 
         [SerializeField] private List<ActiveStatusEffect> activeEffects = new List<ActiveStatusEffect>();
 
+        /// <summary>
+        /// 行動妨害系状態異常 (Hardcc + Charm + Silence 等、StatusEffectMeta.IsDisruptive=true) を
+        /// 受理した瞬間に発火。引数は duration (秒)。RealtimeBattleUnit が subscribe して
+        /// OnDisrupted を呼び、進行中スキルキャンセル + CT払戻 + 硬直 を実装する。
+        /// (memory: Disruption spec — DealDamage前=CT払戻+硬直0、後=CT通常+残アニメ秒硬直)
+        /// </summary>
+        [NonSerialized]
+        public Action<float> OnDisruptApplied;
+
         public SpaceJourneyUnit(SoulInstance soul, BodyInstance body)
         {
             this.soul = soul;
@@ -272,15 +281,51 @@ namespace SteraCube.SpaceJourney
             int normalizedValue = NormalizeValuePercentByType(type, value);
             int expire = Mathf.Max(0, nowTime) + duration;
 
-            // 同タイプが既にあれば「強い方 + 長い方」に更新（最小実装）
-            for (int i = 0; i < activeEffects.Count; i++)
-            {
-                if (activeEffects[i].type != type) continue;
+            // === MMO 式 slot ベース重複制御 ===
+            // 同 slot の既存効果を探し、ランク勝負で決着する。
+            //   既存ランク > 新ランク → 拒否
+            //   既存ランク < 新ランク → 既存削除 → 新規追加
+            //   既存ランク = 新ランク かつ 同 type → 既存を強度+expire 更新 (refresh)
+            //   既存ランク = 新ランク かつ 別 type → 既存削除 → 新規追加
+            // 別 slot の既存効果には触らない (併存可能)。
+            var newSlot = StatusEffectMeta.GetSlot(type);
+            int newRank = StatusEffectMeta.GetRank(type);
 
-                activeEffects[i].expireTime = Mathf.Max(activeEffects[i].expireTime, expire);
-                activeEffects[i].valuePercent = ChooseStrongerValue(type, activeEffects[i].valuePercent, normalizedValue);
-                if (source != null) activeEffects[i].source = source;
-                return;
+            for (int i = activeEffects.Count - 1; i >= 0; i--)
+            {
+                var existing = activeEffects[i];
+                if (existing.expireTime <= battleTime) continue;          // 期限切れは無視
+                if (StatusEffectMeta.GetSlot(existing.type) != newSlot) continue; // 別 slot は触らない
+
+                int existingRank = StatusEffectMeta.GetRank(existing.type);
+
+                if (existingRank > newRank)
+                {
+                    // 既存の方が強い → 新規拒否
+                    return;
+                }
+                if (existingRank < newRank)
+                {
+                    // 新規の方が強い → 既存削除して継続走査 (同 slot に複数いる可能性は本来無いが念のため)
+                    activeEffects.RemoveAt(i);
+                    continue;
+                }
+
+                // 同ランク
+                if (existing.type == type)
+                {
+                    // 同 type → 強度+expire を更新 (refresh)
+                    existing.expireTime = Mathf.Max(existing.expireTime, expire);
+                    existing.valuePercent = ChooseStrongerValue(type, existing.valuePercent, normalizedValue);
+                    if (source != null) existing.source = source;
+                    // Hardcc は refresh でも硬直イベントを再発火 (Stun→Stun で硬直延長)
+                    if (StatusEffectMeta.IsDisruptive(type)) OnDisruptApplied?.Invoke(duration);
+                    return;
+                }
+
+                // 同ランクで別 type (例: Stun 中に同ランクの別 Hardcc 系)
+                // → 既存削除 → 新規追加
+                activeEffects.RemoveAt(i);
             }
 
             activeEffects.Add(new ActiveStatusEffect
@@ -290,6 +335,9 @@ namespace SteraCube.SpaceJourney
                 expireTime = expire,
                 source = source,
             });
+
+            // 行動妨害系受理 → realtime 側 OnDisrupted を発火させる
+            if (StatusEffectMeta.IsDisruptive(type)) OnDisruptApplied?.Invoke(duration);
         }
 
         /// <summary>指定 type の状態異常の source を取得 (有効期限内のみ)</summary>
@@ -310,7 +358,8 @@ namespace SteraCube.SpaceJourney
             get
             {
                 PurgeExpiredEffects();
-                return HasActiveEffect(StatusEffectType.Stun) || HasActiveEffect(StatusEffectType.Freeze);
+                return HasActiveEffect(StatusEffectType.Stun)
+                    || HasActiveEffect(StatusEffectType.Freeze);
             }
         }
 
@@ -354,7 +403,6 @@ namespace SteraCube.SpaceJourney
                     case StatusEffectType.Burn:
                     case StatusEffectType.ChainDamage:
                     case StatusEffectType.Taunt:
-                    case StatusEffectType.CycleDelay:
                         activeEffects.RemoveAt(i);
                         count++;
                         break;

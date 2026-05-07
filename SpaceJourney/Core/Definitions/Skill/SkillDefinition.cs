@@ -230,7 +230,6 @@ namespace SteraCube.SpaceJourney
                      "【被ダメ軽減】DamageReduceOnce / DamageReducePassive\n" +
                      "【マーク】DamageMarkApply（rateParam に増加率）\n" +
                      "【状態異常操作】StatusCleanse\n" +
-                     "【コスト操作】ReuseCycleReduce\n" +
                      "【範囲操作】RangeExpand\n" +
                      "【追加ヒット】SplashHit / RicochetHit\n" +
                      "【常時強化】MeleeBoost（rateParam に新倍率）")]

@@ -574,17 +574,71 @@ namespace SteraCube.SpaceJourney
         Counter = 19,   // 被攻撃時に AT×(value/100) で即時反撃 (duration中)
         SurviveLethal,  // 致死ダメを HP1 に丸める (1回消費)
         Invincible,     // 全ダメージ0化 (duration中)
-        RangeBoost,     // targetRange のマンハッタン距離を +value 拡張
-        CycleDelay,     // 所持スキルの reuseCycle 発動時 +value 加算 (debuff)
-        CoverAlly,      // 隣接味方への次攻撃1回を自分が肩代わり (1回消費)
-        Custom,
+        RangeBoost,         // targetRange のマンハッタン距離を +value 拡張
+        // 23 は欠番 (旧 CycleDelay = ターン制 reuseCycle 操作デバフ。realtime 戦闘で未使用のため削除)
+        CoverAlly = 24,     // 隣接味方への次攻撃1回を自分が肩代わり (1回消費)
+        Custom = 25,        // 武器パッシブ専用拡張枠 (weaponEffect/customIntValue を別途指定)
         // 新規 v2 (2026-04-15)
         Regen = 26,            // HP自動回復 (1tickあたり MaxHP×value%)
         Confusion,             // 味方と敵の認識が反転 (攻撃対象選択が逆)
         NextAttackAppliesStun, // 次の1回の自身攻撃時、対象にStun付与 (1回消費)
         IgnoreDefenseReactions,// 自身攻撃時、敵の回避/反撃/無敵等を無効化 (duration中)
         EffectRangeBoost,      // AoE ImpactLanding スキルの effectRange を +1マス広げる (duration中)
+        AutoRevive = 31,       // 死亡時 1 度だけ HP value% で復活 (1 回消費)。十字架の加護用。SurviveLethal とは別物
+        // 新規 (2026-05-08 状態異常 Phase 1)
+        DisableHealing = 32,   // 回復不能 (HP回復系全ブロック)
+        Silence = 33,          // スキル使用禁止 (通常攻撃のみ可)
+        Reflect = 34,          // 被ダメ value% 軽減 + 攻撃者へ同ダメ反射
+        DamageTakenUp = 35,    // 受け側マーク。被ダメ +value%
+        DamageShare = 36,      // 指定味方とダメ50/50分散 (source 必須)
+        // 37 は欠番 (旧 Petrify。スキル未使用 + ユーザー判断で削除 2026-05-08)
+        Stealth = 38,          // 不可視 (ターゲット対象外、攻撃時自動解除)
+        Charm = 39,            // 通常攻撃のみ + ターゲット陣営反転
     }
+
+    /// <summary>
+    /// 状態異常の重複制御用「枠」(slot)。
+    /// 同 slot の効果は 1 つしか持てず、StatusEffectMeta.GetRank によるランク勝負で決着する。
+    /// 別 slot の効果は併存可能。
+    /// </summary>
+    public enum StatusEffectSlot
+    {
+        None = 0,
+        Hardcc,         // 行動完全停止系: Stun, Freeze (1 枠のみ占有、ランク勝負)
+        StatBuff_AT,    // BuffAt / DebuffAt (打ち消し合う)
+        StatBuff_DF,    // BuffDf / DebuffDf
+        StatBuff_AGI,   // BuffAgi / DebuffAgi
+        StatBuff_MAT,   // BuffMat / DebuffMat
+        StatBuff_MDF,   // BuffMdf / DebuffMdf
+        DoT_Burn,       // Burn (継続ダメ、固定値)
+        DoT_Chain,      // ChainDamage (継続ダメ、MaxHP%)
+        HoT_Regen,      // Regen
+        SoftCC_Confusion,
+        SoftCC_Charm,
+        SoftCC_Silence,
+        SoftCC_Taunt,
+        Vuln_DamageTakenUp,
+        Vuln_DisableHealing,
+        Vuln_Stealth,
+        Defensive_Counter,
+        Defensive_Invincible,
+        Defensive_SurviveLethal,
+        Defensive_AutoRevive,
+        Defensive_AoeAbsorb,
+        Defensive_CoverAlly,
+        Defensive_Reflect,
+        Defensive_DamageShare,
+        Util_RangeBoost,
+        Util_NextAttackAppliesStun,
+        Util_EffectRangeBoost,
+        Util_IgnoreDefenseReactions,
+        Misc_Knockback,         // 即時系 (将来 enum から外す予定だが今は枠だけ用意)
+        Misc_HealMorale,        // 即時系 (将来 enum から外す予定)
+        Misc_Custom,            // 武器パッシブ拡張枠
+    }
+
+    // StatusEffectMeta は別ファイル (Definitions/StatusEffect/StatusEffectMeta.cs) に移動済み。
+    // 数値設定は StatusEffectMetaDatabase (SO) を MasterDatabase に登録して行う。
 
     #endregion
 
@@ -714,12 +768,7 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         EnemyBecameAdjacentThisTime = 85,
 
-        /// <summary>
-        /// 使用スキルが「重スキル」（reuseCycle > baseCost）である。
-        /// 大技・重い技に対してのみ発動するパッシブに使う。
-        /// → SkillTriggerContext.usedSkillIsHeavy で評価。
-        /// </summary>
-        UsedSkillIsHeavy = 86,
+        // 86 は欠番 (旧 UsedSkillIsHeavy = ターン制 reuseCycle > baseCost 判定。realtime 戦闘で未使用のため削除)
 
         /// <summary>
         /// 使用スキルが単体対象スキル（PointArea + Unit）である。
@@ -905,14 +954,7 @@ namespace SteraCube.SpaceJourney
         StatusCleanse = 60,
 
 
-        // ─── スキルコスト・回転操作──────────────────────────────────
-        /// <summary>
-        /// reuseCycle -1：次に使う攻撃スキルの再使用周期（reuseCycle）を1短縮。
-        /// baseCostは変わらない（周期部分のみ短縮）。
-        /// useCountLimit: 発動上限（通常 1）。
-        /// heavySkillOnly: true のとき「短縮対象が重スキル」のときのみ有効。
-        /// </summary>
-        ReuseCycleReduce = 70,
+        // 70 は欠番 (旧 ReuseCycleReduce = ターン制 reuseCycle 短縮効果。realtime 戦闘で未使用のため削除)
 
 
         // ─── 範囲操作────────────────────────────────────────────────

@@ -66,6 +66,7 @@ namespace SteraCube.SpaceJourney.Realtime
         AttackedAndNoEnemyInBasicRange, // 被弾直近 AND preferredRange 内に敵なし
         AttackerCloserThanCurrentTarget, // 被弾直近 AND attacker が現ターゲットより近い AND currentTarget が skills[0] 射程外
         NoLongRangeAttack,       // 3m+ 射程で使える攻撃スキルを 1 つも所持していない (basic 無効化考慮)
+        EnemyInContact,          // 自分中心 EnemyContactRadius (default 1.5m) 内に敵が 1 体以上いる (ルート上 path obstacle 検出より広範囲。接敵時のターゲット切替を path 迂回より先行させる用)
     }
 
     public enum RealtimeAction

@@ -59,11 +59,27 @@ namespace SteraCube.SpaceJourney
         [Tooltip("強制移動 (ノックバック等) の移動秒数。通常より速く。向きも変えない")]
         public float forcedMoveSec = 0.15f;
 
-        [Tooltip("死亡時、モデルを倒す (X軸90度回転)")]
+        [Tooltip("死亡時、モデルを倒す (X軸90度回転)。deathDespawnDelaySec が経過するまでの間に表示される")]
         public bool rotateOnDeath = true;
 
-        [Tooltip("死亡時、モデルを非表示にするなら true (false=倒れる表現)")]
+        [Tooltip("死亡時、モデルを即座に非表示にするなら true (deathDespawnDelaySec を無視)")]
         public bool hideOnDeath = false;
+
+        [Header("死亡演出")]
+        [Tooltip("HP0 から実体削除までの秒数。0 で即時削除、負値で削除しない (旧挙動: 倒れたまま残る)")]
+        public float deathDespawnDelaySec = 1.0f;
+
+        [Tooltip("削除時に跡地へ生成する Prefab (光の粒など、任意)")]
+        public GameObject deathLingerPrefab;
+
+        [Tooltip("跡地 Prefab の表示時間 (秒)。0 以下なら永続表示")]
+        public float deathLingerDurationSec = -1f;
+
+        [Tooltip("跡地 Prefab のローカルオフセット (例: Y を上げて頭上に出す)")]
+        public Vector3 deathLingerOffset = Vector3.zero;
+
+        // 死亡コルーチンを起動済みのユニット (重複起動防止)
+        private readonly HashSet<SpaceJourneyUnit> dyingHandled = new();
 
         /// <summary>生成済みモデルを全削除</summary>
         public void ClearAll()
@@ -220,7 +236,7 @@ namespace SteraCube.SpaceJourney
                 var go = kvp.Value;
                 if (go == null) continue;
 
-                // 死亡処理 (アニメ優先、hideOnDeath の場合は一定秒後に非表示)
+                // 死亡処理 (倒れる + 一定秒後に削除 + 跡地に光の粒)
                 if (unit.IsDead)
                 {
                     if (hideOnDeath)
@@ -231,8 +247,14 @@ namespace SteraCube.SpaceJourney
                     if (rotateOnDeath)
                     {
                         // 既に倒れてる場合はスキップ
-                        if (Mathf.Approximately(go.transform.eulerAngles.x, 90f)) continue;
-                        go.transform.rotation *= Quaternion.Euler(90, 0, 0);
+                        if (!Mathf.Approximately(go.transform.eulerAngles.x, 90f))
+                            go.transform.rotation *= Quaternion.Euler(90, 0, 0);
+                    }
+                    // 1度だけ削除コルーチンを起動 (deathDespawnDelaySec が負なら旧挙動 = 倒れたまま残す)
+                    if (deathDespawnDelaySec >= 0f && !dyingHandled.Contains(unit))
+                    {
+                        dyingHandled.Add(unit);
+                        StartCoroutine(DespawnDeadUnitAfterDelay(unit, go, deathDespawnDelaySec));
                     }
                     continue;
                 }
@@ -307,6 +329,49 @@ namespace SteraCube.SpaceJourney
         {
             yield return new WaitForSeconds(delay);
             if (animatorComp != null) animatorComp.speed = 0f;
+        }
+
+        /// <summary>
+        /// 死亡したユニットを delay 秒後に盤面から削除し、跡地に光の粒 prefab を残す。
+        /// 待機中に復活した場合は削除をキャンセルし、倒れた回転を戻す (AutoRevive 系対応)。
+        /// </summary>
+        private System.Collections.IEnumerator DespawnDeadUnitAfterDelay(SpaceJourneyUnit unit, GameObject go, float delay)
+        {
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+
+            // 復活していたら削除キャンセル + 倒れ回転を戻す
+            if (unit != null && !unit.IsDead)
+            {
+                dyingHandled.Remove(unit);
+                if (go != null && rotateOnDeath)
+                {
+                    var e = go.transform.eulerAngles;
+                    e.x = 0f;
+                    go.transform.eulerAngles = e;
+                }
+                yield break;
+            }
+
+            if (go == null)
+            {
+                if (unit != null) dyingHandled.Remove(unit);
+                yield break;
+            }
+
+            // 跡地に光の粒など
+            if (deathLingerPrefab != null)
+            {
+                Vector3 spawnPos = go.transform.position + deathLingerOffset;
+                Transform parent = unitsParent != null ? unitsParent : transform;
+                var linger = Instantiate(deathLingerPrefab, spawnPos, Quaternion.identity, parent);
+                if (deathLingerDurationSec > 0f) Destroy(linger, deathLingerDurationSec);
+            }
+
+            // モデル削除 + マッピングから外す
+            spawnedModels.Remove(go);
+            unitToModel.Remove(unit);
+            unitToAnimator.Remove(unit);
+            Destroy(go);
         }
 
         /// <summary>指定 side の placements を生成</summary>

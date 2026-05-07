@@ -144,6 +144,11 @@ namespace SteraCube.SpaceJourney
         [Tooltip("バッチ実行時、各ログ内のマーカー出現数を集計して表示")]
         public bool countFeatureFires = false;
 
+        [Header("テスト用 (Mage 最前列)")]
+        [Tooltip("ON のとき: 味方/敵を全員 Mage に強制して最前列 (row 0) に並べる。" +
+                 "Skill Timeline Editor の Test Play で見えた挙動が実機戦闘でも起きるかの検証用。")]
+        public bool testAllMageFrontRow = false;
+
         // ログ内検出マーカー → 機能名 (Python run_batch と同一)
         private static readonly (string key, string marker)[] FEATURE_MARKERS = new[]
         {
@@ -574,6 +579,14 @@ namespace SteraCube.SpaceJourney
         private List<BattleUnitPlacement> CreatePlacements(
             int rank, int level, List<SoulJobTendency> members, BattleTactic tactic)
         {
+            // テスト用: 味方/敵 強制 Mage 1 体ずつ (1v1) を row 0 中央に配置
+            // 5 体並べると斜めに魔法を撃つので 1 体ずつに絞る。
+            // 「Skill Timeline Editor の Test Play で見えた挙動が実機戦闘でも起きるかの検証用」 (2026-05-02)
+            if (testAllMageFrontRow)
+            {
+                members = new List<SoulJobTendency> { SoulJobTendency.Mage };
+            }
+
             var placements = new List<BattleUnitPlacement>();
             var db = MasterDatabase.Instance;
 
@@ -594,7 +607,13 @@ namespace SteraCube.SpaceJourney
                 // 配置ロジック: randomizePlacement なら preferred row 無視、
                 //               偏らず空きセルからランダムで pick
                 int row;
-                if (randomizePlacement)
+                if (testAllMageFrontRow)
+                {
+                    // 強制で row 0 に並べる (1v1 用、 中央 y=2 を優先)
+                    if (rowSlots[0].Count == 0) break;
+                    row = 0;
+                }
+                else if (randomizePlacement)
                 {
                     // 空き row のうちランダム
                     var openRows = new List<int>();
@@ -616,7 +635,17 @@ namespace SteraCube.SpaceJourney
                     if (rowSlots[row].Count == 0) break;
                 }
 
-                int yIdx = Random.Range(0, rowSlots[row].Count);
+                int yIdx;
+                if (testAllMageFrontRow)
+                {
+                    // 中央 y=2 を優先 (なければ先頭)
+                    yIdx = rowSlots[row].IndexOf(2);
+                    if (yIdx < 0) yIdx = 0;
+                }
+                else
+                {
+                    yIdx = Random.Range(0, rowSlots[row].Count);
+                }
                 int y = rowSlots[row][yIdx];
                 rowSlots[row].RemoveAt(yIdx);
                 var cell = new Vector2Int(row, y);

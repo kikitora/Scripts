@@ -81,6 +81,28 @@ namespace SteraCube.SpaceJourney
         // ※ RealtimeSkillDefinition の登録欄はここには不要。
         //   各 BodyJobDefinition の realtimeSkills に直接 SO を登録すること。
 
+        [Header("━━━━━━━━━━ 状態異常メタ ━━━━━━━━━━")]
+        [Tooltip("StatusEffectType ごとの slot / rank / 表示メタを管理する SO。\n" +
+                 "起動時に StatusEffectMeta.Init() で取り込まれ、ApplyStatusEffect から参照される。")]
+        [SerializeField] private StatusEffectMetaDatabase statusEffectMetaDatabase;
+        public StatusEffectMetaDatabase StatusEffectMetaDatabase => statusEffectMetaDatabase;
+
+        // 起動時に StatusEffectMeta を初期化 (SceneSingleton.Awake を override)
+        protected override void Awake()
+        {
+            base.Awake();
+            if (statusEffectMetaDatabase != null)
+            {
+                StatusEffectMeta.Init(statusEffectMetaDatabase);
+            }
+            else
+            {
+                Debug.LogWarning("[MasterDatabase] StatusEffectMetaDatabase が未登録です。" +
+                                 "Inspector の '状態異常メタ' に SO をアサインしてください。" +
+                                 "(現状は全 enum が Slot=None 扱いになり、状態異常の重複制御が破綻します)");
+            }
+        }
+
 
         // ------------------------------
         // ランダム名前（直書き・インスペクター非表示）

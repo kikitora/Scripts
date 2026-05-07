@@ -33,7 +33,7 @@ namespace SteraCube.SpaceJourney.Realtime
         // --- Phase A で追加 (ロジックは Phase B 以降で実装) ---
         GuardChanceBoost,         // 自分のガード確率を effectAmount% UP (騎士 / 盾)
         StatusEffectOnHitTarget,  // 攻撃命中時に対象に状態異常 (炎上 / 凍結 / スタン等)
-        CooldownResetEnemyBasic,  // 敵の通常攻撃 CT を初期化 (ウエイトカッター)
+        ExtendEnemyCooldowns,     // 敵の CT 中スキル全ての残り CT を effectAmount 秒延長 (ウエイトカッター 時断ち)
         RangeMultiplier,          // 射程倍率 (彼方 / 魔王の杖)
         MoveSpeedMultiplier,      // 移動速度倍率 (軽弓 AGI UP 等)
         AttackSpeedMultiplier,    // 攻撃 CT 倍率 (速く / 遅く)
@@ -52,6 +52,14 @@ namespace SteraCube.SpaceJourney.Realtime
         AttackShapeOverride,      // 範囲変更 (収束する運命)
         ExtraAoeHit,              // 対象中心に AoE 追加ヒット (三星剣)
         AutoReviveOnce,           // 死亡時 1 度だけ復活 (十字架)
+        BasicAttackRangeBonus,    // 通常攻撃 (skills[0]) のみ射程に amount(m) を加算 (竜牙穿ち)
+        RangePercentMul,          // 全スキル射程に (1 + amount/100) 倍率を掛ける (魔王の射程 = 1.2 倍 等)
+        LifestealPercent,         // 攻撃命中時、与ダメの amount% を自己回復 (吸血 / 野武士の呼吸)
+        HealAlliesOnHitPercent,   // 攻撃命中時、与ダメの amount% で味方全体回復 (大樹の加護)
+        BasicAttackShapeMultiplier, // 通常攻撃 (skills[0]) のみ shape 倍率 (1 + amount/100)、 VFX も同倍率 (太陽の膨張 = 1.5 倍)
+        WalkSpeedMul,             // walkSpeed に (1 + amount/100) 倍率を恒久適用 (竜王の槍 = +10% 常時、 戦士速度に並ぶ)
+        AllDamageMul,             // 全攻撃 (basic + skill 両方) に (1 + amount/100) 倍率 (竜骨 +5% 等)
+        DeTauntOnDamaged,         // 被弾時、 攻撃者が自分をターゲットなら別の味方に切替 (シャドウハンター 影の回避)
     }
 
     /// <summary>

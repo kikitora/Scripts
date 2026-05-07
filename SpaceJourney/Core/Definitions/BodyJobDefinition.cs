@@ -34,5 +34,9 @@ namespace SteraCube.SpaceJourney
         [Header("リアル戦闘用スキル")]
         [Tooltip("リアル戦闘で使うスキル。index 0 が基礎攻撃、以降が追加スキル。ActionEntry.actionSkillIndex はこの index を参照。")]
         public List<SteraCube.SpaceJourney.Realtime.RealtimeSkillDefinition> realtimeSkills = new();
+
+        [Header("rank3+ 取得 マーカー passive (ConditionalCast 条件用)")]
+        [Tooltip("通常スキル timeline の ConditionalCast.branchRequiredPassive で参照する目印。\n例: 戦士 rank3 自動追撃用の P_Warrior_AutoExtra など。")]
+        public List<SteraCube.SpaceJourney.Realtime.RealtimePassiveDefinition> rank3PassiveMarkers = new();
     }
 }

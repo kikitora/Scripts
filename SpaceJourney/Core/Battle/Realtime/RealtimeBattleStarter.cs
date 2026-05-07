@@ -27,6 +27,10 @@ namespace SteraCube.SpaceJourney.Realtime
         [Tooltip("魔術師のキャラ prefab を強制固定")]
         public GameObject forceMagePrefab;
 
+        [Header("Passive VFX")]
+        [Tooltip("貫通射撃 (Archer rank3) 発動時、矢に取り付ける竜巻 VFX。Polygon Arsenal/Prefabs/Environment/Tornado/BasicTornado.prefab 等")]
+        public GameObject pierceShotVfxPrefab;
+
         [Header("移動速度 (職別、mass/秒)")]
         [Tooltip("戦士: やや速い")]
         public float warriorWalkSpeed = 1.2f;
@@ -70,7 +74,7 @@ namespace SteraCube.SpaceJourney.Realtime
         public float rangeCloseMass = 1f;
         public float rangeMidMass = 2f;
         public float rangeFarMass = 5f;
-        public float rangeMaxFarMass = 8f;
+        public float rangeMaxFarMass = 6f;
 
         [Header("最低攻撃距離 (職別、これより近いと攻撃不可)")]
         [Tooltip("戦士: 制限なし")]
@@ -91,6 +95,13 @@ namespace SteraCube.SpaceJourney.Realtime
         [Header("武器抽選")]
         [Tooltip("テスト段階の武器プール上限。minAreaLevel <= これの武器が候補")]
         [Range(1, 10)] public int weaponPoolMaxRank = 10;
+
+        // 強制武器抽選 (テスト用): jobId → weaponId のマップ。Bridge 経由で set-force-weapon コマンドで設定。
+        // 該当 job のユニットを spawn する時、ランダム抽選より優先してこの武器を装備させる。
+        // 自陣 (味方) のみに適用 (= ownerSide=0)。 敵側はランダム抽選を維持。
+        // 静的辞書なので Domain Reload 後はリセットされる。
+        public static readonly System.Collections.Generic.Dictionary<string, string> ForcedWeaponByJob
+            = new System.Collections.Generic.Dictionary<string, string>();
 
         [Header("職別 AnimatorController (null の場合は Resources から自動ロード試行)")]
         public RuntimeAnimatorController warriorAnimator;
@@ -239,6 +250,9 @@ namespace SteraCube.SpaceJourney.Realtime
 
                 // RealtimeBattleUnit アタッチ
                 var rtu = go.AddComponent<RealtimeBattleUnit>();
+
+                // 状態異常ビジュアルバインダー: aura prefab 装着 + Animator.speed 制御
+                go.AddComponent<StatusEffectVfxBinder>().Bind(u);
                 // スキル割り当て: BodyJobDefinition.realtimeSkills 優先、なければ基礎スキルのみフォールバック
                 var skillList = ResolveSkillsForUnit(u);
                 if (skillList != null && skillList.Count > 0)
@@ -266,18 +280,29 @@ namespace SteraCube.SpaceJourney.Realtime
                 rtu.Setup(u, side, label, range, speed, manager);
                 rtu.basicAttackCooldownSec = attackCd;
                 rtu.fieldVisualizer = fieldVisualizer;
+                // 貫通射撃 VFX (hasPierceShot 立ってる職に対してのみ ArrowEqOff で表示)
+                rtu.pierceShotVfxPrefab = pierceShotVfxPrefab;
                 // スキルCTにもグローバル倍率を適用 (AGI は将来skill側にも効かせる予定)
                 rtu.skillCooldownMul = globalCooldownMul * agiMul;
                 // 決定間隔も AGI で短縮 (基底 1.0s × agiMul)
                 rtu.decisionIntervalSec = Mathf.Max(0.3f, 1.0f * agiMul);
-                // 遠距離職は射程の中間付近 (4m) を維持距離に
-                rtu.preferredDistanceOverride = (jobId == "Archer" || jobId == "Mage") ? 4f : 0f;
+                // 遠距離職は射程内側 0.5m (= 5.5m) を維持距離に。 ArrowShot/Rock の rangeMax 6m 内に収まる。
+                rtu.preferredDistanceOverride = (jobId == "Archer" || jobId == "Mage") ? 5.5f : 0f;
 
                 // Realtime 武器抽選 + 装備 (テスト段階: maxAreaRank=weaponPoolMaxRank で rarity 重み抽選)
                 if (!string.IsNullOrEmpty(jobId) && db != null)
                 {
                     var rngW = new System.Random();
-                    var mainW = db.PickRealtimeWeaponForJob(jobId, weaponPoolMaxRank, rngW);
+                    // 強制武器: ForcedWeaponByJob に該当 job が登録されてれば、 ランダム抽選より優先 (味方/敵両側)
+                    SteraCube.SpaceJourney.Realtime.RealtimeWeaponDefinition mainW = null;
+                    if (ForcedWeaponByJob.TryGetValue(jobId, out string forcedId) && !string.IsNullOrEmpty(forcedId))
+                    {
+                        mainW = db.GetRealtimeWeaponById(forcedId);
+                        if (mainW == null)
+                            Debug.LogWarning($"[RealtimeBattleStarter] forced weapon '{forcedId}' for {jobId} not found in DB; falling back to random");
+                    }
+                    if (mainW == null)
+                        mainW = db.PickRealtimeWeaponForJob(jobId, weaponPoolMaxRank, rngW);
                     if (mainW != null)
                     {
                         rtu.EquipWeapon(mainW);
@@ -292,6 +317,15 @@ namespace SteraCube.SpaceJourney.Realtime
                             rtu.EquipWeapon(shieldW);
                             Debug.Log($"[RealtimeBattleStarter] {go.name}: equipped shield {shieldW.weaponId} (guard {shieldW.guardChance*100:F0}%/{shieldW.guardMitigation*100:F0}%)");
                         }
+                    }
+                    // Warrior は Walk アニメが両手剣を握れる Run2 に差し替え済 → Walk 中も IK ON。
+                    // 他職 (Knight 片手 / Lancer 槍 / Archer 弓 / Mage 杖) は Walk クリップが両手 IK 前提では
+                    // ないので、デフォルトの「Walk/WalkLeft/WalkRight で IK OFF」を維持する。
+                    if (jobId == "Warrior")
+                    {
+                        var ik = go.GetComponentInChildren<SteraCube.SpaceJourney.Realtime.WeaponLeftHandIK>();
+                        if (ik != null)
+                            ik.SetDisableInStates(System.Array.Empty<string>());
                     }
                     // 種族パッシブを unit.activePassives に追加
                     if (!p.IsEnemyDef && p.body != null)
@@ -486,6 +520,13 @@ namespace SteraCube.SpaceJourney.Realtime
                 case "Knight":
                     return new List<RealtimeTargetEntry>
                     {
+                        new RealtimeTargetEntry { // 接敵中 → ルート迂回より先にターゲット変更 (引っ掛かり解消)
+                            condition = RealtimeCondition.EnemyInContact,
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.Nearest,
+                            rangeFilterMaxDist = SteraCube.SpaceJourney.Realtime.RealtimeBattleUnit.EnemyContactRadius,
+                            label = "接敵中 → 最寄敵に切替 (引っ掛かり解消)"
+                        },
                         new RealtimeTargetEntry { // 現 currentTarget が攻撃範囲外 AND 攻撃範囲内に他の敵 → 接敵中の敵に切替
                             condition = RealtimeCondition.TargetOutsideSkillRange,
                             conditionSkillIndex = 0,  // 基本スキル (Slash) の射程
@@ -514,10 +555,17 @@ namespace SteraCube.SpaceJourney.Realtime
                         },
                     };
                 case "Lancer":
-                    // Lancer は Warrior/Knight と違い「接敵時の切替」ルール無し。
-                    // 機動性を活かして遠めの敵もそのまま追う設計 (中距離武器で離脱速度が活きる)。
+                    // Lancer は機動性を活かして遠めの敵を追う設計だが、押し合いで stuck になる場面では
+                    // 接敵切替が必要 (ContinuousMover では敵を obstacle 化せず head-on するため)。
                     return new List<RealtimeTargetEntry>
                     {
+                        new RealtimeTargetEntry { // 接敵中 → ルート迂回より先にターゲット変更 (引っ掛かり解消)
+                            condition = RealtimeCondition.EnemyInContact,
+                            targetSide = RealtimeTargetSide.Enemy,
+                            targetSelect = RealtimeTargetSelect.Nearest,
+                            rangeFilterMaxDist = SteraCube.SpaceJourney.Realtime.RealtimeBattleUnit.EnemyContactRadius,
+                            label = "接敵中 → 最寄敵に切替 (引っ掛かり解消)"
+                        },
                         new RealtimeTargetEntry { // 被弾 AND attacker が現ターゲットより近い → 切替
                             condition = RealtimeCondition.AttackerCloserThanCurrentTarget,
                             targetSide = RealtimeTargetSide.Enemy,
@@ -575,13 +623,14 @@ namespace SteraCube.SpaceJourney.Realtime
                     return new List<RealtimeActionEntry>
                     {
                         // 1. currentTarget が DaggerStab 範囲 (≤1m) かつ CT 空 → 短剣 (近接対応)
+                        // ※ DaggerStab はソウルスキル化予定 (memory: project_archer_skill_redesign)
                         new RealtimeActionEntry {
                             condition = RealtimeCondition.CanCastSkill,
                             conditionSkillIndex = 1,
                             action = RealtimeAction.CastSkill, actionSkillIndex = 1,
                             label = "近接1m内 DaggerStab"
                         },
-                        // 2. 弓射程内 + CT 空 → ArrowShot (targetList が射程内の敵を currentTarget にしてくれる前提)
+                        // 2. 弓射程内 + CT 空 → ArrowShot (rangeMin=0 で隣接からも撃てる)
                         new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "ArrowShot"),
                         // 3. 弓射程内 (CT 中) → 維持 (近寄らず後退もせず)
                         new RealtimeActionEntry {
@@ -590,8 +639,9 @@ namespace SteraCube.SpaceJourney.Realtime
                             action = RealtimeAction.MoveToOwnRange,
                             label = "弓射程内 → 待機"
                         },
-                        // 4. 射程外 → 近接距離まで詰める
-                        new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToCloseRange, "近接 (1m) まで詰める"),
+                        // 4. 射程外 → preferred (4m) まで詰める。
+                        // 「近接 1m まで詰める」は廃止 (ArrowShot rangeMin=0 で接敵時も撃てる + Archer は遠距離型)
+                        new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToOwnRange, "preferred まで詰める"),
                     };
 
                 case "Lancer":
@@ -617,23 +667,38 @@ namespace SteraCube.SpaceJourney.Realtime
                             action = RealtimeAction.CastSkill, actionSkillIndex = 2,
                             label = "味方HP<50 → HealingWave"
                         },
-                        // 2. currentTarget が Bash 範囲 (≤1m) + CT 空 → Bash (近接対応)
+                        // 2. Burst (skill[0]) で 2 体以上巻き込み可 → Burst を使う (CT 空き必須)
+                        new RealtimeActionEntry {
+                            condition = RealtimeCondition.EnemiesHitCountGe,
+                            conditionSkillIndex = 0,
+                            conditionParam = 2f,
+                            action = RealtimeAction.BasicAttack,
+                            label = "Burst (2体以上巻込み)"
+                        },
+                        // 3. Rock (skill[3]) 単体魔法弾、 射程内 + CT 空 → 単体時の主力
+                        new RealtimeActionEntry {
+                            condition = RealtimeCondition.CanCastSkill,
+                            conditionSkillIndex = 3,
+                            action = RealtimeAction.CastSkill, actionSkillIndex = 3,
+                            label = "Rock (単体魔法)"
+                        },
+                        // 4. Burst が 1 体だけでも撃てる (Rock CT 中の fallback)
+                        new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "Burst (単体 fallback)"),
+                        // 5. 近接 1m 内に敵 + Bash CT 空 → Bash
                         new RealtimeActionEntry {
                             condition = RealtimeCondition.CanCastSkill,
                             conditionSkillIndex = 1,
                             action = RealtimeAction.CastSkill, actionSkillIndex = 1,
                             label = "近接1m内 Bash"
                         },
-                        // 3. 魔法射程内 + CT 空 → Burst (targetList が射程内敵を currentTarget にしてくれる前提)
-                        new RealtimeActionEntry(RealtimeCondition.CanBasicAttack, RealtimeAction.BasicAttack, "Burst"),
-                        // 4. 魔法射程内 (CT 中) → 維持
+                        // 6. 魔法射程内 (CT 中) → 維持
                         new RealtimeActionEntry {
                             condition = RealtimeCondition.TargetInSkillRange,
                             conditionSkillIndex = 0,
                             action = RealtimeAction.MoveToOwnRange,
                             label = "魔法射程内 → 待機"
                         },
-                        // 5. 射程外 → 近接距離まで詰める
+                        // 7. 射程外 → 近接距離まで詰める
                         new RealtimeActionEntry(RealtimeCondition.Always, RealtimeAction.MoveToCloseRange, "近接 (1m) まで詰める"),
                     };
 

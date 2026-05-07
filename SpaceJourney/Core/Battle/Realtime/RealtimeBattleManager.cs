@@ -10,7 +10,13 @@ namespace SteraCube.SpaceJourney.Realtime
     /// リアルタイム戦闘の統括コンポーネント。
     /// 生存監視、勝敗判定、ログ収集、制限時間管理。
     /// 連続移動方式: MovementPhase で全ユニット step + push-out 反復。
+    ///
+    /// [DefaultExecutionOrder(100)]: Update を RealtimeBattleUnit.Update より後に走らせる。
+    /// これで「Unit.Update で MaintainCurrentTarget (接敵切替判定) → mover.destination 更新」が
+    /// 完了してから「Manager.Update.MovementPhase で StepBattle (path obstacle 計算)」が走るので、
+    /// **接敵時のターゲット切替が path 迂回より必ず先**に成立する (1 frame 遅延の不安定を解消)。
     /// </summary>
+    [DefaultExecutionOrder(100)]
     public class RealtimeBattleManager : MonoBehaviour
     {
         [Header("戦闘設定")]
@@ -59,8 +65,8 @@ namespace SteraCube.SpaceJourney.Realtime
         /// MovementPhase で lifetime / HP チェック + 重なり押し出しを行う。</summary>
         public readonly List<Barricade> barricades = new();
 
-        /// <summary>バリケードマップ (BeginBattle で SimpleGrid 準拠の GridBarricadeMap を構築)。
-        /// SimpleGrid 未初期化時のフォールバックとして空マップを保持。</summary>
+        /// <summary>バリケードマップ。 ターゲットリスト requireRoute の LineOfSight 判定だけに使う。
+        /// 迂回 (FindPath) はしない設計。 BeginBattle で BarricadeListMap を構築。</summary>
         public IBarricadeMap barricadeMap = new EmptyBarricadeMap();
 
         public void RegisterUnit(RealtimeBattleUnit u)
@@ -123,13 +129,13 @@ namespace SteraCube.SpaceJourney.Realtime
         }
 
         /// <summary>SimpleGrid.Active が存在する場合、全ユニットの mover を attach する。
-        /// barricadeMap も SimpleGrid に揃えて GridBarricadeMap (A* 経路探索) を構築。</summary>
+        /// barricadeMap は LineOfSight 判定 (requireRoute) 用に BarricadeListMap を構築。
+        /// 迂回 (FindPath) はしない。</summary>
         private void AttachAllMovers()
         {
             var grid = SimpleGrid.Active;
             if (grid == null) return;
-            // Grid 取得後に GridBarricadeMap 構築 (各 mover に inject)
-            barricadeMap = new GridBarricadeMap(this, grid);
+            barricadeMap = new BarricadeListMap(this);
             foreach (var u in AllUnits)
             {
                 if (u == null) continue;
@@ -141,15 +147,11 @@ namespace SteraCube.SpaceJourney.Realtime
             }
         }
 
-        /// <summary>バリケードの追加/削除後に呼び出す。GridBarricadeMap の blocked セルを再計算し、
-        /// 全 mover のキャッシュ path も破棄して次フレで再計画させる。</summary>
+        /// <summary>バリケードの追加/削除後に呼び出す。 BarricadeListMap は manager.barricades を
+        /// 直接見るので rebuild は不要。 互換のため空関数として残置。</summary>
         public void RebuildBarricadeMap()
         {
-            if (barricadeMap is GridBarricadeMap gb) gb.Rebuild();
-            foreach (var u in AllUnits)
-            {
-                if (u != null && u.mover != null) u.mover.InvalidatePath();
-            }
+            // no-op: BarricadeListMap は manager.barricades の現在状態を都度見る
         }
 
         /// <summary>ランタイム中に倍速を変更する。Animator/エフェクトに即時反映。</summary>
@@ -318,7 +320,17 @@ namespace SteraCube.SpaceJourney.Realtime
                     barricadesChanged = true;
                 }
             }
-            if (barricadesChanged) RebuildBarricadeMap();
+            if (barricadesChanged)
+            {
+                RebuildBarricadeMap();
+                // 全ユニットに再評価を促す (Barricade 消滅で「壁の前で停止」してた unit が動き出せるよう)
+                foreach (var u in AllUnits)
+                {
+                    if (u == null || !u.IsAlive()) continue;
+                    u.nextDecisionTime = 0f;
+                    if (u.mover != null) u.mover.simulateMovement = false;
+                }
+            }
 
             // push-out 反復 (重なり解消) — unit-unit + unit-barricade。
             for (int iter = 0; iter < 20; iter++)

@@ -38,33 +38,50 @@ namespace SteraCube.SpaceJourney.Realtime
             RealtimeBattleUnit caster, Vector3 center, Vector3 facing,
             float currentTime, int hp = DEFAULT_HP, float lifetime = DEFAULT_LIFETIME)
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = $"Barricade_{caster.displayName}";
+            // ビジュアルは Resources/Barricade/Barricade_Visual.prefab があればそれを使う。
+            // prefab 製作者は scale=(LENGTH, HEIGHT, THICKNESS)=(3, 1.5, 0.4) で見栄え良くなるよう設計する。
+            // prefab が無ければ primitive Cube + 砂岩色 Material のフォールバック表示。
+            GameObject go;
+            var visualPrefab = Resources.Load<GameObject>("Barricade/Barricade_Visual");
+            if (visualPrefab != null)
+            {
+                go = Object.Instantiate(visualPrefab);
+                go.name = $"Barricade_{caster.displayName}";
+            }
+            else
+            {
+                go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                go.name = $"Barricade_{caster.displayName}";
+                var rend = go.GetComponent<Renderer>();
+                if (rend != null)
+                {
+                    var mat = new Material(Shader.Find("Standard"));
+                    mat.color = (caster != null && caster.ownerSide == 0)
+                        ? new Color(0.7f, 0.6f, 0.5f)
+                        : new Color(0.4f, 0.3f, 0.3f);
+                    rend.material = mat;
+                }
+            }
+
             // 親を caster と同じ親 (シーン整理)
             if (caster != null && caster.transform.parent != null)
                 go.transform.SetParent(caster.transform.parent, true);
             // 位置: caster の y に合わせる、壁の中心が地面から HEIGHT/2 に
             float baseY = caster != null ? caster.transform.position.y : 0f;
             go.transform.position = new Vector3(center.x, baseY + HEIGHT * 0.5f, center.z);
-            // 回転: facing 方向 = +Z (Quad/Cube の前面)
+            // 回転: facing 方向 = +Z (Cube/visualPrefab の前面)
             Vector3 facingFlat = new Vector3(facing.x, 0f, facing.z).normalized;
             if (facingFlat.sqrMagnitude < 0.001f) facingFlat = Vector3.forward;
             go.transform.rotation = Quaternion.LookRotation(facingFlat, Vector3.up);
-            // スケール: 横軸 (along) = LENGTH, 縦軸 (height) = HEIGHT, 厚さ (facing axis) = THICKNESS
-            // LookRotation で +Z が facing → scale: x=LENGTH, y=HEIGHT, z=THICKNESS
-            go.transform.localScale = new Vector3(LENGTH, HEIGHT, THICKNESS);
-            // 物理コライダ不要 (mover が独自に避ける)
-            var coll = go.GetComponent<Collider>(); if (coll != null) Object.Destroy(coll);
-            // 仮の見た目 (色: 灰 = caster ally / 黒 = enemy)
-            var rend = go.GetComponent<Renderer>();
-            if (rend != null)
-            {
-                var mat = new Material(Shader.Find("Standard"));
-                mat.color = (caster != null && caster.ownerSide == 0)
-                    ? new Color(0.7f, 0.6f, 0.5f) // 砂岩風
-                    : new Color(0.4f, 0.3f, 0.3f);
-                rend.material = mat;
-            }
+            // スケール:
+            // - visualPrefab 経由: prefab 自身の scale を尊重 (prefab 制作者は (LENGTH, HEIGHT, THICKNESS)
+            //   で見栄え良くなるよう作る前提だが、別 scale で作りたい場合も上書きしない)
+            // - primitive Cube fallback: 単位 1m なので (LENGTH, HEIGHT, THICKNESS) でストレッチ
+            if (visualPrefab == null)
+                go.transform.localScale = new Vector3(LENGTH, HEIGHT, THICKNESS);
+            // 物理コライダ不要 (mover が独自に避ける) — 自身と全子の Collider を除去
+            foreach (var c in go.GetComponentsInChildren<Collider>(true))
+                Object.Destroy(c);
 
             var b = go.AddComponent<Barricade>();
             b.owner = caster;

@@ -885,13 +885,6 @@ namespace SteraCube.SpaceJourney
                     Log.Add($"    [種族] {GetLabel(actor)} 「集中」「{skill.SkillName}」CT {skill.reuseCycle}→{appliedCycle} (戦闘中1回)");
                     state.HumanFocusAvailable = false;
                 }
-                // CycleDelay: 所持してれば +value 加算
-                int cycleDelay = actor.GetActiveEffectValue(StatusEffectType.CycleDelay);
-                if (cycleDelay > 0)
-                {
-                    appliedCycle += cycleDelay;
-                    Log.Add($"    [牽制] {GetLabel(actor)} 「{skill.SkillName}」CT +{cycleDelay}");
-                }
                 // リアルタイムモードでは CT を秒単位で扱う (cycle値 = 秒数)
                 state.SkillCooldowns[skill.SkillId] = realtimeMode ? (ClockTime + appliedCycle) : (t + appliedCycle);
             }
@@ -1609,7 +1602,20 @@ namespace SteraCube.SpaceJourney
                     damage = 0;
                 }
 
+                // AutoRevive: 致死→HP value% 残しで復活、効果消費 (IgnoreDefenseReactionsで無効化)
+                // 十字架の加護用。SurviveLethal とは別 enum
+                bool revived = false;
+                if (!ignoreDef && damage >= tgt.CurrentHp && tgt.HasActiveEffect(StatusEffectType.AutoRevive))
+                {
+                    int rPct = Mathf.Max(1, tgt.GetActiveEffectValue(StatusEffectType.AutoRevive));
+                    int reviveHp = Mathf.Max(1, Mathf.RoundToInt(tgt.MaxHp * rPct / 100f));
+                    damage = Mathf.Max(0, tgt.CurrentHp - reviveHp);
+                    tgt.ConsumeActiveEffect(StatusEffectType.AutoRevive);
+                    revived = true;
+                }
+
                 // SurviveLethal: 致死→1HP残し、効果消費 (IgnoreDefenseReactionsで無効化)
+                // 不屈用。AutoRevive で削りきれていれば自然に発動条件不成立
                 bool survived = false;
                 if (!ignoreDef && damage >= tgt.CurrentHp && tgt.HasActiveEffect(StatusEffectType.SurviveLethal))
                 {
@@ -1626,7 +1632,7 @@ namespace SteraCube.SpaceJourney
                 // 踏ん張り (knight_shobo_s2): HP70%/40% 初到達でダメ refund
                 TryShoulderRefund(tgt, dmgActual);
 
-                string deadMark = tgt.IsDead ? " ★撃破!" : (survived ? " ☆不屈!" : "");
+                string deadMark = tgt.IsDead ? " ★撃破!" : (revived ? " ✝復活!" : (survived ? " ☆不屈!" : ""));
                 Log.Add($"  [{GetLabel(actor)}] →「{skill.SkillName}」→ [{GetLabel(tgt)}] " +
                         $"{damage}ダメ (HP {hpBefore}→{tgt.CurrentHp}){deadMark} [cost={cost}]");
 

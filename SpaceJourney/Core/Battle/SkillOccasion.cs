@@ -131,12 +131,6 @@ namespace SteraCube.SpaceJourney
         public bool enemyBecameAdjacentThisTime;
 
         /// <summary>
-        /// 使用スキルが「重スキル」（reuseCycle > baseCost）かどうか。
-        /// UsedSkillIsHeavy（86）の判定に使う。
-        /// </summary>
-        public bool usedSkillIsHeavy;
-
-        /// <summary>
         /// 使用スキルが単体対象スキル（PointArea + Unit）かどうか。
         /// TargetingIsSingle（87）の判定に使う。
         /// </summary>
@@ -244,10 +238,6 @@ namespace SteraCube.SpaceJourney
                 // 85: このタイムに敵が新たに隣接してきた
                 case SkillConditionKind.EnemyBecameAdjacentThisTime:
                     return ctx.enemyBecameAdjacentThisTime;
-
-                // 86: 使用スキルが重スキル（reuseCycle > baseCost）
-                case SkillConditionKind.UsedSkillIsHeavy:
-                    return ctx.usedSkillIsHeavy;
 
                 // 87: 使用スキルが単体対象スキル
                 case SkillConditionKind.TargetingIsSingle:

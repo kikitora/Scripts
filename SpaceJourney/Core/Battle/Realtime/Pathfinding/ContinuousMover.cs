@@ -4,14 +4,13 @@ using UnityEngine;
 namespace SteraCube.SpaceJourney.Realtime.Pathfinding
 {
     /// <summary>
-    /// 連続座標 Mover。GridUnitMover (旧) と同じ公開 API を保ちつつ占有テーブルを使わない。
+    /// 連続座標 Mover。
     ///
-    /// ・直線シーク (障害物なし時)
-    /// ・近接ユニット tangent 回避 (head-on デッドロック解消)
-    /// ・接触相手方向の velocity 成分を削る (重なり防止)
-    /// ・push-out は RealtimeBattleManager 側で全 unit step 後に一括反復解消
-    ///
-    /// Python continuous_mover.py の 1:1 C# 移植。
+    /// 設計方針: **destination へ直行**。同 side 味方も非ターゲット敵もバリケードも
+    /// path obstacle 化しない (= 迂回しない)。物理的衝突は velocity clamp + push-out で
+    /// 防ぎ、詰まったらユーザがターゲット/アクションリストで挙動を決める。
+    /// 並走 stuck だけ崩すための極めて軽い tangent avoid steer (currentTarget 除外、
+    /// 接触距離ぎりぎりのみ) を持つ。
     /// </summary>
     public class ContinuousMover : MonoBehaviour
     {
@@ -42,6 +41,16 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
         public bool reachedDestination { get; private set; }
 
         public bool IsInTransit => _attached && simulateMovement && !reachedDestination;
+
+        /// <summary>直前 StepBattle で実際に動いた速度 (m/s)。
+        /// velocity (clamp 前後の意図ベクトル) ではなく **押し出し後の真の displacement / dt**。
+        /// 押し合いで velocity が tangent に小さく残っても EffectiveSpeed は実際の動きを反映する。</summary>
+        public float EffectiveSpeed { get; private set; }
+
+        /// <summary>直前 StepBattle で destination 方向にどれだけ近づいたか (m/s)。
+        /// 横滑りで EffectiveSpeed > 0 でも、 destination に向かってない場合は 0 近くになる。
+        /// walk / idle anim 切替や「stuck → 攻撃許可」判定に使う。</summary>
+        public float EffectiveProgressSpeed { get; private set; }
 
         /// <summary>現在位置のグリッドセル (互換: round(world / cell_size))。</summary>
         public Vector2Int CurrentCell
@@ -74,13 +83,9 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
 
         private bool _attached = false;
         private SimpleGrid _grid;
-        private IBarricadeMap _barricadeMap;
         private SteraCube.SpaceJourney.Realtime.RealtimeBattleUnit _owner;
-        private List<Vector3> _path;
-        private float _pathComputedAt = -999f;
-        private float _stuckTime = 0f;  // 動こうとしてるのに動けてない時間累積 (エスケープ判定用)
-        private Vector3 _prevStepStart;       // 前フレーム StepBattle 開始時の position (push-out 含む実効移動測定用)
-        private bool _hasPrevStepStart = false;
+        private Vector3 _prevStepStartPos;  // 直前 StepBattle 開始時 position (Effective*Speed 算出用)
+        private bool _hasPrevStepStartPos = false;
 
         // ======================== 初期化 ========================
 
@@ -96,10 +101,9 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             velocity = Vector3.zero;
             reachedDestination = false;
             _attached = true;
-            _path = null;
-            _pathComputedAt = -999f;
-            _hasPrevStepStart = false;
-            _stuckTime = 0f;
+            _hasPrevStepStartPos = false;
+            EffectiveSpeed = 0f;
+            EffectiveProgressSpeed = 0f;
         }
 
         public void Detach()
@@ -115,9 +119,9 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             transform.position = world;
             if (clearVelocity) velocity = Vector3.zero;
             reachedDestination = false;
-            _path = null;
-            _hasPrevStepStart = false;  // テレポート後の偽スタック検知を抑止
-            _stuckTime = 0f;
+            _hasPrevStepStartPos = false;  // テレポート後の偽 EffectiveSpeed を抑止
+            EffectiveSpeed = 0f;
+            EffectiveProgressSpeed = 0f;
         }
 
         public void StopMovement()
@@ -125,20 +129,15 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             simulateMovement = false;
             velocity = Vector3.zero;
             reachedDestination = false;
+            EffectiveSpeed = 0f;
+            EffectiveProgressSpeed = 0f;
         }
 
-        public void SetBarricadeMap(IBarricadeMap bm)
-        {
-            _barricadeMap = bm;
-        }
+        /// <summary>互換のため残置 (旧 GridBarricadeMap A* 経路用、現在は no-op)。</summary>
+        public void SetBarricadeMap(IBarricadeMap bm) { /* no-op: A* 撤廃済 */ }
 
-        /// <summary>キャッシュされた A* path を破棄して次フレで再計算させる。
-        /// バリケード追加/削除で blocked セルが変わったときに呼ぶ。</summary>
-        public void InvalidatePath()
-        {
-            _path = null;
-            _pathComputedAt = -999f;
-        }
+        /// <summary>互換のため残置 (旧 path キャッシュ無効化、現在は no-op)。</summary>
+        public void InvalidatePath() { /* no-op: A* 撤廃済 */ }
 
         // ======================== メイン更新 ========================
 
@@ -148,14 +147,29 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
         /// </summary>
         public void StepBattle(float dt, float currentTime)
         {
-            // フレーム単位の実効移動量を測定 (push-out 含む)。前フレ start → 今フレ start の差分が
-            // 「前フレで実際にどれだけ動けたか」になる (push-out で戻された分は差し引かれる)。
+            // 前フレ StepBattle 開始 → 今フレ StepBattle 開始の差分が
+            // 「前フレで実際にどれだけ動けたか」(push-out 込み)。
             Vector3 thisFrameStart = transform.position;
-            float interFrameDelta = -1f;
-            if (_hasPrevStepStart)
-                interFrameDelta = (thisFrameStart - _prevStepStart).magnitude;
-            _prevStepStart = thisFrameStart;
-            _hasPrevStepStart = true;
+            if (_hasPrevStepStartPos && dt > 1e-6f)
+            {
+                Vector3 displacement = thisFrameStart - _prevStepStartPos;
+                displacement.y = 0f;
+                EffectiveSpeed = displacement.magnitude / dt;
+                // destination 方向への成分: 横滑りは 0 近く、 直進は EffectiveSpeed と同等。
+                Vector3 toDest = destination - _prevStepStartPos;
+                toDest.y = 0f;
+                if (toDest.sqrMagnitude > 0.01f)
+                    EffectiveProgressSpeed = Vector3.Dot(displacement, toDest.normalized) / dt;
+                else
+                    EffectiveProgressSpeed = EffectiveSpeed;  // destination 至近
+            }
+            else
+            {
+                EffectiveSpeed = 0f;
+                EffectiveProgressSpeed = 0f;
+            }
+            _prevStepStartPos = thisFrameStart;
+            _hasPrevStepStartPos = true;
 
             if (!_attached || !simulateMovement)
             {
@@ -175,14 +189,9 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             }
             reachedDestination = false;
 
-            // steer_target 解決 (障害物回避 or 直行)
-            Vector3 steer = ResolveSteerTarget(currentTime);
-
-            // 速度: 直線方向 + 近接ユニット tangent 回避
-            Vector3 d = steer - transform.position;
-            d.y = 0f;
-            Vector3 dir = d.sqrMagnitude > 1e-9f ? d.normalized : Vector3.zero;
-            dir = ApplyAvoidanceSteer(dir);
+            // 速度: 直線方向 + 軽量 unit avoid bias
+            Vector3 dir = dist > 1e-4f ? to / dist : Vector3.zero;
+            dir = ApplyUnitAvoidanceSteer(dir);
 
             Vector3 v = dir * maxSpeed;
 
@@ -200,206 +209,16 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             cand.y = prevPos.y;
 
             transform.position = cand;
-
-            // スタック検出 + 強制エスケープ:
-            // 「動こうとしてるのに実際の移動量が極端に小さい」状態が 0.8s 続いたら横方向に強制ステップ。
-            // 検知は OR で 3 系統:
-            //  (a) velocity が clamp で削られて near-zero (= 味方が真前で止まり接触方向成分全部消滅)
-            //  (b) StepBattle 内 displacement (cand - prevPos) が極小 (= field 端 ClampToField で食われた)
-            //  (c) フレーム単位の実効移動量 (前フレ start→今フレ start) が極小 (= push-out が StepBattle の動きを毎フレ取り消してる)
-            // どれかが 0.8s 続けば escape + path 破棄で再計算。
-            const float stuckEscapeThreshold = 0.8f;
-            float actualDelta = (cand - prevPos).magnitude;
-            float expectedDelta = v.magnitude * dt;
-            bool velocityNearZero = v.sqrMagnitude < 0.01f * maxSpeed * maxSpeed;                       // (a)
-            bool clampAteMotion = expectedDelta > 0.001f && actualDelta < expectedDelta * 0.1f;        // (b)
-            float frameExpected = maxSpeed * dt;
-            bool pushOutCancellingMotion = interFrameDelta >= 0f
-                && frameExpected > 0.001f
-                && interFrameDelta < frameExpected * 0.1f;                                              // (c)
-            bool effectivelyStuck = velocityNearZero || clampAteMotion || pushOutCancellingMotion;
-            if (effectivelyStuck)
-            {
-                _stuckTime += dt;
-                if (_stuckTime > stuckEscapeThreshold)
-                {
-                    // 90° サイドステップ: ID で左右決定論的に、両側 field 内かどうかをプローブして開いている方を選ぶ
-                    Vector3 baseDir = dir.sqrMagnitude > 0.01f ? dir : transform.forward;
-                    int preferRight = (GetInstanceID() & 1);
-                    Vector3 leftDir = new Vector3(-baseDir.z, 0f, baseDir.x);
-                    Vector3 rightDir = new Vector3(baseDir.z, 0f, -baseDir.x);
-                    Vector3 first = preferRight == 0 ? leftDir : rightDir;
-                    Vector3 second = preferRight == 0 ? rightDir : leftDir;
-                    Vector3 escape = first;
-                    if (_grid != null)
-                    {
-                        const float probeDist = 1.0f;
-                        Vector3 probe1 = transform.position + first * probeDist;
-                        Vector3 clamp1 = _grid.ClampToField(probe1);
-                        bool firstBlocked = (Mathf.Abs(probe1.x - clamp1.x) > 0.05f || Mathf.Abs(probe1.z - clamp1.z) > 0.05f);
-                        if (firstBlocked)
-                        {
-                            // 2 つ目を試す。それも塞がってたら baseDir 反転 (180°) を試す
-                            Vector3 probe2 = transform.position + second * probeDist;
-                            Vector3 clamp2 = _grid.ClampToField(probe2);
-                            bool secondBlocked = (Mathf.Abs(probe2.x - clamp2.x) > 0.05f || Mathf.Abs(probe2.z - clamp2.z) > 0.05f);
-                            if (!secondBlocked) escape = second;
-                            else escape = -baseDir;
-                        }
-                    }
-                    Vector3 stepTarget = transform.position + escape.normalized * 0.3f;
-                    if (_grid != null) stepTarget = _grid.ClampToField(stepTarget);
-                    stepTarget.y = transform.position.y;
-                    transform.position = stepTarget;
-                    velocity = escape.normalized * maxSpeed * 0.6f;
-                    _stuckTime = 0f;
-                    // path キャッシュもクリア (現位置から再計算させる)
-                    _path = null;
-                }
-            }
-            else
-            {
-                _stuckTime = 0f;
-            }
         }
 
-        // ======================== steer_target 解決 ========================
+        // ======================== 軽量 unit avoid steer ========================
 
-        /// <summary>障害物があれば A* 経路の次 waypoint、なければ destination 直接。
-        /// Python _resolve_steer_target の 1:1 移植。</summary>
-        private Vector3 ResolveSteerTarget(float now)
+        /// <summary>味方/敵問わずユニット間の avoid steer は無効化。
+        /// destination へ素直に直進。 押し合い stuck は velocity clamp で停止 + idle anim、
+        /// 解決はターゲットリスト/アクションリストで行う設計。</summary>
+        private Vector3 ApplyUnitAvoidanceSteer(Vector3 desiredDir)
         {
-            var bm = _barricadeMap;
-            if (bm == null || !bm.IsPresent)
-                return destination;
-
-            if (bm.LineOfSight(transform.position, destination))
-            {
-                _path = null;
-                return destination;
-            }
-
-            // 再計画判定
-            bool needReplan = (_path == null
-                || (now - _pathComputedAt) >= 0.4f
-                || (_path != null && _path.Count > 0
-                    && Vector3.Distance(_path[_path.Count - 1], destination) > 1f));
-
-            if (needReplan)
-            {
-                _path = bm.FindPath(transform.position, destination);
-                _pathComputedAt = now;
-            }
-
-            if (_path == null || _path.Count == 0)
-                return destination;
-
-            // 通過済み waypoint を除去
-            while (_path.Count > 0)
-            {
-                Vector3 wp = _path[0];
-                Vector3 diff = wp - transform.position;
-                diff.y = 0f;
-                if (diff.magnitude < 0.3f)
-                    _path.RemoveAt(0);
-                else
-                    break;
-            }
-
-            return _path.Count > 0 ? _path[0] : destination;
-        }
-
-        // ======================== 回避 steer ========================
-
-        /// <summary>前方の近接ユニットを避けるため、velocity に tangent 成分を加える。
-        /// head-on デッドロックは ID で左右を決定論的に選ぶ。
-        /// Python _apply_avoidance_steer の 1:1 移植 (XZ 平面)。</summary>
-        private Vector3 ApplyAvoidanceSteer(Vector3 desiredDir)
-        {
-            if (_owner == null || _owner.manager == null || radius <= 0f)
-                return desiredDir;
-
-            // 検出半径 / steer 強度を大きめにとる。
-            // 「前にキャラがいてルートが塞がっている」場合、早めに横に振って回り込ませる。
-            float avoidR = radius * 9f;       // 検出半径拡張 (6r → 9r)
-            float weightMul = 6f;              // sideways 重み強化 (3 → 6)
-            float biasX = 0f;
-            float biasZ = 0f;
-            int blockingCount = 0;             // 前方ブロッカー数 (デッドロック検出)
-            Vector3 myPos = transform.position;
-
-            int ownerSide = _owner.ownerSide;
-            foreach (var u in _owner.manager.AllUnits)
-            {
-                if (u == null || u == _owner || !u.IsAlive()) continue;
-                // 同 side (味方) のみ回避する。敵は head-on で接敵させる。
-                if (u.ownerSide != ownerSide) continue;
-                var m = u.mover;
-                if (m == null || !m._attached) continue;
-
-                float rx = m.transform.position.x - myPos.x;
-                float rz = m.transform.position.z - myPos.z;
-                float dval = Mathf.Sqrt(rx * rx + rz * rz);
-                if (dval < 1e-6f || dval > avoidR) continue;
-
-                // 前方判定: 進行方向との内積が正のときのみ avoid
-                float forward = rx * desiredDir.x + rz * desiredDir.z;
-                if (forward <= 0f) continue;
-                blockingCount++;
-
-                AccumulateAvoidanceBias(desiredDir, rx, rz, dval, forward, avoidR, weightMul,
-                    u.mover.GetInstanceID(), myPos, ref biasX, ref biasZ);
-            }
-
-            // バリケード回避 (Active barricade を obstacle として扱う、closest point on wall で位置算出)
-            if (_owner.manager.barricades != null)
-            {
-                foreach (var b in _owner.manager.barricades)
-                {
-                    if (b == null || !b.IsActive) continue;
-                    Vector3 closestOnWall = b.ClosestPointOnWall(myPos);
-                    float rx = closestOnWall.x - myPos.x;
-                    float rz = closestOnWall.z - myPos.z;
-                    float dval = Mathf.Sqrt(rx * rx + rz * rz);
-                    if (dval < 1e-6f || dval > avoidR) continue;
-                    float forward = rx * desiredDir.x + rz * desiredDir.z;
-                    if (forward <= 0f) continue;
-                    blockingCount++;
-                    AccumulateAvoidanceBias(desiredDir, rx, rz, dval, forward, avoidR, weightMul,
-                        b.GetInstanceID(), myPos, ref biasX, ref biasZ);
-                }
-            }
-
-            // デッドロック対策: ブロッカー有るのに左右バイアスが相殺されてゼロに近い場合、
-            // ID ベースで決まった preferred side に強制的に横振り
-            if (blockingCount > 0)
-            {
-                float biasMag = Mathf.Sqrt(biasX * biasX + biasZ * biasZ);
-                if (biasMag < 0.5f)
-                {
-                    // 0 or 拮抗 → 強制サイドステップ
-                    int preferRight = (GetInstanceID() & 1);
-                    float forceTx, forceTz;
-                    if (preferRight == 0)
-                    {
-                        forceTx = -desiredDir.z;
-                        forceTz = desiredDir.x;
-                    }
-                    else
-                    {
-                        forceTx = desiredDir.z;
-                        forceTz = -desiredDir.x;
-                    }
-                    biasX += forceTx * 1.5f;
-                    biasZ += forceTz * 1.5f;
-                }
-            }
-
-            float newX = desiredDir.x + biasX;
-            float newZ = desiredDir.z + biasZ;
-            float len = Mathf.Sqrt(newX * newX + newZ * newZ);
-            if (len < 1e-9f) return desiredDir;
-            return new Vector3(newX / len, 0f, newZ / len);
+            return desiredDir;
         }
 
         /// <summary>obstacle (rx, rz, dval) に対して左右どちらに sidestep するか決め、bias を加算。
@@ -437,7 +256,7 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
                     Vector3 altClamped = _grid.ClampToField(altProbe);
                     bool altBlocked = (Mathf.Abs(altProbe.x - altClamped.x) > 0.1f || Mathf.Abs(altProbe.z - altClamped.z) > 0.1f);
                     if (!altBlocked) chosen = alt; // 反対側が空いてるなら flip
-                    // 両側ブロックされてる場合は元のまま (stuck escape に任せる)
+                    // 両側ブロックされてる場合は元のまま
                 }
             }
 
@@ -451,7 +270,6 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
         // ======================== velocity clamp ========================
 
         /// <summary>既に接触/ほぼ接触している他ユニットへ向かう velocity 成分を削る。
-        /// Python _clamp_velocity_against_units の 1:1 移植 (XZ 平面)。
         /// パラメータ: contact_eps=0.02</summary>
         private Vector3 ClampVelocityAgainstUnits(Vector3 vel, float dt)
         {
@@ -495,8 +313,9 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             return vel;
         }
 
-        /// <summary>Barricade に向かう velocity 成分を削る。
-        /// Python _clamp_velocity_against_barricades の 1:1 移植 (XZ 平面)。</summary>
+        /// <summary>Barricade に向かう velocity 成分を削る (壁通過防止)。
+        /// 壁の前で速度ゼロになるので、ユニットは自然に「壁の前で停止」する。
+        /// 迂回はしない (steer bias 無し)。</summary>
         private Vector3 ClampVelocityAgainstBarricades(Vector3 vel)
         {
             if (_owner == null || _owner.manager == null) return vel;

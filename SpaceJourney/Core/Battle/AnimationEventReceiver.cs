@@ -26,6 +26,16 @@ namespace SteraCube.SpaceJourney
         public void WaitDestroyParts(float sec) { }
         public void WaitDestroyParts(AnimationEvent e) { }
 
+        // SteraCube_Humanoid 系クリップは Wait なし版も使う (Victory Idle, Telling A Secret, Sickle, Sakumotu, Roa, NIkutaiKouka, Mutant Idle, MagicStone, Jyouka, HeiwaNoIji, Bite 等)
+        public void DestroyParts() { }
+        public void DestroyParts(float sec) { }
+        public void DestroyParts(AnimationEvent e) { }
+
+        // Drinking, MagicStone, NIkutaiKouka, Sakumotu, Nusumu, Roa, Rangiri 等で使用
+        public void HitStart() { }
+        public void HitStart(string key) { }
+        public void HitStart(AnimationEvent e) { }
+
         public void EndSkill() { }
         public void EndSkill(AnimationEvent e) { }
 

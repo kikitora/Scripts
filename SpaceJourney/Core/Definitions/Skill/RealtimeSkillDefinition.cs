@@ -43,6 +43,8 @@ namespace SteraCube.SpaceJourney.Realtime
         public float powerMul = 1.0f;
         [Tooltip("回復量 (Heal 系)")]
         public int healAmount = 0;
+        [Tooltip("最大HP割合回復 (0.075 = 7.5%)。0 のとき healAmount を使用、>0 のとき優先される")]
+        public float healMaxHpRate = 0f;
         [Tooltip("ノックバック距離 (m)。0=なし")]
         public float knockbackMass = 0f;
         [Tooltip("挑発時間 (秒)。>0 で対象を強制的にこちらを狙わせる")]
@@ -96,6 +98,21 @@ namespace SteraCube.SpaceJourney.Realtime
         [Header("ジョブ紐付け (任意)")]
         [Tooltip("このスキルを使用可能なジョブ (空なら全職可)")]
         public BodyJobDefinition[] allowedBodyJobs;
+
+        [Header("SubSkill 専用挙動 (ConditionalCast から発動された時のみ)")]
+        [Tooltip("DealDamage イベントが発火した時に通常 ApplySkillEffect の代わりに発動する特殊挙動。\n" +
+                 "AoE 範囲やノックバック距離など SO で表現できないものはコード側で hardcode。\n" +
+                 "None なら通常の damageKind/powerMul で計算。")]
+        public SubSkillBehavior subSkillBehavior = SubSkillBehavior.None;
+    }
+
+    /// <summary>SubSkill 専用挙動。 SO で表現できない AoE 範囲などはコード側 hardcode。</summary>
+    public enum SubSkillBehavior
+    {
+        None,                // 通常の damageKind/powerMul で計算
+        AoeAroundTarget,     // 対象中心 1.5m AoE、 powerMul で各敵にダメ (朱雀爆炎 / 三星の輝き)
+        PullEnemies,         // 対象を自分方向へ powerMul 倍 (m) 引き寄せ (重力の調べ)
+        KnockbackAoE,        // 自前方 2x2 (2m 幅 × 2m 奥行) BOX 内の敵を powerMul 倍 (m) 押し戻す (さざ波)
     }
 
     /// <summary>
@@ -124,13 +141,31 @@ namespace SteraCube.SpaceJourney.Realtime
         [Tooltip("SE (kind=PlaySound 時)")]
         public AudioClip sound;
         public string label;
+
+        // ===== ConditionalCast 用 =====
+        [Tooltip("発動条件 (kind=ConditionalCast 時)。 null なら無条件 (procChance のみで判定)。\n" +
+                 "RealtimePassive SO 参照で、そのパッシブが unit.activePassives に登録されてれば true。\n" +
+                 "戦士 rank3 自動追撃マーカー / 武器パッシブ 等を区別なく扱える。")]
+        public RealtimePassiveDefinition branchRequiredPassive;
+        [Tooltip("発動枠 (N 回中 1 回確定で発動、 kind=ConditionalCast 時)。\n" +
+                 "1=毎回、 2=2 回中 1 回、 3=3 回中 1 回、... 0 や負値は \"使わない\" (= branchProcChance を使う)。\n" +
+                 "周期内位置はランダム → ユニット間で同期しない、 周期境界で稀に 2 連発する味あり。")]
+        public int branchTriggerInterval = 0;
+        [Tooltip("発動確率 (kind=ConditionalCast 時、 0-1)。1.0 で必ず発動。\n" +
+                 "branchTriggerInterval > 0 の時は無視される。")]
+        [Range(0f, 1f)]
+        public float branchProcChance = 1f;
+        [Tooltip("発動するサブスキル SO (kind=ConditionalCast 時)。 自身の anim/timeline で再生")]
+        public RealtimeSkillDefinition branchSubSkill;
     }
 
     public enum RealtimeSkillEventKind
     {
-        Effect,      // エフェクト Prefab を spawn
-        PlaySound,   // SE 再生
-        DealDamage,  // 指定時刻にダメージ/効果適用
+        Effect,           // エフェクト Prefab を spawn
+        PlaySound,        // SE 再生
+        DealDamage,       // 指定時刻にダメージ/効果適用
+        UnequipWeapon,    // 装備武器を一時非表示 (cast 終了で自動復帰)
+        ConditionalCast,  // 条件満たせばサブスキルを発動 (追撃/分岐)
     }
 
     public enum RealtimeEffectOrigin

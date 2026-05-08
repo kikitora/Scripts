@@ -562,11 +562,11 @@ namespace SteraCube.SpaceJourney
         Stun,
         Freeze,
         Burn,
-        HealMorale,
-        ChainDamage,
-        Taunt,          // 挑発: 周囲の敵が自分を優先攻撃
-        Knockback,      // ノックバック: 対象を1マス後方に押し戻す
-        BuffMat,        // 魔法攻撃力アップ
+        // 10 は欠番 (旧 HealMorale。士気回復スキル自体を廃止したため削除 2026-05-08)
+        // 11 は欠番 (旧 ChainDamage。電撃連鎖は状態異常ではなくスキル即時効果として別実装するため削除 2026-05-08)
+        Taunt = 12,     // 挑発: 周囲の敵が自分を優先攻撃
+        // 13 は欠番 (旧 Knockback。ノックバックは状態異常ではなく即時効果として別経路 (knockbackMass+ApplyKnockback) で実装。削除 2026-05-08)
+        BuffMat = 14,   // 魔法攻撃力アップ
         DebuffMat,      // 魔法攻撃力ダウン
         BuffMdf,        // 魔法防御力アップ (魔法被ダメ減)
         DebuffMdf,      // 魔法防御力ダウン
@@ -580,8 +580,8 @@ namespace SteraCube.SpaceJourney
         Custom = 25,        // 武器パッシブ専用拡張枠 (weaponEffect/customIntValue を別途指定)
         // 新規 v2 (2026-04-15)
         Regen = 26,            // HP自動回復 (1tickあたり MaxHP×value%)
-        Confusion,             // 味方と敵の認識が反転 (攻撃対象選択が逆)
-        NextAttackAppliesStun, // 次の1回の自身攻撃時、対象にStun付与 (1回消費)
+        // 27 は欠番 (旧 Confusion。挙動 = 敵味方ランダム攻撃 を Charm に統合したため削除 2026-05-08)
+        NextAttackAppliesStun = 28, // 次の1回の自身攻撃時、対象にStun付与 (1回消費)
         IgnoreDefenseReactions,// 自身攻撃時、敵の回避/反撃/無敵等を無効化 (duration中)
         EffectRangeBoost,      // AoE ImpactLanding スキルの effectRange を +1マス広げる (duration中)
         AutoRevive = 31,       // 死亡時 1 度だけ HP value% で復活 (1 回消費)。十字架の加護用。SurviveLethal とは別物
@@ -604,19 +604,17 @@ namespace SteraCube.SpaceJourney
     public enum StatusEffectSlot
     {
         None = 0,
-        Hardcc,         // 行動完全停止系: Stun, Freeze (1 枠のみ占有、ランク勝負)
-        StatBuff_AT,    // BuffAt / DebuffAt (打ち消し合う)
-        StatBuff_DF,    // BuffDf / DebuffDf
-        StatBuff_AGI,   // BuffAgi / DebuffAgi
-        StatBuff_MAT,   // BuffMat / DebuffMat
-        StatBuff_MDF,   // BuffMdf / DebuffMdf
-        DoT_Burn,       // Burn (継続ダメ、固定値)
-        DoT_Chain,      // ChainDamage (継続ダメ、MaxHP%)
-        HoT_Regen,      // Regen
-        SoftCC_Confusion,
-        SoftCC_Charm,
-        SoftCC_Silence,
-        SoftCC_Taunt,
+        ActionDisrupt = 1,  // 行動妨害統合枠: Stun, Freeze, Charm, Confusion, Silence (1 枠のみ占有、ランク勝負)
+        StatBuff_AT,        // BuffAt / DebuffAt (打ち消し合う)
+        StatBuff_DF,        // BuffDf / DebuffDf
+        StatBuff_AGI,       // BuffAgi / DebuffAgi
+        StatBuff_MAT,       // BuffMat / DebuffMat
+        StatBuff_MDF,       // BuffMdf / DebuffMdf
+        DoT_Burn,           // Burn (継続ダメ、固定値)
+        // 8 は欠番 (旧 DoT_Chain。ChainDamage 削除に伴い廃止)
+        HoT_Regen = 9,
+        // 10-12 は欠番 (旧 SoftCC_Confusion/Charm/Silence。ActionDisrupt=1 に統合)
+        SoftCC_Taunt = 13,
         Vuln_DamageTakenUp,
         Vuln_DisableHealing,
         Vuln_Stealth,
@@ -632,9 +630,9 @@ namespace SteraCube.SpaceJourney
         Util_NextAttackAppliesStun,
         Util_EffectRangeBoost,
         Util_IgnoreDefenseReactions,
-        Misc_Knockback,         // 即時系 (将来 enum から外す予定だが今は枠だけ用意)
-        Misc_HealMorale,        // 即時系 (将来 enum から外す予定)
-        Misc_Custom,            // 武器パッシブ拡張枠
+        // 29 は欠番 (旧 Misc_Knockback。Knockback enum 削除に伴い廃止)
+        // 30 は欠番 (旧 Misc_HealMorale。HealMorale enum 削除に伴い廃止)
+        Misc_Custom = 31,       // 武器パッシブ拡張枠
     }
 
     // StatusEffectMeta は別ファイル (Definitions/StatusEffect/StatusEffectMeta.cs) に移動済み。

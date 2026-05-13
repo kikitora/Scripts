@@ -92,6 +92,16 @@ namespace SteraCube.SpaceJourney.Realtime
         [Tooltip("基本攻撃の再使用間隔 (秒)")]
         public float basicAttackCooldownSec = 0.8f;
 
+        [Header("状態アイコン表示")]
+        [Tooltip("状態アイコンのワールドサイズ")]
+        public float statusIconWorldSize = 0.28f;
+        [Tooltip("状態アイコンを横に並べる間隔")]
+        public float statusIconSpacing = 0.28f;
+        [Tooltip("バフ行とデバフ/状態異常行の縦間隔")]
+        public float statusIconRowSpacing = 0.34f;
+        [Tooltip("キャラ頭上アンカーからの追加高さ。下げたい場合は小さくする")]
+        public float statusIconVerticalPadding = 0.24f;
+
         [Header("武器抽選")]
         [Tooltip("テスト段階の武器プール上限。minAreaLevel <= これの武器が候補")]
         [Range(1, 10)] public int weaponPoolMaxRank = 10;
@@ -147,10 +157,30 @@ namespace SteraCube.SpaceJourney.Realtime
             // unitSpawner を使って3Dモデル配置 + RealtimeBattleUnit 登録
             SpawnSide(data.allyUnits, 0, data.allyMorale);
             SpawnSide(data.enemyUnits, 1, data.enemyMorale);
+            ArrangeCameraForSpawnedUnits();
 
             // BeginBattle (この時点で unit が全登録済み + SimpleGrid.Active 設定済み)
             // → 内部の AttachAllMovers で全 mover が attach され、移動開始可能になる
             manager.BeginBattle();
+        }
+
+        private void ArrangeCameraForSpawnedUnits()
+        {
+            if (fieldVisualizer == null || manager == null)
+                return;
+            if (!fieldVisualizer.autoArrangeCamera
+                || fieldVisualizer.preserveCurrentCameraPose
+                || fieldVisualizer.useFixedCameraPose)
+                return;
+
+            var points = new List<Vector3>();
+            foreach (var unit in manager.AllUnits)
+            {
+                if (unit != null)
+                    points.Add(unit.transform.position);
+            }
+
+            fieldVisualizer.ArrangeCameraForWorldPoints(points);
         }
 
         private void SpawnSide(List<BattleUnitPlacement> placements, int side, float morale)
@@ -253,6 +283,10 @@ namespace SteraCube.SpaceJourney.Realtime
 
                 // 状態異常ビジュアルバインダー: aura prefab 装着 + Animator.speed 制御
                 go.AddComponent<StatusEffectVfxBinder>().Bind(u);
+                // 状態アイコン: 頭上に 1段目=バフ、2段目=デバフ/状態異常を表示
+                var iconBar = go.AddComponent<SteraCube.SpaceJourney.StatusEffectIconBar>();
+                iconBar.Bind(u);
+                iconBar.Configure(statusIconWorldSize, statusIconSpacing, statusIconRowSpacing, statusIconVerticalPadding);
                 // スキル割り当て: BodyJobDefinition.realtimeSkills 優先、なければ基礎スキルのみフォールバック
                 var skillList = ResolveSkillsForUnit(u);
                 if (skillList != null && skillList.Count > 0)

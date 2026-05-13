@@ -2474,12 +2474,7 @@ namespace SteraCube.SpaceJourney
             var actorCell = new Vector2Int(actorPos[1], actorPos[2]);
 
             EffectTargetSide targetSide = skill.effectTargetSide;
-            // Confusion: 味方と敵の認識が反転
-            if (actor.HasActiveEffect(StatusEffectType.Confusion))
-            {
-                if (targetSide == EffectTargetSide.Enemy) targetSide = EffectTargetSide.Self;
-                else if (targetSide == EffectTargetSide.Self) targetSide = EffectTargetSide.Enemy;
-            }
+            // 旧 Confusion 反転処理は削除 (Confusion 廃止、Charm に統合 2026-05-08)
             List<SpaceJourneyUnit> candidates;
 
             // 所属ベースで味方/敵を判定 (敵陣侵入中でも正しく動くように)
@@ -2784,20 +2779,6 @@ namespace SteraCube.SpaceJourney
 
                 if (UnityEngine.Random.value > eff.probability) continue;
 
-                // ノックバックは即時処理 (持続なし)
-                if (eff.effectType == StatusEffectType.Knockback)
-                {
-                    TryKnockback(actor, target);
-                    continue;
-                }
-
-                // 士気回復は戦闘後にまとめて計算されるため戦闘中は何もしない
-                if (eff.effectType == StatusEffectType.HealMorale)
-                {
-                    Log.Add($"    [士気効果] {skill.SkillName} 戦闘後計算のためスキップ");
-                    continue;
-                }
-
                 // Robot: 状態異常付与を3回まで無効化 (戦闘ごと)
                 if (IsAbnormalStatusEffect(eff.effectType))
                 {
@@ -2830,7 +2811,6 @@ namespace SteraCube.SpaceJourney
                 case StatusEffectType.DebuffAgi:
                 case StatusEffectType.DebuffMat:
                 case StatusEffectType.DebuffMdf:
-                case StatusEffectType.ChainDamage:
                 case StatusEffectType.Taunt:
                     return true;
                 default:
@@ -3019,13 +2999,6 @@ namespace SteraCube.SpaceJourney
 
                     foreach (var tgt in targets)
                     {
-                        // ノックバックは即時処理
-                        if (eff.effectType == StatusEffectType.Knockback)
-                        {
-                            if (otherUnit != null) TryKnockback(unit, tgt);
-                            continue;
-                        }
-
                         int duration = eff.duration > 0 ? eff.duration : 2;
                         // Taunt は source (発動者=unit) 情報を保持 (武器パッシブ等)
                         SpaceJourneyUnit pSrc = eff.effectType == StatusEffectType.Taunt ? unit : null;

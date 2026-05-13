@@ -278,8 +278,30 @@ namespace SteraCube.SpaceJourney
 
             if (activeEffects == null) activeEffects = new List<ActiveStatusEffect>();
 
+            // Stealth cannot coexist with hard action disruption.
+            // Stun/Freeze/Silence break an existing Stealth, and Stealth cannot be applied while they are active.
+            if (type == StatusEffectType.Stealth && HasActiveStealthBreakingDisrupt())
+                return;
+            if (BreaksStealth(type))
+                RemoveActiveEffect(StatusEffectType.Stealth);
+
             int normalizedValue = NormalizeValuePercentByType(type, value);
             int expire = Mathf.Max(0, nowTime) + duration;
+
+            // === 対立属性 (exclusiveWith) チェック: 後勝ちで既存を削除 ===
+            // 例: Burn 付与時、Freeze が exclusiveWith に登録されてれば既存 Freeze を消す
+            // SO Inspector で Entry 単位に設定 (Burn↔Freeze など)
+            var db = StatusEffectMeta.CurrentDatabase;
+            var newEntry = db != null ? db.Get(type) : null;
+            if (newEntry != null && newEntry.exclusiveWith != null && newEntry.exclusiveWith.Count > 0)
+            {
+                for (int i = activeEffects.Count - 1; i >= 0; i--)
+                {
+                    if (activeEffects[i].expireTime <= battleTime) continue;
+                    if (newEntry.exclusiveWith.Contains(activeEffects[i].type))
+                        activeEffects.RemoveAt(i);
+                }
+            }
 
             // === MMO 式 slot ベース重複制御 ===
             // 同 slot の既存効果を探し、ランク勝負で決着する。
@@ -340,6 +362,31 @@ namespace SteraCube.SpaceJourney
             if (StatusEffectMeta.IsDisruptive(type)) OnDisruptApplied?.Invoke(duration);
         }
 
+        private static bool BreaksStealth(StatusEffectType type)
+        {
+            return type == StatusEffectType.Stun
+                || type == StatusEffectType.Freeze
+                || type == StatusEffectType.Silence;
+        }
+
+        private bool HasActiveStealthBreakingDisrupt()
+        {
+            PurgeExpiredEffects();
+            return HasActiveEffectInternal(StatusEffectType.Stun)
+                || HasActiveEffectInternal(StatusEffectType.Freeze)
+                || HasActiveEffectInternal(StatusEffectType.Silence);
+        }
+
+        private void RemoveActiveEffect(StatusEffectType type)
+        {
+            if (activeEffects == null) return;
+            for (int i = activeEffects.Count - 1; i >= 0; i--)
+            {
+                if (activeEffects[i].type == type)
+                    activeEffects.RemoveAt(i);
+            }
+        }
+
         /// <summary>指定 type の状態異常の source を取得 (有効期限内のみ)</summary>
         public SpaceJourneyUnit GetActiveEffectSource(StatusEffectType type)
         {
@@ -363,7 +410,87 @@ namespace SteraCube.SpaceJourney
             }
         }
 
+        /// <summary>
+        /// 移動だけが封じられている状態か?
+        /// 攻撃/アクティブスキル/ガード/パッシブは通常通り扱う。
+        /// </summary>
+        public bool IsMovementDisabled
+        {
+            get
+            {
+                PurgeExpiredEffects();
+                return HasActiveEffect(StatusEffectType.Immobilize);
+            }
+        }
+
+        /// <summary>
+        /// アクティブスキル (詠唱が必要なもの) を使えない状態か?
+        /// 通常攻撃 (skills[0]) は可能、それ以外のスキル発動を禁止する。
+        /// パッシブには影響しない (memory: Status effects don't block passives)。
+        /// 対象: Stun, Freeze (動けない結果)、Silence/Charm/Confusion (詠唱封じ)
+        /// </summary>
+        public bool IsActiveSkillDisabled
+        {
+            get
+            {
+                PurgeExpiredEffects();
+                return HasActiveEffect(StatusEffectType.Stun)
+                    || HasActiveEffect(StatusEffectType.Freeze)
+                    || HasActiveEffect(StatusEffectType.Silence)
+                    || HasActiveEffect(StatusEffectType.Charm);
+            }
+        }
+
+        /// <summary>
+        /// ガード (盾) が発生しない状態か?
+        /// 完全停止系 (Stun/Freeze) は防御姿勢が取れない、Silence は集中できないので
+        /// ガード判定でこれが true なら必ず素通り (mitigation=0)。
+        /// </summary>
+        public bool IsGuardDisabled
+        {
+            get
+            {
+                PurgeExpiredEffects();
+                return HasActiveEffect(StatusEffectType.Stun)
+                    || HasActiveEffect(StatusEffectType.Freeze)
+                    || HasActiveEffect(StatusEffectType.Silence);
+            }
+        }
+
         public bool HasActiveEffect(StatusEffectType type) => HasActiveEffectInternal(type);
+
+        public bool TryGetActiveEffectRemainingTime(StatusEffectType type, out int remaining)
+        {
+            remaining = 0;
+            PurgeExpiredEffects();
+            if (activeEffects == null) return false;
+
+            for (int i = 0; i < activeEffects.Count; i++)
+            {
+                var e = activeEffects[i];
+                if (e.type != type || e.expireTime <= battleTime) continue;
+
+                remaining = e.expireTime - battleTime;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>現在有効な StatusEffectType を列挙用バッファへ追加する。UI 表示など読み取り専用用途。</summary>
+        public void GetActiveStatusEffectTypes(List<StatusEffectType> buffer)
+        {
+            if (buffer == null) return;
+            buffer.Clear();
+            PurgeExpiredEffects();
+            if (activeEffects == null || activeEffects.Count == 0) return;
+
+            for (int i = 0; i < activeEffects.Count; i++)
+            {
+                var e = activeEffects[i];
+                if (e.expireTime > battleTime && e.type != StatusEffectType.None)
+                    buffer.Add(e.type);
+            }
+        }
 
         /// <summary>指定StatusEffect の valuePercent を返す。無ければ0。複数あれば最大値。</summary>
         public int GetActiveEffectValue(StatusEffectType type)
@@ -401,7 +528,6 @@ namespace SteraCube.SpaceJourney
                     case StatusEffectType.Stun:
                     case StatusEffectType.Freeze:
                     case StatusEffectType.Burn:
-                    case StatusEffectType.ChainDamage:
                     case StatusEffectType.Taunt:
                         activeEffects.RemoveAt(i);
                         count++;
@@ -466,10 +592,6 @@ namespace SteraCube.SpaceJourney
                     case StatusEffectType.Burn:
                         // valuePercent を1tickの固定ダメージとして扱う
                         dmg = Mathf.Max(1, Mathf.Abs(e.valuePercent));
-                        break;
-                    case StatusEffectType.ChainDamage:
-                        // MaxHP の valuePercent % をダメージ (連鎖ダメージ)
-                        dmg = Mathf.Max(1, Mathf.RoundToInt(MaxHp * Mathf.Abs(e.valuePercent) / 100f));
                         break;
                     case StatusEffectType.Regen:
                     {

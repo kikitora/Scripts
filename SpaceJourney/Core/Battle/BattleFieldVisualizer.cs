@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SteraCube.SpaceJourney
@@ -40,6 +41,22 @@ namespace SteraCube.SpaceJourney
         public float cameraAngle = 55f;
         [Tooltip("カメラとフィールド中心の距離")]
         public float cameraDistance = 12f;
+        [Tooltip("ON の場合だけ、戦闘開始時にフィールド中心からカメラ位置を自動計算する")]
+        public bool autoArrangeCamera = false;
+        [Tooltip("ON の場合、戦闘開始時に現在のカメラ位置・回転・FOVを維持する")]
+        public bool preserveCurrentCameraPose = true;
+        [Tooltip("ON の場合、戦闘開始時の自動計算カメラではなく fixedCamera* の値をそのまま使う")]
+        public bool useFixedCameraPose = false;
+        public Vector3 fixedCameraPosition = new Vector3(22.5f, 11.8f, 14.2f);
+        public Vector3 fixedCameraEulerAngles = new Vector3(64.25f, 0f, 0f);
+        [Range(1f, 179f)]
+        public float fixedCameraFieldOfView = 60f;
+        [Tooltip("ON の場合、現在のGameView縦横比に合わせて10x5戦場全体が画面内に入る距離を自動計算する")]
+        public bool fitCameraToBattleField = true;
+        [Tooltip("自動フレーミング時に戦場外へ足す余白 (mass)")]
+        public float cameraFitPadding = 1.2f;
+        [Tooltip("コメントUIを避けるため、注視点を味方側へずらして盤面を画面上側へ寄せる量 (mass)")]
+        public float cameraUiSafeForwardOffset = -1.8f;
 
         [Header("デバッグ")]
         public bool drawGizmos = true;
@@ -112,20 +129,112 @@ namespace SteraCube.SpaceJourney
             var cam = battleCamera != null ? battleCamera : Camera.main;
             if (cam == null) return;
 
-            // フィールド中心の表面位置
+            if (!autoArrangeCamera)
+                return;
+
+            if (preserveCurrentCameraPose)
+                return;
+
+            if (useFixedCameraPose)
+            {
+                cam.transform.SetPositionAndRotation(
+                    fixedCameraPosition,
+                    Quaternion.Euler(fixedCameraEulerAngles));
+                cam.fieldOfView = fixedCameraFieldOfView;
+                return;
+            }
+
+            ArrangeCameraForCurrentField(cam);
+        }
+
+        public void ArrangeCameraForCurrentField(Camera cam = null)
+        {
+            cam = cam != null ? cam : (battleCamera != null ? battleCamera : Camera.main);
+            if (cam == null) return;
+
             Vector3 lookTarget = battleCenter;
+            lookTarget += forward * cameraUiSafeForwardOffset;
+            lookTarget.y = surfaceY;
+            float halfDepth = gridDepth * cellSize;
+            float halfWidth = gridWidth * cellSize * 0.5f;
+
+            ArrangeCameraAt(cam, lookTarget, halfDepth, halfWidth);
+        }
+
+        public void ArrangeCameraForWorldPoints(IEnumerable<Vector3> worldPoints, Camera cam = null)
+        {
+            cam = cam != null ? cam : (battleCamera != null ? battleCamera : Camera.main);
+            if (cam == null) return;
+
+            float halfFieldDepth = gridDepth * cellSize;
+            float halfFieldWidth = gridWidth * cellSize * 0.5f;
+            float minF = -halfFieldDepth;
+            float maxF = halfFieldDepth;
+            float minR = -halfFieldWidth;
+            float maxR = halfFieldWidth;
+            const float unitMargin = 0.75f;
+
+            if (worldPoints != null)
+            {
+                foreach (var p in worldPoints)
+                {
+                    Vector3 local = p - battleCenter;
+                    float f = Vector3.Dot(local, forward);
+                    float r = Vector3.Dot(local, right);
+                    minF = Mathf.Min(minF, f - unitMargin);
+                    maxF = Mathf.Max(maxF, f + unitMargin);
+                    minR = Mathf.Min(minR, r - unitMargin);
+                    maxR = Mathf.Max(maxR, r + unitMargin);
+                }
+            }
+
+            Vector3 lookTarget = battleCenter
+                                 + forward * ((minF + maxF) * 0.5f)
+                                 + right * ((minR + maxR) * 0.5f);
+            lookTarget += forward * cameraUiSafeForwardOffset;
             lookTarget.y = surfaceY;
 
-            // カメラを Player 側後方の斜め上に配置 (フィールドを俯瞰)
+            float halfDepth = (maxF - minF) * 0.5f;
+            float halfWidth = (maxR - minR) * 0.5f;
+            ArrangeCameraAt(cam, lookTarget, halfDepth, halfWidth);
+        }
+
+        private void ArrangeCameraAt(Camera cam, Vector3 lookTarget, float halfDepth, float halfWidth)
+        {
+            // カメラを Player 側後方の斜め上に配置 (フィールドを俯瞰)。
+            // forward を画面の縦方向に流すことで、キューブ配置が X/Z どちら向きでも縦画面に収める。
             float angleRad = cameraAngle * Mathf.Deg2Rad;
-            float height = Mathf.Sin(angleRad) * cameraDistance;
-            float horizontalDist = Mathf.Cos(angleRad) * cameraDistance;
+            float distance = fitCameraToBattleField ? CalculateFitCameraDistance(cam, angleRad, halfDepth, halfWidth) : cameraDistance;
+            float height = Mathf.Sin(angleRad) * distance;
+            float horizontalDist = Mathf.Cos(angleRad) * distance;
 
-            // Player 後方 (-forward 方向) からフィールドを見下ろす
             Vector3 camPos = lookTarget - forward * horizontalDist + Vector3.up * height;
-
             cam.transform.position = camPos;
             cam.transform.LookAt(lookTarget);
+        }
+
+        private float CalculateFitCameraDistance(Camera cam, float angleRad)
+        {
+            float halfTotalDepth = gridDepth * cellSize;
+            float halfWidth = gridWidth * cellSize * 0.5f;
+            return CalculateFitCameraDistance(cam, angleRad, halfTotalDepth, halfWidth);
+        }
+
+        private float CalculateFitCameraDistance(Camera cam, float angleRad, float halfTotalDepth, float halfWidth)
+        {
+            float aspect = Mathf.Max(0.01f, cam.aspect);
+            float padding = Mathf.Max(0f, cameraFitPadding);
+
+            float verticalHalf = halfTotalDepth * Mathf.Cos(angleRad) + padding;
+            float horizontalHalf = halfWidth + padding;
+            float tanHalfFov = Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            if (tanHalfFov <= 0.001f) return cameraDistance;
+
+            float byVertical = verticalHalf / tanHalfFov;
+            float byHorizontal = horizontalHalf / (tanHalfFov * aspect);
+            float fitDistance = Mathf.Max(byVertical, byHorizontal);
+
+            return Mathf.Max(cameraDistance, fitDistance);
         }
 
         private float GetSurfaceY()

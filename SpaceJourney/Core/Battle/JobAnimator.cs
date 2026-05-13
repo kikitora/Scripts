@@ -11,6 +11,7 @@ namespace SteraCube.SpaceJourney
     {
         private Animator animator;
         private bool hasMoving, hasAttack, hasDamage, hasDie, hasVictory, hasDefeat;
+        private int blockedLookAroundLayer = -1;
 
         private const string PARAM_MOVING = "Moving";
         private const string PARAM_ATTACK = "Attack";
@@ -18,6 +19,7 @@ namespace SteraCube.SpaceJourney
         private const string PARAM_DIE = "Die";
         private const string PARAM_VICTORY = "Victory";
         private const string PARAM_DEFEAT = "Defeat";
+        private const string LAYER_BLOCKED_LOOK_AROUND = "BlockedLookAround";
 
         private void Awake()
         {
@@ -36,6 +38,7 @@ namespace SteraCube.SpaceJourney
         private void DetectParams()
         {
             hasMoving = hasAttack = hasDamage = hasDie = hasVictory = hasDefeat = false;
+            blockedLookAroundLayer = -1;
             if (animator == null || animator.runtimeAnimatorController == null) return;
             foreach (var p in animator.parameters)
             {
@@ -46,6 +49,9 @@ namespace SteraCube.SpaceJourney
                 if (p.name == PARAM_VICTORY) hasVictory = true;
                 if (p.name == PARAM_DEFEAT) hasDefeat = true;
             }
+            blockedLookAroundLayer = animator.GetLayerIndex(LAYER_BLOCKED_LOOK_AROUND);
+            if (blockedLookAroundLayer >= 0)
+                animator.SetLayerWeight(blockedLookAroundLayer, 0f);
         }
 
         private void LogStatus(string phase)
@@ -61,6 +67,12 @@ namespace SteraCube.SpaceJourney
         {
             if (!hasMoving || animator == null) return;
             animator.SetBool(PARAM_MOVING, moving);
+        }
+
+        public void SetBlockedLookAround(bool active)
+        {
+            if (animator == null || blockedLookAroundLayer < 0) return;
+            animator.SetLayerWeight(blockedLookAroundLayer, active ? 1f : 0f);
         }
 
         /// <summary>方向転換アニメ。WalkRight/WalkLeft state があれば CrossFade、無ければ Walk fallback。

@@ -60,6 +60,7 @@ namespace SteraCube.SpaceJourney.Realtime
         WalkSpeedMul,             // walkSpeed に (1 + amount/100) 倍率を恒久適用 (竜王の槍 = +10% 常時、 戦士速度に並ぶ)
         AllDamageMul,             // 全攻撃 (basic + skill 両方) に (1 + amount/100) 倍率 (竜骨 +5% 等)
         DeTauntOnDamaged,         // 被弾時、 攻撃者が自分をターゲットなら別の味方に切替 (シャドウハンター 影の回避)
+        MagicDamageTakenMultiplier, // 魔法被ダメを amount% にする (プロテクトワンド)
     }
 
     /// <summary>
@@ -100,5 +101,9 @@ namespace SteraCube.SpaceJourney.Realtime
         public int maxTriggersPerBattle = -1;
         [Tooltip("次の発動まで必要な秒数 (連発防止)")]
         public float cooldownSec = 0f;
+
+        [Header("発動時 VFX")]
+        [Tooltip("このパッシブ効果が実際に発動した瞬間に再生する VFX。再生位置は効果ごとに自分/対象/回復対象へ自動振り分け")]
+        public GameObject activationVfxPrefab;
     }
 }

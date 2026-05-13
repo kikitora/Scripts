@@ -56,10 +56,13 @@ namespace SteraCube.SpaceJourney.Realtime
         [Header("UI")]
         [Tooltip("ダメージ数値ポップアップ (未設定ならフォールバック生成)")]
         public DamagePopupSpawner damagePopup;
+        [Tooltip("スキル使用時の MiniWindow / MiniWindowEnemy コメント表示")]
+        public BattleCommentWindowFeed battleCommentFeed;
         [Tooltip("残り秒数を表示する Text (未設定なら何もしない)")]
         public TMP_Text timeText;
 
         public readonly List<RealtimeBattleUnit> AllUnits = new();
+        private readonly List<GameObject> runtimeEffectObjects = new();
 
         /// <summary>動的設置 Barricade (Knight rank 5 スキル) のリスト。
         /// MovementPhase で lifetime / HP チェック + 重なり押し出しを行う。</summary>
@@ -80,6 +83,47 @@ namespace SteraCube.SpaceJourney.Realtime
             }
         }
 
+        public void RegisterRuntimeEffect(GameObject go)
+        {
+            if (go != null && !runtimeEffectObjects.Contains(go))
+                runtimeEffectObjects.Add(go);
+        }
+
+        public void ReportSkillUsed(RealtimeBattleUnit actor, RealtimeSkillDefinition skill, int skillIndex)
+        {
+            if (actor == null || skill == null) return;
+            if (skillIndex == 0) return;
+
+            string actorName = ResolveBattleCommentActorName(actor);
+            string skillName = string.IsNullOrEmpty(skill.skillName) ? skill.name : skill.skillName;
+            string message = $"{actorName}が{skillName}を使った。";
+
+            BattleLog.Add($"[{ElapsedSec:F1}s] {message}");
+
+            if (battleCommentFeed == null)
+                battleCommentFeed = FindFirstObjectByType<BattleCommentWindowFeed>();
+            if (battleCommentFeed == null)
+            {
+                var canvas = FindFirstObjectByType<Canvas>();
+                if (canvas != null)
+                    battleCommentFeed = canvas.gameObject.AddComponent<BattleCommentWindowFeed>();
+            }
+
+            battleCommentFeed?.ShowSkillUse(actor.ownerSide, message);
+        }
+
+        private static string ResolveBattleCommentActorName(RealtimeBattleUnit actor)
+        {
+            if (actor == null) return "?";
+
+            string display = string.IsNullOrEmpty(actor.displayName) ? actor.name : actor.displayName;
+            string soulName = actor.unit?.Soul?.SoulName;
+            if (!string.IsNullOrEmpty(soulName))
+                return $"{soulName}（{display}）";
+
+            return display;
+        }
+
         /// <summary>連戦バッチ用: 前戦の残骸 (BattleTime / IsFinished 等) をクリアし、
         /// 次戦のユニット Setup が BT=0 を見られるようにする。
         /// 通常の単発戦闘では BeginBattle が同じ役目を果たすが、連戦時は Setup 前に呼ぶ必要がある。</summary>
@@ -92,6 +136,7 @@ namespace SteraCube.SpaceJourney.Realtime
             BattleDeltaTime = 0f;
             IsCountdown = false;
             CountdownRemaining = 0f;
+            _nextStatusTickTime = 0.5f;
         }
 
         public void BeginBattle()
@@ -101,6 +146,7 @@ namespace SteraCube.SpaceJourney.Realtime
             ElapsedSec = 0f;
             BattleTime = 0f;
             BattleDeltaTime = 0f;
+            _nextStatusTickTime = 0.5f;
             GlobalSpeed = battleSpeedMul;
             BattleLog.Clear();
             BattleLog.Add("=== リアルタイム戦闘開始 ===");
@@ -173,6 +219,7 @@ namespace SteraCube.SpaceJourney.Realtime
         }
 
         private float _lastAppliedSpeed = float.NaN;
+        private float _nextStatusTickTime = 0.5f;
 
         private void Update()
         {
@@ -216,15 +263,17 @@ namespace SteraCube.SpaceJourney.Realtime
             if (timeText != null)
             {
                 float remain = Mathf.Max(0f, battleTimeLimitSec - BattleTime);
-                timeText.text = remain.ToString("F1");
+                timeText.text = Mathf.CeilToInt(remain).ToString();
             }
 
             // StatusEffect の expireTime 評価用に battleTime を秒で更新
-            int t = Mathf.RoundToInt(BattleTime);
+            int t = Mathf.FloorToInt(BattleTime);
             foreach (var u in AllUnits)
             {
                 if (u != null && u.unit != null) u.unit.SetBattleTime(t);
             }
+
+            ApplyPeriodicStatusTicks(BattleTime, t);
 
             // 制限時間判定 (戦闘時間ベース: 倍速でも 20秒分の戦闘が進んだら打ち切り)
             if (BattleTime >= battleTimeLimitSec)
@@ -245,6 +294,7 @@ namespace SteraCube.SpaceJourney.Realtime
                 IsFinished = true;
                 WinningSide = allyAlive ? 0 : (enemyAlive ? 1 : -1);
                 BattleLog.Add($"[{ElapsedSec:F1}s] 決着: {(WinningSide == 0 ? "味方勝利" : WinningSide == 1 ? "敵勝利" : "引き分け")}");
+                CleanupBattleEffects();
                 PlayEndPoses();
                 LogSummary();
             }
@@ -264,6 +314,28 @@ namespace SteraCube.SpaceJourney.Realtime
             Debug.Log($"[RealtimeBattleManager] PlayEndPoses called on {called} units (winner={WinningSide})");
         }
 
+        private void ApplyPeriodicStatusTicks(float currentTime, int currentSec)
+        {
+            if (currentTime + 0.0001f < _nextStatusTickTime) return;
+
+            while (_nextStatusTickTime <= currentTime + 0.0001f)
+            {
+                int tickSec = Mathf.FloorToInt(_nextStatusTickTime - 0.001f);
+                foreach (var u in AllUnits)
+                {
+                    if (u == null || !u.IsAlive() || u.unit == null) continue;
+                    u.unit.SetBattleTime(tickSec);
+                    u.ApplyBurnStatusTick();
+                }
+                _nextStatusTickTime += 1.0f;
+            }
+
+            foreach (var u in AllUnits)
+            {
+                if (u != null && u.unit != null) u.unit.SetBattleTime(currentSec);
+            }
+        }
+
         private void EndBattleByTimeout()
         {
             IsFinished = true;
@@ -273,8 +345,47 @@ namespace SteraCube.SpaceJourney.Realtime
             else if (enemyHp > allyHp) WinningSide = 1;
             else WinningSide = -1;
             BattleLog.Add($"[{ElapsedSec:F1}s] 制限時間、HP判定: {(WinningSide == 0 ? "味方" : WinningSide == 1 ? "敵" : "引分")} (味方{allyHp} 敵{enemyHp})");
+            CleanupBattleEffects();
             PlayEndPoses();
             LogSummary();
+        }
+
+        private void CleanupBattleEffects()
+        {
+            foreach (var binder in Object.FindObjectsByType<StatusEffectVfxBinder>(FindObjectsSortMode.None))
+            {
+                if (binder != null) binder.ClearBattleVisuals();
+            }
+
+            foreach (var iconBar in Object.FindObjectsByType<StatusEffectIconBar>(FindObjectsSortMode.None))
+            {
+                if (iconBar != null) iconBar.ClearBattleVisuals();
+            }
+
+            for (int i = runtimeEffectObjects.Count - 1; i >= 0; i--)
+            {
+                var go = runtimeEffectObjects[i];
+                if (go != null) Destroy(go);
+            }
+            runtimeEffectObjects.Clear();
+
+            for (int i = barricades.Count - 1; i >= 0; i--)
+            {
+                var b = barricades[i];
+                if (b != null) b.DestroySelf();
+            }
+            barricades.Clear();
+            RebuildBarricadeMap();
+
+            foreach (var projectile in Object.FindObjectsByType<Projectile>(FindObjectsSortMode.None))
+            {
+                if (projectile != null) Destroy(projectile.gameObject);
+            }
+
+            foreach (var popup in Object.FindObjectsByType<DamagePopup>(FindObjectsSortMode.None))
+            {
+                if (popup != null) Destroy(popup.gameObject);
+            }
         }
 
         private void LogSummary()

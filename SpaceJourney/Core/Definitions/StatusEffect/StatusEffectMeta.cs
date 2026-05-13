@@ -57,11 +57,10 @@ namespace SteraCube.SpaceJourney
         /// 付与時に SpaceJourneyUnit.OnDisruptApplied 経由で realtime 側 OnDisrupted が呼ばれる。
         /// memory [Disruption spec]: DealDamage前=CT払戻+硬直0、後=CT通常+残アニメ秒硬直
         ///
-        /// 対象:
-        ///   - Hardcc 系 (Stun, Freeze): 完全に動きが止まる
-        ///   - Charm: 通常攻撃のみ + ターゲット陣営反転 → 一旦キャンセルして再考
+        /// 対象 (= ActionDisrupt 枠に入っているもの):
+        ///   - Stun, Freeze: 完全に動きが止まる
+        ///   - Charm: 敵味方ランダム攻撃 (旧 Confusion 挙動を統合) → 一旦キャンセルして再考
         ///   - Silence: スキル使用禁止 → 進行中スキルもキャンセル
-        ///   - Confusion: 認識反転 → 行動方針が変わるので一旦キャンセル
         ///
         /// 対象外 (動けるので続行):
         ///   - Taunt: ターゲット指定のみ、進行中攻撃は完了させて次の行動から切替
@@ -69,18 +68,11 @@ namespace SteraCube.SpaceJourney
         /// </summary>
         public static bool IsDisruptive(StatusEffectType type)
         {
-            // Hardcc 全部
-            if (GetSlot(type) == StatusEffectSlot.Hardcc) return true;
-            // 個別追加
-            switch (type)
-            {
-                case StatusEffectType.Charm:
-                case StatusEffectType.Silence:
-                case StatusEffectType.Confusion:
-                    return true;
-                default:
-                    return false;
-            }
+            if (type == StatusEffectType.Taunt) return false;
+            if (type == StatusEffectType.Immobilize) return false;
+
+            // ActionDisrupt 枠に属していれば disrupt 対象
+            return GetSlot(type) == StatusEffectSlot.ActionDisrupt;
         }
     }
 }

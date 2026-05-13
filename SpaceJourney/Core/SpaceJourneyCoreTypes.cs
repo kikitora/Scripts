@@ -590,10 +590,11 @@ namespace SteraCube.SpaceJourney
         Silence = 33,          // スキル使用禁止 (通常攻撃のみ可)
         Reflect = 34,          // 被ダメ value% 軽減 + 攻撃者へ同ダメ反射
         DamageTakenUp = 35,    // 受け側マーク。被ダメ +value%
-        DamageShare = 36,      // 指定味方とダメ50/50分散 (source 必須)
+        DamageShare = 36,      // 半径3m以内に味方がいる時、総ダメ1.2倍を本人+周囲味方で等分
         // 37 は欠番 (旧 Petrify。スキル未使用 + ユーザー判断で削除 2026-05-08)
-        Stealth = 38,          // 不可視 (ターゲット対象外、攻撃時自動解除)
+        Stealth = 38,          // 不可視 (ターゲット対象外、攻撃1回目10%/2回目50%/3回目確定解除、被攻撃時解除)
         Charm = 39,            // 通常攻撃のみ + ターゲット陣営反転
+        Immobilize = 40,       // 移動不可 (移動のみ禁止。攻撃/スキル/ガードは可能)
     }
 
     /// <summary>
@@ -617,7 +618,7 @@ namespace SteraCube.SpaceJourney
         SoftCC_Taunt = 13,
         Vuln_DamageTakenUp,
         Vuln_DisableHealing,
-        Vuln_Stealth,
+        Buff_Stealth,
         Defensive_Counter,
         Defensive_Invincible,
         Defensive_SurviveLethal,
@@ -633,6 +634,7 @@ namespace SteraCube.SpaceJourney
         // 29 は欠番 (旧 Misc_Knockback。Knockback enum 削除に伴い廃止)
         // 30 は欠番 (旧 Misc_HealMorale。HealMorale enum 削除に伴い廃止)
         Misc_Custom = 31,       // 武器パッシブ拡張枠
+        MovementLock = 32,      // 移動不可。ActionDisrupt とは別枠で Silence/Charm/Stun 等と併存可能
     }
 
     // StatusEffectMeta は別ファイル (Definitions/StatusEffect/StatusEffectMeta.cs) に移動済み。

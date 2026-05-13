@@ -207,6 +207,7 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             Vector3 cand = prevPos + v * dt;
             if (_grid != null) cand = _grid.ClampToField(cand);
             cand.y = prevPos.y;
+            cand = StopBeforeUnitOverlap(prevPos, cand, dt, ref v);
 
             transform.position = cand;
         }
@@ -311,6 +312,78 @@ namespace SteraCube.SpaceJourney.Realtime.Pathfinding
             }
 
             return vel;
+        }
+
+        /// <summary>
+        /// 通常移動では他ユニットを押さない。候補位置が相手半径内へ入るなら、
+        /// 移動する側だけを接触直前で止める。既存の push-out は初期重なり等の保険用。
+        /// </summary>
+        private Vector3 StopBeforeUnitOverlap(Vector3 prevPos, Vector3 cand, float dt, ref Vector3 vel)
+        {
+            if (_owner == null || _owner.manager == null)
+                return cand;
+
+            Vector3 move = cand - prevPos;
+            move.y = 0f;
+            if (move.sqrMagnitude < 1e-8f)
+                return cand;
+
+            float bestT = 1f;
+            bool blocked = false;
+            foreach (var u in _owner.manager.AllUnits)
+            {
+                if (u == null || u == _owner || !u.IsAlive()) continue;
+                var m = u.mover;
+                if (m == null || !m._attached) continue;
+
+                Vector3 center = m.transform.position;
+                center.y = prevPos.y;
+                float minD = radius + m.radius;
+
+                Vector3 fromCenter = prevPos - center;
+                fromCenter.y = 0f;
+                float startDistSq = fromCenter.sqrMagnitude;
+                if (startDistSq < minD * minD)
+                {
+                    blocked = true;
+                    bestT = 0f;
+                    break;
+                }
+
+                Vector3 endFromCenter = cand - center;
+                endFromCenter.y = 0f;
+                if (endFromCenter.sqrMagnitude >= minD * minD) continue;
+
+                float a = Vector3.Dot(move, move);
+                float b = 2f * Vector3.Dot(fromCenter, move);
+                float c = startDistSq - minD * minD;
+                float disc = b * b - 4f * a * c;
+                if (disc < 0f || a < 1e-8f)
+                {
+                    blocked = true;
+                    bestT = 0f;
+                    break;
+                }
+
+                float sqrt = Mathf.Sqrt(disc);
+                float t = (-b - sqrt) / (2f * a);
+                if (t >= 0f && t <= 1f && t < bestT)
+                {
+                    bestT = t;
+                    blocked = true;
+                }
+            }
+
+            if (!blocked) return cand;
+
+            const float contactBackoff = 0.001f;
+            float safeT = Mathf.Max(0f, bestT - contactBackoff);
+            Vector3 safe = prevPos + move * safeT;
+            safe.y = prevPos.y;
+            vel = dt > 1e-6f ? (safe - prevPos) / dt : Vector3.zero;
+            vel.y = 0f;
+            if (safeT <= 0f) vel = Vector3.zero;
+            return safe;
         }
 
         /// <summary>Barricade に向かう velocity 成分を削る (壁通過防止)。

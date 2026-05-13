@@ -10,8 +10,8 @@ namespace SteraCube.SpaceJourney.Realtime
     public class DamagePopup : MonoBehaviour
     {
         [SerializeField] private TextMeshPro text;
-        public float riseSpeed = 1.5f;
-        public float lifeSec = 1.0f;
+        public float riseSpeed = 0.85f;
+        public float lifeSec = 0.85f;
 
         private float elapsed;
         private Color baseColor = Color.white;
@@ -19,15 +19,59 @@ namespace SteraCube.SpaceJourney.Realtime
 
         public void Setup(int value, Color color)
         {
+            Setup(value.ToString(), color);
+        }
+
+        public void Setup(string value, Color color)
+        {
             if (text == null) text = GetComponentInChildren<TextMeshPro>();
             if (text != null)
             {
-                text.text = value.ToString();
+                text.text = value;
                 text.color = color;
             }
             baseColor = color;
             cam = Camera.main;
             elapsed = 0f;
+        }
+
+        public void ApplyMotion(float newRiseSpeed, float newLifeSec)
+        {
+            riseSpeed = Mathf.Max(0f, newRiseSpeed);
+            lifeSec = Mathf.Max(0.05f, newLifeSec);
+        }
+
+        public void ApplyFont(TMP_FontAsset font)
+        {
+            if (font == null) return;
+            if (text == null) text = GetComponentInChildren<TextMeshPro>();
+            if (text != null) text.font = font;
+        }
+
+        public void SetRenderOnTop(bool enabled)
+        {
+            if (text == null) text = GetComponentInChildren<TextMeshPro>();
+            if (text == null) return;
+
+            var renderer = text.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.sortingOrder = enabled ? 500 : 0;
+            }
+
+            if (!enabled) return;
+
+            var mat = text.fontMaterial;
+            if (mat == null) return;
+
+            if (mat.HasProperty("_ZTest"))
+                mat.SetFloat("_ZTest", (float)UnityEngine.Rendering.CompareFunction.Always);
+            mat.SetFloat("unity_GUIZTestMode", (float)UnityEngine.Rendering.CompareFunction.Always);
+            if (mat.HasProperty("_ZWrite"))
+                mat.SetFloat("_ZWrite", 0f);
+
+            mat.renderQueue = 4000;
+            text.fontMaterial = mat;
         }
 
         private void Update()

@@ -45,6 +45,8 @@ namespace SteraCube.SpaceJourney.Realtime
         public int healAmount = 0;
         [Tooltip("最大HP割合回復 (0.075 = 7.5%)。0 のとき healAmount を使用、>0 のとき優先される")]
         public float healMaxHpRate = 0f;
+        [Tooltip("回復が実際に入った対象位置で再生する VFX。空なら StatusEffectMetaDatabase の共通回復VFXを使用")]
+        public GameObject healResolvedVfxPrefab;
         [Tooltip("ノックバック距離 (m)。0=なし")]
         public float knockbackMass = 0f;
         [Tooltip("挑発時間 (秒)。>0 で対象を強制的にこちらを狙わせる")]

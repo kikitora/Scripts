@@ -193,6 +193,39 @@ namespace SteraCube.SpaceJourney
             StartCoroutine(RunRealtimeBatchCoroutine());
         }
 
+        public int StartRealtimeBattleForPreview(float speed = 1f)
+        {
+            if (realtimeStarter == null)
+            {
+                Debug.LogError("[TestBattleStarter] realtimeStarter 未設定 (Inspector)");
+                return 0;
+            }
+
+            var allyTends = randomizeTeams ? PickRandomTeam(teamSize) : allyMembers;
+            var enemyTends = randomizeTeams ? PickRandomTeam(teamSize) : enemyMembers;
+            var startData = new BattleStartData
+            {
+                fieldLayout = BattleFieldLayout.Default5x5(),
+                allyUnits = CreatePlacements(rank, level, allyTends, allyTactic),
+                enemyUnits = CreatePlacements(rank, level, enemyTends, enemyTactic),
+                initiativeSide = initiativeSide,
+                allyMorale = allyMorale,
+                enemyMorale = enemyMorale,
+            };
+
+            CleanupRealtimeBattle();
+            realtimeStarter.StartRealtimeBattle(startData);
+            var manager = realtimeStarter.manager;
+            if (manager != null)
+            {
+                manager.SetSpeed(speed);
+                Debug.Log($"[TestBattleStarter] Realtime preview battle started: speed={speed:F2} units={manager.AllUnits.Count}");
+                return manager.AllUnits.Count;
+            }
+
+            return 0;
+        }
+
         /// <summary>Realtime 戦闘を batchCount 回連続実行、ログを 1 ファイルに集約。
         /// チーム/配置ランダム、戦闘間に勝利モーション確認の小休止。</summary>
         private System.Collections.IEnumerator RunRealtimeBatchCoroutine()

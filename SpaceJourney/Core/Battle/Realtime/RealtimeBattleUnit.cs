@@ -30,7 +30,7 @@ namespace SteraCube.SpaceJourney.Realtime
         public float basicAttackCooldownSec = 0.8f;
         [Tooltip("攻撃アニメーションの拘束時間 (この間は移動しない、秒)")]
         public float attackAnimDurationSec = 0.7f;
-        [Tooltip("攻撃アニメ終了後、回転/AIPath 移動を再開するまでの猶予 (秒)。ルートモーションはこの間も有効")]
+        [Tooltip("攻撃アニメ終了後、回転/移動を再開するまでの猶予 (秒)。ルートモーションはこの間も有効")]
         public float postAttackLockSec = 0.3f;
         [Header("ターゲット優先度リスト")]
         [Tooltip("上から評価し dominant を決定。dominant が変わった時のみ再選択 (振動防止)。空ならデフォルト (敵最寄)。")]
@@ -103,6 +103,7 @@ namespace SteraCube.SpaceJourney.Realtime
         [HideInInspector] public SkillDamageKind basicKindOverride = SkillDamageKind.Physical;
         [HideInInspector] public bool basicAttackDisabled = false;
         [HideInInspector] public int multiShotCount = 1;
+        [HideInInspector] public float magicDamageTakenMul = 1.0f; // 魔法被ダメ倍率 (プロテクトワンド等)
 
         // ===== Passive 評価用 追跡フィールド =====
         private int _basicAttackHitCount = 0;
@@ -113,6 +114,7 @@ namespace SteraCube.SpaceJourney.Realtime
         private float _lastHpPercentForTrigger = 100f; // OnSelfHpBelowPercent 閾値跨ぎ検出
         private float _nextHitDamageReductionRatio = 0f; // NextHitDamageReduction 効果の残量
         private bool _battleStartFired = false;
+        private readonly Queue<RealtimeBattleUnit> _pendingCounterTargets = new Queue<RealtimeBattleUnit>();
 
         private class PassiveRuntimeState
         {
@@ -167,6 +169,17 @@ namespace SteraCube.SpaceJourney.Realtime
         private float lastAttackerUntil;          // 有効期限
         // 一時的に非表示にした装備武器 (UnequipWeapon イベント) — cast 終了で復帰
         private readonly List<GameObject> hiddenWeapons = new();
+        private const float DamageShareRadius = 3f;
+        private const float DamageShareTotalMultiplier = 1.2f;
+
+        private struct DamageApplication
+        {
+            public RealtimeBattleUnit target;
+            public int finalDamage;
+            public int hpBefore;
+            public int hpAfter;
+            public bool primary;
+        }
 
         [Header("ボディサイズ")]
         [Tooltip("自分の半径 (m)。重なり判定・経路探索で使用")]
@@ -188,6 +201,10 @@ namespace SteraCube.SpaceJourney.Realtime
         public bool TryRollGuard(RealtimeBattleUnit attacker, out float mitigation)
         {
             mitigation = 0f;
+
+            // 状態異常でガード不可 (Stun/Freeze は完全停止、Silence は集中できない)
+            if (unit != null && unit.IsGuardDisabled) return false;
+
             float baseChance = Mathf.Clamp01(guardChance);
             float effectiveChance = IsGuardForced ? 1f : baseChance;
             if (effectiveChance <= 0f) return false;
@@ -222,15 +239,18 @@ namespace SteraCube.SpaceJourney.Realtime
                     if (unit != null)
                         unit.ApplyStatusEffect(fx.statusEffectType, fx.statusEffectValue,
                             fx.effectDurationSec > 0 ? fx.effectDurationSec : 3);
+                    SpawnPassiveActivationVfx(fx, this);
                     break;
                 case PassiveEffect.ApplyStatusEffectTarget:
                     if (attacker != null && attacker.unit != null)
                         attacker.unit.ApplyStatusEffect(fx.statusEffectType, fx.statusEffectValue,
                             fx.effectDurationSec > 0 ? fx.effectDurationSec : 3);
+                    SpawnPassiveActivationVfx(fx, attacker);
                     break;
                 case PassiveEffect.MoveSpeedMultiplier:
                     // effectAmount% 分 walkSpeed を短時間 UP (デフォルト 3 秒)
                     StartCoroutine(TempMoveSpeedBoost(fx.effectAmount, fx.effectDurationSec > 0 ? fx.effectDurationSec : 3f));
+                    SpawnPassiveActivationVfx(fx, this);
                     break;
                 // 他 Phase B で実装
             }
@@ -290,11 +310,12 @@ namespace SteraCube.SpaceJourney.Realtime
         }
 
         /// <summary>被弾時の passive トリガ処理を self で実行。攻撃者の ApplySkillEffect から呼ばれる。</summary>
-        public void OnDamagedByPassive(RealtimeBattleUnit attacker)
+        public void OnDamagedByPassive(RealtimeBattleUnit attacker, bool allowCounter = true)
         {
             // OnDamaged 発火
             EvaluatePassives(PassiveTrigger.OnDamaged, ctxAttacker: attacker);
             _damagedPendingCounter++; // OnDamagedThenNextHit 用
+            if (allowCounter) QueueCounterAttack(attacker);
 
             // OnSelfHpBelowPercent: 閾値跨ぎ検出
             if (unit != null && unit.MaxHp > 0 && activePassives != null)
@@ -313,6 +334,85 @@ namespace SteraCube.SpaceJourney.Realtime
                 }
                 _lastHpPercentForTrigger = curPct;
             }
+        }
+
+        private void QueueCounterAttack(RealtimeBattleUnit attacker)
+        {
+            if (attacker == null || attacker == this || !attacker.IsAlive()) return;
+            if (unit == null || !IsAlive()) return;
+            if (!unit.HasActiveEffect(StatusEffectType.Counter)) return;
+            if (!CanPerformDefenseReaction()) return;
+            if (basicAttackDisabled) return;
+
+            if (!IsBasicAttackTargetInRange(attacker))
+            {
+                unit.ConsumeActiveEffect(StatusEffectType.Counter);
+                manager?.BattleLog.Add($"[{BT:F2}s] {displayName} Counter consumed: {attacker.displayName} is out of basic attack range");
+                return;
+            }
+
+            unit.ConsumeActiveEffect(StatusEffectType.Counter);
+            _pendingCounterTargets.Enqueue(attacker);
+            SpawnStatusResolvedVfx(StatusEffectType.Counter);
+            SpawnTextPopup(transform.position, "COUNTER", DamagePopupSpawner.PopupKind.Guard);
+            manager?.BattleLog.Add($"[{BT:F2}s] {displayName} Counter queued against {attacker.displayName}");
+        }
+
+        private bool IsBasicAttackTargetInRange(RealtimeBattleUnit target)
+        {
+            if (target == null || !target.IsAlive()) return false;
+            float d = Vector3.Distance(transform.position, target.transform.position);
+            if (skills != null && skills.Count > 0 && skills[0] != null)
+            {
+                var s = skills[0];
+                if (s.shape == null) return false;
+                float effRange = s.shape.rangeMax * rangeMul + rangeBonus + basicRangeBonus;
+                return d >= s.shape.rangeMin && d <= effRange;
+            }
+
+            return d <= GetAttackRangeMass();
+        }
+
+        private bool TryFireQueuedCounterAttack()
+        {
+            if (_pendingCounterTargets.Count == 0) return false;
+            if (unit == null || !IsAlive()) { _pendingCounterTargets.Clear(); return false; }
+            if (!CanPerformDefenseReaction()) return false;
+            if (basicAttackDisabled) { _pendingCounterTargets.Clear(); return false; }
+            if (BT < attackingUntil) return false;
+            if (anim != null && anim.IsBusyState()) return false;
+
+            while (_pendingCounterTargets.Count > 0)
+            {
+                var target = _pendingCounterTargets.Dequeue();
+                if (target == null || !target.IsAlive() || target.unit == null) continue;
+
+                bool fired = CastCounterBasicAttack(target);
+                if (fired)
+                    manager?.BattleLog.Add($"[{BT:F2}s] {displayName} Counter fired at {target.displayName}");
+                return fired;
+            }
+
+            return false;
+        }
+
+        private bool CanPerformDefenseReaction()
+        {
+            return unit != null
+                && IsAlive()
+                && !unit.IsGuardDisabled;
+        }
+
+        private bool CastCounterBasicAttack(RealtimeBattleUnit target)
+        {
+            if (target == null || !target.IsAlive()) return false;
+            if (skills != null && skills.Count > 0 && skills[0] != null)
+                return CastSkill(0, target, ignoreCooldown: true, consumeCooldown: false, isCounterAttack: true);
+
+            FireBasicAttack(target, isCounterAttack: true);
+            attackingUntil = BT + attackAnimDurationSec;
+            if (mover != null) mover.StopMovement();
+            return true;
         }
 
         /// <summary>trigger 固有のパラメータ条件 (N 回目、連続 N 回 等) を判定。</summary>
@@ -373,6 +473,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     {
                         int dur = p.effectDurationSec > 0 ? p.effectDurationSec : 5;
                         unit.ApplyStatusEffect(p.statusEffectType, p.statusEffectValue, dur);
+                        SpawnPassiveActivationVfx(p, this);
                     }
                     break;
 
@@ -382,6 +483,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     {
                         int dur = p.effectDurationSec > 0 ? p.effectDurationSec : 5;
                         t1.unit.ApplyStatusEffect(p.statusEffectType, p.statusEffectValue, dur);
+                        SpawnPassiveActivationVfx(p, t1);
                     }
                     break;
 
@@ -390,6 +492,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     {
                         int dur = p.effectDurationSec > 0 ? p.effectDurationSec : 3;
                         ctxTarget.unit.ApplyStatusEffect(p.statusEffectType, Mathf.Max(1, p.statusEffectValue), dur);
+                        SpawnPassiveActivationVfx(p, ctxTarget);
                     }
                     break;
 
@@ -399,12 +502,8 @@ namespace SteraCube.SpaceJourney.Realtime
                         // 攻撃直後に追加で amount% 分の atFinal ダメを与える (簡易)
                         int baseAt = unit != null ? unit.AtFinal : 10;
                         int extra = Mathf.Max(1, Mathf.RoundToInt(baseAt * (p.effectAmount / 100f)));
-                        int before = ctxTarget.unit.CurrentHp;
-                        ProcessAutoRevive(ctxTarget, ref extra);
-                        ProcessSurviveLethal(ctxTarget, ref extra);
-                        ctxTarget.unit.TakeDamage(extra);
-                        ctxTarget.OnHit(ctxTarget.unit.IsDead, this);
-                        manager?.OnAttack(this, ctxTarget, extra, before, ctxTarget.unit.CurrentHp);
+                        var hits = ApplyDamageWithDamageShare(ctxTarget, extra);
+                        ReportDamageApplications(hits, this, DamagePopupSpawner.PopupKind.Damage);
                     }
                     break;
 
@@ -413,6 +512,8 @@ namespace SteraCube.SpaceJourney.Realtime
                     {
                         int heal = Mathf.Max(1, Mathf.RoundToInt(p.effectAmount));
                         unit.Heal(heal);
+                        SpawnHealResolvedVfx(this);
+                        SpawnPassiveActivationVfx(p, this);
                     }
                     break;
 
@@ -453,6 +554,8 @@ namespace SteraCube.SpaceJourney.Realtime
                     {
                         int heal = Mathf.Max(1, Mathf.RoundToInt(_lastDealtDamage * (p.effectAmount / 100f)));
                         unit.Heal(heal);
+                        SpawnHealResolvedVfx(this);
+                        SpawnPassiveActivationVfx(p, this);
                         if (manager != null)
                             manager.BattleLog.Add($"  → Lifesteal: {heal} HP 自己回復");
                     }
@@ -468,6 +571,8 @@ namespace SteraCube.SpaceJourney.Realtime
                         {
                             if (u == null || !u.IsAlive() || u.ownerSide != ownerSide || u.unit == null) continue;
                             u.unit.Heal(heal);
+                            SpawnHealResolvedVfx(u);
+                            SpawnPassiveActivationVfx(p, u);
                             healed++;
                         }
                         manager.BattleLog.Add($"  → 味方 {healed} 体に {heal} HP 回復");
@@ -492,6 +597,10 @@ namespace SteraCube.SpaceJourney.Realtime
                         basicAttackMul *= allMul;
                         skillMul *= allMul;
                     }
+                    break;
+                case PassiveEffect.MagicDamageTakenMultiplier:
+                    // 魔法被ダメを amount% にする (ProtectWand: 70 = 70% に軽減)。
+                    magicDamageTakenMul *= Mathf.Clamp(p.effectAmount / 100f, 0f, 10f);
                     break;
                 case PassiveEffect.DeTauntOnDamaged:
                     // 攻撃者が自分をターゲットしてれば、 別の味方に切り替えさせる (シャドウハンター 影の回避)
@@ -536,12 +645,8 @@ namespace SteraCube.SpaceJourney.Realtime
                     {
                         int baseAt = unit != null ? unit.AtFinal : 10;
                         int extra = Mathf.Max(1, Mathf.RoundToInt(baseAt * (p.effectAmount / 100f)));
-                        int before = ctxTarget.unit.CurrentHp;
-                        ProcessAutoRevive(ctxTarget, ref extra);
-                        ProcessSurviveLethal(ctxTarget, ref extra);
-                        ctxTarget.unit.TakeDamage(extra);
-                        ctxTarget.OnHit(ctxTarget.unit.IsDead, this);
-                        manager?.OnAttack(this, ctxTarget, extra, before, ctxTarget.unit.CurrentHp);
+                        var hits = ApplyDamageWithDamageShare(ctxTarget, extra);
+                        ReportDamageApplications(hits, this, DamagePopupSpawner.PopupKind.Damage);
                     }
                     break;
 
@@ -556,13 +661,8 @@ namespace SteraCube.SpaceJourney.Realtime
                         {
                             if (u == null || !u.IsAlive() || u.ownerSide == ownerSide) continue;
                             if (Vector3.Distance(u.transform.position, ctxTarget.transform.position) > radius) continue;
-                            int before = u.unit.CurrentHp;
-                            int eachDmg = extra;
-                            ProcessAutoRevive(u, ref eachDmg);
-                            ProcessSurviveLethal(u, ref eachDmg);
-                            u.unit.TakeDamage(eachDmg);
-                            u.OnHit(u.unit.IsDead, this);
-                            manager?.OnAttack(this, u, eachDmg, before, u.unit.CurrentHp);
+                            var hits = ApplyDamageWithDamageShare(u, extra);
+                            ReportDamageApplications(hits, this, DamagePopupSpawner.PopupKind.Damage);
                         }
                     }
                     break;
@@ -614,6 +714,7 @@ namespace SteraCube.SpaceJourney.Realtime
                         if (nearest != null)
                         {
                             nearest.ForceTarget(ctxTarget, 3f);
+                            SpawnPassiveActivationVfx(p, nearest);
                             if (manager != null) manager.BattleLog.Add($"  → FocusMark: {nearest.displayName} → {ctxTarget.displayName}");
                         }
                     }
@@ -621,7 +722,15 @@ namespace SteraCube.SpaceJourney.Realtime
 
                 case PassiveEffect.ExtendEnemyCooldowns:
                     // 対象の CT 中スキル全てを effectAmount 秒延長 (ウエイトカッター 時断ち)
-                    if (ctxTarget != null) ctxTarget.ExtendActiveCooldowns(p.effectAmount);
+                    if (ctxTarget != null)
+                    {
+                        bool extended = ctxTarget.ExtendActiveCooldowns(p.effectAmount);
+                        if (extended)
+                        {
+                            ctxTarget.SpawnCommonReactionVfx(db => db.cooldownExtendedVfxPrefab);
+                            SpawnPassiveActivationVfx(p, ctxTarget);
+                        }
+                    }
                     if (manager != null && ctxTarget != null)
                         manager.BattleLog.Add($"  → {ctxTarget.displayName} の CT 中スキルを {p.effectAmount:F1}s 延長");
                     break;
@@ -661,6 +770,7 @@ namespace SteraCube.SpaceJourney.Realtime
 
                 case PassiveEffect.MoveSpeedMultiplier:
                     StartCoroutine(TempMoveSpeedBoost(p.effectAmount, p.effectDurationSec > 0 ? p.effectDurationSec : 3f));
+                    SpawnPassiveActivationVfx(p, this);
                     break;
 
                 case PassiveEffect.AttackSpeedMultiplier:
@@ -854,6 +964,7 @@ namespace SteraCube.SpaceJourney.Realtime
             public Vector3 castAim;
             public Vector3 castDir;
             public float damageMul; // トライアローの側矢などで 0.9 倍にする用 (default 1.0)
+            public bool isCounterAttack;
         }
         private RealtimeBattleUnit currentTarget;
         // 基本スキル射程内に敵バリケードがあれば優先攻撃 (Warrior/Knight 等の近接職向け)。
@@ -862,6 +973,9 @@ namespace SteraCube.SpaceJourney.Realtime
         internal RealtimeBattleManager manager;
         private JobAnimator anim;
         private bool wasMoving;
+        private float movementBlockedSince = -1f;
+        private float blockedLookAroundUntil = 0f;
+        private bool wasBlockedLookAround;
         private bool _isTurning;       // 方向転換中フラグ (Walk アニメ流して回転を見せる用)
         private bool _turnRight;       // 旋回方向 (true=右回り、false=左回り)
         private bool _useMoveDirFacing; // 速度ヒステリシスで管理: true=進行方向を向く、 false=target を向く
@@ -880,6 +994,10 @@ namespace SteraCube.SpaceJourney.Realtime
         public static float RangeMidMass = 2f;
         public static float RangeFarMass = 5f;
         public static float RangeMaxFarMass = 6f;
+        private const float MeleeCrowdReachGrace = 0.35f;
+        private const float StuckProgressThreshold = 0.05f;
+        private const float MovementBlockedDetectSec = 0.4f;
+        private const float MovementBlockedLookAroundSec = 0.8f;
 
         public void Setup(SpaceJourneyUnit u, int side, string name,
                           AttackRangeCategory range, float speed,
@@ -909,6 +1027,7 @@ namespace SteraCube.SpaceJourney.Realtime
             if (mover == null)
                 mover = gameObject.AddComponent<SteraCube.SpaceJourney.Realtime.Pathfinding.ContinuousMover>();
             mover.Init(this);
+            mover.radius = bodyRadius;
             mover.maxSpeed = walkSpeed;
             mover.simulateMovement = false;
 
@@ -1095,6 +1214,8 @@ namespace SteraCube.SpaceJourney.Realtime
                 return;
             }
 
+            if (TryFireQueuedCounterAttack()) return;
+
             // 初回 Update: BattleStart と AlwaysWhileActive 系 passive を発火
             if (!_battleStartFired)
             {
@@ -1132,12 +1253,14 @@ namespace SteraCube.SpaceJourney.Realtime
             bool isAttacking = (BT < attackingUntil + postAttackLockSec)
                             || (animBusy && BT < attackingUntil + animSafetyTimeoutSec);
             bool isFlinching = IsFlinching;
+            bool isMovementLocked = unit != null && unit.IsMovementDisabled;
+            bool isBlockedLookAround = BT < blockedLookAroundUntil;
 
             bool moving = false;
-            if (isAttacking || isFlinching)
+            if (isAttacking || isFlinching || isMovementLocked || isBlockedLookAround)
             {
-                // 攻撃アニメ中 / 被弾怯み中: 完全停止
-                if (mover != null) mover.simulateMovement = false;
+                // 攻撃アニメ中 / 被弾怯み中 / 移動不可 / 詰まり待機: 移動停止
+                if (mover != null) mover.StopMovement();
             }
             else
             {
@@ -1159,7 +1282,7 @@ namespace SteraCube.SpaceJourney.Realtime
             //   - 移動中 (velocity 充分) → 進行方向 (= 迂回時は迂回方向、 直行時は target 方向)
             //   - 停止中 → target 方向
             //   - 切替振動防止: 移動 ON 判定は |v|>0.5*walkSpeed、 OFF 判定は |v|<0.2*walkSpeed
-            if (!isAttacking && !isFlinching)
+            if (!isAttacking && !isFlinching && !isBlockedLookAround)
             {
                 float vMag = (mover != null) ? mover.velocity.magnitude : 0f;
                 float walkRef = Mathf.Max(0.1f, walkSpeed);
@@ -1219,6 +1342,28 @@ namespace SteraCube.SpaceJourney.Realtime
             {
                 bool moverActive = mover.simulateMovement || mover.IsInTransit;
                 moving = moverActive && !mover.reachedDestination && mover.EffectiveProgressSpeed > 0.3f;
+
+                bool blockedByUnit = mover.IsInTransit
+                    && !mover.reachedDestination
+                    && mover.EffectiveProgressSpeed <= StuckProgressThreshold
+                    && !isAttacking
+                    && !isFlinching
+                    && !isMovementLocked;
+                if (blockedByUnit)
+                {
+                    if (movementBlockedSince < 0f) movementBlockedSince = BT;
+                    if (BT - movementBlockedSince >= MovementBlockedDetectSec)
+                    {
+                        blockedLookAroundUntil = BT + MovementBlockedLookAroundSec;
+                        movementBlockedSince = -1f;
+                        mover.StopMovement();
+                        moving = false;
+                    }
+                }
+                else if (!isBlockedLookAround)
+                {
+                    movementBlockedSince = -1f;
+                }
             }
 
             // アニメ反映
@@ -1247,6 +1392,12 @@ namespace SteraCube.SpaceJourney.Realtime
             {
                 wasMoving = moving;
                 anim?.SetMoving(moving);
+            }
+            bool blockedLookAround = !isAttacking && !isFlinching && !isMovementLocked && BT < blockedLookAroundUntil;
+            if (blockedLookAround != wasBlockedLookAround)
+            {
+                wasBlockedLookAround = blockedLookAround;
+                anim?.SetBlockedLookAround(blockedLookAround);
             }
         }
 
@@ -1391,7 +1542,16 @@ namespace SteraCube.SpaceJourney.Realtime
         /// Damage アニメは再生しない (怯み攻撃なら別途 ApplyFlinch を呼ぶ)。</summary>
         public void OnHit(bool died, RealtimeBattleUnit attacker = null)
         {
-            if (died) anim?.PlayDie();
+            if (attacker != null && attacker != this)
+            {
+                BreakStealthOnDamagedByAttack();
+            }
+
+            if (died)
+            {
+                ClearActionStateOnDeath();
+                anim?.PlayDie();
+            }
             if (attacker != null && attacker != this && attacker.IsAlive())
             {
                 lastAttacker = attacker;
@@ -1431,6 +1591,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     else
                     {
                         mover.StopMovement();
+                        ClearActionStateOnDeath();
                         _deathTime = BT;          // 死亡開始時刻を記録
                         _deathRemoved = false;
                     }
@@ -1454,6 +1615,17 @@ namespace SteraCube.SpaceJourney.Realtime
                     _deathRemoved = true;
                 }
             }
+        }
+
+        private void ClearActionStateOnDeath()
+        {
+            currentCast.valid = false;
+            activeCastSkill = null;
+            attackingUntil = BT;
+            flinchUntil = BT;
+            disruptedUntil = BT;
+            nextDecisionTime = 0f;
+            if (mover != null) mover.StopMovement();
         }
 
         // ─────────────────────────────────
@@ -1501,7 +1673,9 @@ namespace SteraCube.SpaceJourney.Realtime
                     {
                         var bs = skills[0];
                         float effRange = bs.shape.rangeMax * rangeMul + rangeBonus + basicRangeBonus;
-                        return IsSkillReady(0) && dist >= bs.shape.rangeMin && dist <= effRange;
+                        return IsSkillReady(0)
+                            && dist >= bs.shape.rangeMin
+                            && (dist <= effRange || IsStuckNearMeleeRange(0, bs, dist));
                     }
                     return BT >= nextAttackTime && dist <= GetAttackRangeMass();
                 case RealtimeCondition.TargetWithinClose:   return dist <= RangeCloseMass;
@@ -1607,6 +1781,7 @@ namespace SteraCube.SpaceJourney.Realtime
             foreach (var u in manager.AllUnits)
             {
                 if (u == null || !u.IsAlive() || u.ownerSide == side) continue;
+                if (IsHiddenEnemy(u)) continue;
                 Vector3 rel = u.transform.position - myPos; rel.y = 0f;
                 if (rel.sqrMagnitude <= r2) return true;
             }
@@ -1622,10 +1797,61 @@ namespace SteraCube.SpaceJourney.Realtime
             {
                 if (u == null || !u.IsAlive()) continue;
                 if (u.ownerSide == ownerSide) continue;
+                if (IsHiddenEnemy(u)) continue;
                 float d = Vector3.Distance(transform.position, u.transform.position);
                 if (d <= maxR) return true;
             }
             return false;
+        }
+
+        private bool IsHiddenEnemy(RealtimeBattleUnit candidate)
+        {
+            return candidate != null
+                && candidate.ownerSide != ownerSide
+                && candidate.unit != null
+                && candidate.unit.HasActiveEffect(StatusEffectType.Stealth);
+        }
+
+        private const int StealthGuaranteedBreakAttackCount = 3;
+        private int stealthAttackCount = 0;
+
+        private void RollStealthBreakOnAttack()
+        {
+            if (unit == null || !unit.HasActiveEffect(StatusEffectType.Stealth))
+            {
+                stealthAttackCount = 0;
+                return;
+            }
+
+            stealthAttackCount++;
+            float breakChance = GetStealthBreakChanceOnAttack(stealthAttackCount);
+            bool breaks = stealthAttackCount >= StealthGuaranteedBreakAttackCount
+                || UnityEngine.Random.value < breakChance;
+            if (!breaks) return;
+
+            int attackCount = stealthAttackCount;
+            unit.ConsumeActiveEffect(StatusEffectType.Stealth);
+            stealthAttackCount = 0;
+            manager?.BattleLog.Add($"[{BT:F2}s] {displayName} 隠密解除 (攻撃 {attackCount}回目)");
+        }
+
+        private static float GetStealthBreakChanceOnAttack(int attackCount)
+        {
+            return attackCount switch
+            {
+                <= 1 => 0.10f,
+                2 => 0.50f,
+                _ => 1.00f,
+            };
+        }
+
+        private void BreakStealthOnDamagedByAttack()
+        {
+            if (unit == null || !unit.HasActiveEffect(StatusEffectType.Stealth)) return;
+
+            unit.ConsumeActiveEffect(StatusEffectType.Stealth);
+            stealthAttackCount = 0;
+            manager?.BattleLog.Add($"[{BT:F2}s] {displayName} 隠密解除 (被攻撃)");
         }
 
         // ─────────────────────────────────
@@ -1650,6 +1876,7 @@ namespace SteraCube.SpaceJourney.Realtime
             {
                 dmg = Mathf.Max(0, tgt.unit.CurrentHp - 1);
                 tgt.unit.ConsumeActiveEffect(StatusEffectType.SurviveLethal);
+                tgt.SpawnStatusResolvedVfx(StatusEffectType.SurviveLethal);
                 tgt.manager?.BattleLog.Add($"  → {tgt.displayName} ☆不屈! HP1 で耐えた");
             }
         }
@@ -1665,24 +1892,129 @@ namespace SteraCube.SpaceJourney.Realtime
                 int reviveHp = Mathf.Max(1, Mathf.RoundToInt(tgt.unit.MaxHp * pct / 100f));
                 dmg = Mathf.Max(0, tgt.unit.CurrentHp - reviveHp);
                 tgt.unit.ConsumeActiveEffect(StatusEffectType.AutoRevive);
+                tgt.SpawnStatusResolvedVfx(StatusEffectType.AutoRevive);
                 tgt.manager?.BattleLog.Add($"  → {tgt.displayName} ✝復活! HP {reviveHp} ({pct}%)");
+            }
+        }
+
+        private List<DamageApplication> ApplyDamageWithDamageShare(RealtimeBattleUnit primaryTarget, int damage)
+        {
+            var applied = new List<DamageApplication>();
+            if (primaryTarget == null || primaryTarget.unit == null || !primaryTarget.IsAlive() || damage <= 0)
+                return applied;
+
+            var recipients = new List<RealtimeBattleUnit> { primaryTarget };
+            bool canShare = primaryTarget.unit.HasActiveEffect(StatusEffectType.DamageShare) && manager != null;
+            if (canShare)
+            {
+                var allies = new List<RealtimeBattleUnit>();
+                foreach (var u in manager.AllUnits)
+                {
+                    if (u == null || u == primaryTarget || !u.IsAlive() || u.unit == null) continue;
+                    if (u.ownerSide != primaryTarget.ownerSide) continue;
+                    if (u.unit.IsBarricade) continue;
+                    if (Vector3.Distance(u.transform.position, primaryTarget.transform.position) > DamageShareRadius) continue;
+                    allies.Add(u);
+                }
+
+                if (allies.Count > 0)
+                {
+                    allies.Sort((a, b) =>
+                        Vector3.Distance(a.transform.position, primaryTarget.transform.position)
+                            .CompareTo(Vector3.Distance(b.transform.position, primaryTarget.transform.position)));
+                    recipients.AddRange(allies);
+                    primaryTarget.SpawnStatusResolvedVfx(StatusEffectType.DamageShare);
+                }
+            }
+
+            bool shared = recipients.Count > 1;
+            int totalDamage = shared
+                ? Mathf.Max(1, Mathf.RoundToInt(damage * DamageShareTotalMultiplier))
+                : damage;
+            int shareBase = totalDamage / recipients.Count;
+            int remainder = totalDamage % recipients.Count;
+
+            if (shared)
+            {
+                manager?.BattleLog.Add(
+                    $"  → DamageShare: {primaryTarget.displayName} damage {damage} → total {totalDamage} / {recipients.Count}");
+            }
+
+            for (int i = 0; i < recipients.Count; i++)
+            {
+                var recipient = recipients[i];
+                if (recipient == null || recipient.unit == null || !recipient.IsAlive()) continue;
+
+                int finalDamage = shareBase + (i < remainder ? 1 : 0);
+                if (finalDamage <= 0) continue;
+
+                ProcessAutoRevive(recipient, ref finalDamage);
+                ProcessSurviveLethal(recipient, ref finalDamage);
+
+                int before = recipient.unit.CurrentHp;
+                recipient.unit.TakeDamage(finalDamage);
+                int after = recipient.unit.CurrentHp;
+
+                applied.Add(new DamageApplication
+                {
+                    target = recipient,
+                    finalDamage = finalDamage,
+                    hpBefore = before,
+                    hpAfter = after,
+                    primary = recipient == primaryTarget,
+                });
+            }
+
+            return applied;
+        }
+
+        private bool TryApplyMagicDamageTakenMultiplier(ref int dmg)
+        {
+            if (dmg <= 0 || magicDamageTakenMul >= 0.999f) return false;
+
+            int beforeDamage = dmg;
+            dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * magicDamageTakenMul));
+            return dmg < beforeDamage;
+        }
+
+        private void ReportDamageApplications(
+            List<DamageApplication> applications,
+            RealtimeBattleUnit attacker,
+            DamagePopupSpawner.PopupKind popupKind)
+        {
+            if (applications == null) return;
+            foreach (var hit in applications)
+            {
+                if (hit.target == null || hit.target.unit == null) continue;
+                hit.target.OnHit(hit.target.unit.IsDead, attacker);
+                manager?.OnAttack(attacker, hit.target, hit.finalDamage, hit.hpBefore, hit.hpAfter);
+                SpawnDamagePopup(hit.target.transform.position, hit.finalDamage, popupKind);
             }
         }
 
         /// <summary>現在 CT 中 (skillNextReadyTime[i] > BT) のスキルすべての残り CT を seconds 秒延長。
         /// 既に ready のスキルや nextAttackTime が ready の場合は影響しない (ウエイトカッター 時断ち用)。</summary>
-        public void ExtendActiveCooldowns(float seconds)
+        public bool ExtendActiveCooldowns(float seconds)
         {
-            if (seconds <= 0f) return;
+            if (seconds <= 0f) return false;
+            bool extended = false;
             if (skillNextReadyTime != null)
             {
                 for (int i = 0; i < skillNextReadyTime.Length; i++)
                 {
                     if (skillNextReadyTime[i] > BT)
+                    {
                         skillNextReadyTime[i] += seconds;
+                        extended = true;
+                    }
                 }
             }
-            if (nextAttackTime > BT) nextAttackTime += seconds;
+            if (nextAttackTime > BT)
+            {
+                nextAttackTime += seconds;
+                extended = true;
+            }
+            return extended;
         }
 
         /// <summary>ターゲットを外部から強制的に切替 (シャドウハンター de-taunt 用)。 nextDecisionTime を即時化して
@@ -1690,7 +2022,7 @@ namespace SteraCube.SpaceJourney.Realtime
         /// 通常の MaintainCurrentTarget で再選定される可能性あり (1 撃避けたい用途には十分)。</summary>
         public void SwitchTargetTo(RealtimeBattleUnit newTarget)
         {
-            currentTarget = newTarget;
+            SetCurrentTarget(newTarget);
             nextDecisionTime = 0f;
         }
 
@@ -1699,6 +2031,13 @@ namespace SteraCube.SpaceJourney.Realtime
             forcedTarget = taunter;
             forcedUntil = BT + durationSec;
             nextDecisionTime = 0f; // 即時再評価
+        }
+
+        private void SetCurrentTarget(RealtimeBattleUnit newTarget)
+        {
+            if (currentTarget == newTarget) return;
+            currentTarget = newTarget;
+            mover?.StopMovement();
         }
 
         private void MaintainCurrentTarget()
@@ -1716,10 +2055,32 @@ namespace SteraCube.SpaceJourney.Realtime
                             || (animBusy && BT < attackingUntil + animSafetyTimeoutSec);
             if (isAttacking || IsFlinching) return;
 
-            // 1. 挑発: 強制ターゲット固定 (有効期間中)
-            if (forcedTarget != null && forcedTarget.IsAlive() && BT < forcedUntil)
+            // === 魅了 (Charm) によるターゲット強制差し替え (挑発より優先) ===
+            // Charm = 敵味方ランダム攻撃 (旧 Confusion 挙動を統合)。本人は通常攻撃のみ実行可。
+            // 既存対象が生きてれば次の再評価タイミングまで維持 (毎フレ切替防止)
+            if (unit != null && unit.HasActiveEffect(StatusEffectType.Charm))
             {
-                currentTarget = forcedTarget;
+                if (currentTarget != null && currentTarget.IsAlive() && BT < nextDecisionTime) return;
+                SetCurrentTarget(PickRandomAnyUnit());
+                nextDecisionTime = BT + decisionIntervalSec;
+                return;
+            }
+
+            // === 挑発 (Taunt) による引き寄せ ===
+            // 周囲 TauntPullRangeMeter (= 2m) 以内に Taunt status を持つ敵 unit がいれば、その敵を強制ターゲット。
+            // タンク本人が動けば追従、新しく範囲に入った敵も対象 (毎フレ判定)。
+            // ルート判定は ContinuousMover に依存 (経路無ければ攻撃距離まで近づけないので自然に他ターゲットに切替わる)。
+            var nearbyTaunter = FindNearbyEnemyWithTaunt(TauntPullRangeMeter);
+            if (nearbyTaunter != null)
+            {
+                SetCurrentTarget(nearbyTaunter);
+                return;
+            }
+
+            // 1. 挑発: 強制ターゲット固定 (有効期間中)
+            if (forcedTarget != null && forcedTarget.IsAlive() && !IsHiddenEnemy(forcedTarget) && BT < forcedUntil)
+            {
+                SetCurrentTarget(forcedTarget);
                 return;
             }
             if (forcedTarget != null)
@@ -1730,7 +2091,7 @@ namespace SteraCube.SpaceJourney.Realtime
             }
 
             // 2. 再評価タイミング判定
-            bool targetGone = currentTarget == null || !currentTarget.IsAlive();
+            bool targetGone = currentTarget == null || !currentTarget.IsAlive() || IsHiddenEnemy(currentTarget);
             bool timeToReEval = BT >= nextDecisionTime;
             if (!targetGone && !timeToReEval) return; // 維持
 
@@ -1756,19 +2117,21 @@ namespace SteraCube.SpaceJourney.Realtime
 
             if (dominant == null)
             {
-                currentTarget = null;
+                SetCurrentTarget(null);
                 lastDominantIndex = -1;
                 return;
             }
 
-            // 4. dominant が前回と同じで currentTarget が生きてれば維持 (振動防止)
-            if (dominantIdx == lastDominantIndex && currentTarget != null && currentTarget.IsAlive())
+            // 4. dominant が前回と同じでも、SelectTargetByEntry が別 target を返したなら切り替える。
+            // SelectTargetByEntry 側に sticky 判定があるため、ここで currentTarget を無条件維持すると
+            // Taunt 解除後や接敵切替時に古い遠距離 target を掴み続けて棒立ちになる。
+            if (dominantIdx == lastDominantIndex && picked == currentTarget && currentTarget != null && currentTarget.IsAlive())
             {
                 return;
             }
 
             // 5. 新 dominant or target 死亡 → 再選択
-            currentTarget = picked;
+            SetCurrentTarget(picked);
             lastDominantIndex = dominantIdx;
         }
 
@@ -1970,6 +2333,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     case RealtimeTargetSide.AnyAllyIncludingSelf:
                         if (u.ownerSide != ownerSide) continue; break;
                 }
+                if (IsHiddenEnemy(u)) continue;
                 if (e.jobFilter != null && e.jobFilter.Length > 0)
                 {
                     string jid = u.unit?.Body?.BodyJobId;
@@ -2076,6 +2440,13 @@ namespace SteraCube.SpaceJourney.Realtime
                 return false; // 次の優先度 (移動アクション等) にフォールスルー
             }
 
+            if (unit != null && unit.IsMovementDisabled && IsMovementAction(act))
+            {
+                if (mover != null) mover.StopMovement();
+                committed = false;
+                return false;
+            }
+
             switch (act)
             {
                 case RealtimeAction.Wait:
@@ -2153,6 +2524,27 @@ namespace SteraCube.SpaceJourney.Realtime
                 case RealtimeAction.MoveAwayToFar:      return MoveAwayToDistance(toTarget, dist, RangeFarMass);
             }
             return false;
+        }
+
+        private static bool IsMovementAction(RealtimeAction action)
+        {
+            switch (action)
+            {
+                case RealtimeAction.MoveToTarget:
+                case RealtimeAction.MoveToLowestHpAlly:
+                case RealtimeAction.MoveToOwnRange:
+                case RealtimeAction.MoveToOwnRangeKeep:
+                case RealtimeAction.MoveToCloseRange:
+                case RealtimeAction.MoveToMidRange:
+                case RealtimeAction.MoveToFarRange:
+                case RealtimeAction.MoveToMaxFarRange:
+                case RealtimeAction.MoveAwayToClose:
+                case RealtimeAction.MoveAwayToMid:
+                case RealtimeAction.MoveAwayToFar:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>target の世界座標を返す。連続移動では transform.position 直返し。</summary>
@@ -2268,26 +2660,81 @@ namespace SteraCube.SpaceJourney.Realtime
             return best;
         }
 
-        private void FireBasicAttack(RealtimeBattleUnit target)
+        /// <summary>挑発の引き寄せ範囲 (メートル)。タンクから 2m 以内の敵が常にタンクを狙う。</summary>
+        private const float TauntPullRangeMeter = 2f;
+
+        /// <summary>自分から radius (メートル) 以内に Taunt status を持つ敵 unit がいれば最寄りを返す。挑発用。</summary>
+        private RealtimeBattleUnit FindNearbyEnemyWithTaunt(float radius)
+        {
+            if (manager == null) return null;
+            float radiusSq = radius * radius;
+            RealtimeBattleUnit best = null;
+            float bestDistSq = float.MaxValue;
+            foreach (var u in manager.AllUnits)
+            {
+                if (u == null || u == this || !u.IsAlive()) continue;
+                if (u.ownerSide == ownerSide) continue;  // 敵のみ
+                if (IsHiddenEnemy(u)) continue;
+                if (u.unit == null || !u.unit.HasActiveEffect(StatusEffectType.Taunt)) continue;
+                float dSq = (u.transform.position - transform.position).sqrMagnitude;
+                if (dSq <= radiusSq && dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    best = u;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>同 side (味方陣営) で自分以外の生存ユニット最寄りを返す。Charm 用 (現在は未使用)。</summary>
+        private RealtimeBattleUnit FindNearestAlly()
+        {
+            if (manager == null) return null;
+            RealtimeBattleUnit best = null;
+            float bestDist = float.MaxValue;
+            foreach (var u in manager.AllUnits)
+            {
+                if (u == null || u == this || !u.IsAlive()) continue;
+                if (u.ownerSide != ownerSide) continue;
+                float d = Vector3.Distance(transform.position, u.transform.position);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = u;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>敵味方両方の生存ユニットからランダムに 1 体返す (自分は除外)。Confusion 用。</summary>
+        private RealtimeBattleUnit PickRandomAnyUnit()
+        {
+            if (manager == null) return null;
+            var candidates = new List<RealtimeBattleUnit>();
+            foreach (var u in manager.AllUnits)
+            {
+                if (u == null || u == this || !u.IsAlive()) continue;
+                candidates.Add(u);
+            }
+            if (candidates.Count == 0) return null;
+            return candidates[UnityEngine.Random.Range(0, candidates.Count)];
+        }
+
+        private void FireBasicAttack(RealtimeBattleUnit target, bool isCounterAttack = false)
         {
             if (target == null || !target.IsAlive()) return;
             if (unit == null || target.unit == null) return;
+            RollStealthBreakOnAttack();
 
             int at = unit.AtFinal;
             int df = target.unit.DfFinal;
             int dmg = Mathf.Max(1, Mathf.RoundToInt(at - df * 0.5f));
 
-            int before = target.unit.CurrentHp;
-            ProcessAutoRevive(target, ref dmg);
-            ProcessSurviveLethal(target, ref dmg);
-            target.unit.TakeDamage(dmg);
-            int after = target.unit.CurrentHp;
+            var hits = ApplyDamageWithDamageShare(target, dmg);
 
             anim?.PlayAttack();
-            target.OnHit(target.unit.IsDead, this);
-
-            manager?.OnAttack(this, target, dmg, before, after);
-            SpawnDamagePopup(target.transform.position, dmg, DamagePopupSpawner.PopupKind.Damage);
+            ReportDamageApplications(hits, this, DamagePopupSpawner.PopupKind.Damage);
+            target.OnDamagedByPassive(this, allowCounter: !isCounterAttack);
         }
 
         private void SpawnDamagePopup(Vector3 pos, int value, DamagePopupSpawner.PopupKind kind)
@@ -2308,6 +2755,135 @@ namespace SteraCube.SpaceJourney.Realtime
                 manager.damagePopup = sp;
             }
             sp.Spawn(pos, value, kind);
+        }
+
+        private void SpawnTextPopup(Vector3 pos, string text, DamagePopupSpawner.PopupKind kind)
+        {
+            if (manager == null) return;
+            var sp = manager.damagePopup;
+            if (sp == null)
+            {
+                var go = new GameObject("DamagePopupSpawner(Auto)");
+                go.transform.SetParent(manager.transform);
+                sp = go.AddComponent<DamagePopupSpawner>();
+#if UNITY_EDITOR
+                sp.prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<DamagePopup>(
+                    "Assets/0SteraCube/Prefabs/UI/DamagePopup.prefab");
+#endif
+                manager.damagePopup = sp;
+            }
+            sp.SpawnText(pos, text, kind);
+        }
+
+        private StatusEffectMetaDatabase GetStatusEffectMetaDatabase()
+        {
+            return MasterDatabase.Instance != null ? MasterDatabase.Instance.StatusEffectMetaDatabase : null;
+        }
+
+        private void SpawnRuntimeVfx(GameObject prefab, Vector3 position)
+        {
+            if (prefab == null) return;
+            var go = Instantiate(prefab, position, Quaternion.identity);
+            manager?.RegisterRuntimeEffect(go);
+            ApplyBattleSpeedToEffect(go);
+            Destroy(go, 5f);
+        }
+
+        private void SpawnRuntimeVfxOnSelf(GameObject prefab)
+        {
+            SpawnRuntimeVfx(prefab, transform.position);
+        }
+
+        private void SpawnCommonReactionVfx(System.Func<StatusEffectMetaDatabase, GameObject> select)
+        {
+            var db = GetStatusEffectMetaDatabase();
+            if (db == null || select == null) return;
+            SpawnRuntimeVfxOnSelf(select(db));
+        }
+
+        private void SpawnStatusResolvedVfx(StatusEffectType type)
+        {
+            var db = GetStatusEffectMetaDatabase();
+            var entry = db != null ? db.Get(type) : null;
+            if (entry == null) return;
+            SpawnRuntimeVfxOnSelf(entry.resolvedVfxPrefab);
+            PlayStatusResolvedTimeline(entry.resolvedTimelineSkill);
+        }
+
+        private void PlayStatusResolvedTimeline(RealtimeSkillDefinition reactionSkill)
+        {
+            if (reactionSkill == null) return;
+
+            // Resolved reactions are visual-only. They may reuse Skill Timeline authoring,
+            // but must not apply damage/status/sub-skills or consume this unit's current cast.
+            anim?.PlayAttackForSkill(reactionSkill);
+
+            Vector3 castOrigin = transform.position;
+            Vector3 castDir = transform.forward;
+            Vector3 castAim = castOrigin + castDir * Mathf.Max(0f, reactionSkill.shape != null ? reactionSkill.shape.rangeMax : 0f);
+
+            if (reactionSkill.timeline == null) return;
+            foreach (var ev in reactionSkill.timeline)
+            {
+                if (ev == null) continue;
+                if (ev.kind == RealtimeSkillEventKind.DealDamage ||
+                    ev.kind == RealtimeSkillEventKind.ConditionalCast)
+                {
+                    continue;
+                }
+
+                pendingEvents.Add(new PendingSkillEvent
+                {
+                    fireTime = BT + Mathf.Max(0f, ev.timeSec),
+                    ev = ev,
+                    skill = reactionSkill,
+                    primaryTarget = this,
+                    hitTargets = new List<RealtimeBattleUnit> { this },
+                    castOrigin = castOrigin,
+                    castAim = castAim,
+                    castDir = castDir,
+                    damageMul = 1f,
+                });
+            }
+        }
+
+        private void SpawnHealResolvedVfx(RealtimeBattleUnit target, GameObject overridePrefab = null)
+        {
+            if (target == null) return;
+            if (overridePrefab != null)
+            {
+                target.SpawnRuntimeVfxOnSelf(overridePrefab);
+                return;
+            }
+            target.SpawnCommonReactionVfx(db => db.healReceivedVfxPrefab);
+        }
+
+        private void SpawnPassiveActivationVfx(RealtimePassiveDefinition passive, RealtimeBattleUnit subject)
+        {
+            if (passive == null || subject == null) return;
+            subject.SpawnRuntimeVfxOnSelf(passive.activationVfxPrefab);
+        }
+
+        public void ApplyBurnStatusTick()
+        {
+            if (unit == null || unit.IsDead) return;
+            if (!unit.HasActiveEffect(StatusEffectType.Burn)) return;
+
+            int dmg = Mathf.Max(1, Mathf.RoundToInt(unit.MaxHp * 0.04f));
+            var hits = ApplyDamageWithDamageShare(this, dmg);
+            if (hits.Count == 0) return;
+
+            SpawnStatusResolvedVfx(StatusEffectType.Burn);
+            foreach (var hit in hits)
+            {
+                if (hit.target == null || hit.target.unit == null) continue;
+                SpawnDamagePopup(hit.target.transform.position, hit.finalDamage, DamagePopupSpawner.PopupKind.Damage);
+                manager?.BattleLog.Add($"[{BT:F2}s] {hit.target.displayName} Burn tick -{hit.finalDamage} (4% max HP / 1s)");
+                if (hit.target.unit.IsDead)
+                {
+                    hit.target.OnHit(true);
+                }
+            }
         }
 
         // ─────────────────────────────────
@@ -2337,7 +2913,19 @@ namespace SteraCube.SpaceJourney.Realtime
             float d = Vector3.Distance(transform.position, currentTarget.transform.position);
             float extra = (index == 0) ? basicRangeBonus : 0f;
             float effRange = s.shape.rangeMax * rangeMul + rangeBonus + extra;
-            return d >= s.shape.rangeMin && d <= effRange;
+            return d >= s.shape.rangeMin && (d <= effRange || IsStuckNearMeleeRange(index, s, d));
+        }
+
+        private bool IsStuckNearMeleeRange(int index, RealtimeSkillDefinition s, float distance)
+        {
+            if (index != 0 || s == null || s.shape == null) return false;
+            if (currentTarget == null || !currentTarget.IsAlive()) return false;
+            if (s.skillType != RealtimeSkillType.Attack || s.targetSide != RealtimeTargetSide.Enemy) return false;
+            if (s.shape.rangeMax > RangeCloseMass + 0.05f) return false;
+            if (mover == null || !mover.IsInTransit || mover.EffectiveProgressSpeed > StuckProgressThreshold) return false;
+
+            float effRange = s.shape.rangeMax * rangeMul + rangeBonus + basicRangeBonus;
+            return distance >= s.shape.rangeMin && distance <= effRange + MeleeCrowdReachGrace;
         }
 
         /// <summary>いまスキル i を撃てば何体当たるか (現在ターゲット方向で計算)</summary>
@@ -2362,6 +2950,7 @@ namespace SteraCube.SpaceJourney.Realtime
             {
                 if (u == null || !u.IsAlive()) continue;
                 if (u.ownerSide == ownerSide) continue;
+                if (IsHiddenEnemy(u)) continue;
                 float d = Vector3.Distance(transform.position, u.transform.position);
                 if (d >= minReach && d <= maxReach) return true;
             }
@@ -2426,12 +3015,75 @@ namespace SteraCube.SpaceJourney.Realtime
         /// <summary>キャスト中アニメ拘束時間が残っているか (Replay 連打防止判定用)。</summary>
         public bool DebugIsCasting() => BT < attackingUntil;
 
+        private void CastSelfTauntSkill(RealtimeSkillDefinition s, int index)
+        {
+            int durationInt = Mathf.Max(1, Mathf.RoundToInt(s.tauntDurationSec));
+            unit.ApplyStatusEffect(StatusEffectType.Taunt, 0, durationInt, Mathf.RoundToInt(BT), unit);
+
+            Vector3 castOrigin = transform.position;
+            Vector3 castDir = transform.forward;
+            Vector3 castAim = castOrigin + castDir * Mathf.Max(0f, s.shape != null ? s.shape.rangeMax : 0f);
+
+            if (s.timeline != null && s.timeline.Count > 0)
+            {
+                foreach (var ev in s.timeline)
+                {
+                    if (ev == null) continue;
+                    if (ev.kind == RealtimeSkillEventKind.DealDamage) continue;
+
+                    pendingEvents.Add(new PendingSkillEvent
+                    {
+                        fireTime = BT + Mathf.Max(0f, ev.timeSec),
+                        ev = ev,
+                        skill = s,
+                        primaryTarget = this,
+                        hitTargets = new List<RealtimeBattleUnit> { this },
+                        castOrigin = castOrigin,
+                        castAim = castAim,
+                        castDir = castDir,
+                        damageMul = 1f,
+                    });
+                }
+            }
+
+            anim?.PlayAttackForSkill(s);
+            skillNextReadyTime[index] = BT + s.cooldownSec * skillCooldownMul * cooldownMul;
+            attackingUntil = BT + s.castAnimSec;
+            activeCastSkill = s;
+            BeginCastInfo(s, index);
+            manager?.ReportSkillUsed(this, s, index);
+        }
+
         /// <summary>スキル発動。成功したら true、CT未達/対象なしで no-op なら false (fall-through)。</summary>
         private bool CastSkill(int index)
         {
+            return CastSkill(index, null, false, true, false);
+        }
+
+        private bool CastSkill(
+            int index,
+            RealtimeBattleUnit forcedPrimary,
+            bool ignoreCooldown,
+            bool consumeCooldown,
+            bool isCounterAttack)
+        {
             var s = GetSkill(index);
             if (s == null) return false;
-            if (!IsSkillReady(index)) return false;  // CT 残り
+            if (!ignoreCooldown && !IsSkillReady(index)) return false;  // CT 残り
+
+            // 状態異常でアクティブスキル禁止 (Silence/Charm/Confusion + Stun/Freeze で動けない場合も含む)
+            // skills[0] (基本攻撃) は別経路 (FireBasicAttack) で実行されるため、ここでは index >= 1 だけ弾く。
+            // パッシブには影響しない (memory: Status effects don't block passives)。
+            if (index >= 1 && unit != null && unit.IsActiveSkillDisabled) return false;
+
+            // 挑発スキル: 発動者本人に Taunt status を付与する自己発動スキル。
+            // 対象選択に依存させると Provoke (CircleAtSelf/rangeMax=0) が no-op になるため、
+            // CT/アニメ/timeline までここで完結させる。
+            if (s.tauntDurationSec > 0f && unit != null)
+            {
+                CastSelfTauntSkill(s, index);
+                return true;
+            }
 
             // Move スキル: 自己瞬間移動 (shape.rangeMax を距離として使用)
             if (s.skillType == RealtimeSkillType.Move)
@@ -2441,6 +3093,7 @@ namespace SteraCube.SpaceJourney.Realtime
                 attackingUntil = BT + s.castAnimSec;
                 anim?.PlayAttackForSkill(s);
                 BeginCastInfo(s, index); // 行動妨害共通仕様
+                manager?.ReportSkillUsed(this, s, index);
                 return true;
             }
 
@@ -2452,7 +3105,7 @@ namespace SteraCube.SpaceJourney.Realtime
             }
 
             // スキル独自の対象を再選択
-            var primary = SelectSkillTarget(s);
+            var primary = forcedPrimary != null && forcedPrimary.IsAlive() ? forcedPrimary : SelectSkillTarget(s, index);
             if (primary == null) return false;
 
             // basic attack か?
@@ -2505,7 +3158,9 @@ namespace SteraCube.SpaceJourney.Realtime
                 else if ((shotDir - mainDir).sqrMagnitude < 1e-6f)
                 {
                     // メイン dir = primary 経由収集
-                    shotHits = CollectSkillTargets(s, primary);
+                    shotHits = isCounterAttack && isBasicCast
+                        ? new List<RealtimeBattleUnit> { primary }
+                        : CollectSkillTargets(s, primary);
                 }
                 else
                 {
@@ -2594,6 +3249,7 @@ namespace SteraCube.SpaceJourney.Realtime
                                     castAim = shotAim,
                                     castDir = shotDir,
                                     damageMul = dmgMul,
+                                    isCounterAttack = isCounterAttack,
                                 });
                             }
                             continue;  // 貫通 DealDamage は per-target で処理済 → 一括イベントは作らない
@@ -2612,6 +3268,7 @@ namespace SteraCube.SpaceJourney.Realtime
                             castAim = shotAim,
                             castDir = shotDir,
                             damageMul = dmgMul,
+                            isCounterAttack = isCounterAttack,
                         });
                     }
                 }
@@ -2620,11 +3277,17 @@ namespace SteraCube.SpaceJourney.Realtime
                     // DealDamage イベントが timeline に無ければ即時適用 (後方互換)
                     foreach (var tgt in shotHits)
                     {
-                        ApplySkillEffect(s, tgt, dmgMul);
+                        ApplySkillEffect(s, tgt, dmgMul, isCounterAttack);
                     }
                 }
             }
             if (!anyHit) return false;
+            if (s.skillType == RealtimeSkillType.Attack
+                || s.skillType == RealtimeSkillType.Debuff
+                || s.skillType == RealtimeSkillType.Control)
+            {
+                RollStealthBreakOnAttack();
+            }
             // hits 変数 (旧コード参照用に primary だけのプレースホルダ)
             var hits = new List<RealtimeBattleUnit> { primary };
 
@@ -2633,10 +3296,12 @@ namespace SteraCube.SpaceJourney.Realtime
             anim?.PlayAttackForSkill(s);
 
             // CT + ロック
-            skillNextReadyTime[index] = BT + s.cooldownSec * skillCooldownMul * cooldownMul;
+            if (consumeCooldown)
+                skillNextReadyTime[index] = BT + s.cooldownSec * skillCooldownMul * cooldownMul;
             attackingUntil = BT + s.castAnimSec;
             activeCastSkill = s; // AnimationEvent 参照用
             BeginCastInfo(s, index); // 行動妨害共通仕様
+            manager?.ReportSkillUsed(this, s, index);
 
             // Knight Defend: ガード 100% 状態を 5 秒付与 (盾副次効果は盾本来 % で判定)
             if (!string.IsNullOrEmpty(s.skillId) && s.skillId == "Defend")
@@ -2738,7 +3403,9 @@ namespace SteraCube.SpaceJourney.Realtime
                 // 矢複製
                 var copy = Instantiate(orig, origPos, Quaternion.LookRotation(dir, Vector3.up), null);
                 copy.transform.localScale = orig.transform.lossyScale;
+                RestoreArrowVisualOpacity(copy);
                 copy.SetActive(true);
+                manager?.RegisterRuntimeEffect(copy);
 
                 if (manager != null)
                 {
@@ -2807,6 +3474,47 @@ namespace SteraCube.SpaceJourney.Realtime
             }
         }
 
+        private static void RestoreArrowVisualOpacity(GameObject arrow)
+        {
+            if (arrow == null) return;
+
+            var renderers = arrow.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var r = renderers[i];
+                if (r == null) continue;
+
+                var materials = r.materials;
+                for (int m = 0; m < materials.Length; m++)
+                {
+                    var mat = materials[m];
+                    if (mat == null) continue;
+
+                    if (mat.HasProperty("_Alpha")) mat.SetFloat("_Alpha", 1f);
+                    if (mat.HasProperty("_Color"))
+                    {
+                        var c = mat.GetColor("_Color");
+                        c.a = 1f;
+                        mat.SetColor("_Color", c);
+                    }
+                    if (mat.HasProperty("_BaseColor"))
+                    {
+                        var c = mat.GetColor("_BaseColor");
+                        c.a = 1f;
+                        mat.SetColor("_BaseColor", c);
+                    }
+                    if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One);
+                    if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.Zero);
+                    if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 1f);
+                    mat.renderQueue = -1;
+                    mat.SetOverrideTag("RenderType", "Opaque");
+                }
+
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                r.receiveShadows = true;
+            }
+        }
+
         /// <summary>射撃経路 (origPos → aimPos) と交差するバリケードの中で、最も caster に近いものを返す。
         /// 非貫通矢の遮蔽判定用。敵側のバリケード or 自陣のバリケード関係なく、
         /// 経路上に物理的に存在するなら blocker 扱い。</summary>
@@ -2859,6 +3567,7 @@ namespace SteraCube.SpaceJourney.Realtime
                 if (u == null || !u.IsAlive()) continue;
                 if (u.ownerSide == ownerSide) continue;  // 敵のみ
                 if (u == this) continue;
+                if (IsHiddenEnemy(u)) continue;
                 Vector3 rel = u.transform.position - origPos; rel.y = 0f;
                 float along = Vector3.Dot(rel, dn);
                 if (along < 0.1f || along > maxDist) continue;
@@ -2881,6 +3590,7 @@ namespace SteraCube.SpaceJourney.Realtime
             foreach (var u in manager.AllUnits)
             {
                 if (u == null || u == this || !u.IsAlive() || u.ownerSide == ownerSide) continue;
+                if (IsHiddenEnemy(u)) continue;
                 Vector3 rel = u.transform.position - origPos; rel.y = 0;
                 float along = Vector3.Dot(rel, dir);
                 if (along < 0.1f || along > maxDist + 0.5f) continue;
@@ -2926,13 +3636,10 @@ namespace SteraCube.SpaceJourney.Realtime
                         if (u == null || !u.IsAlive() || u.ownerSide == ownerSide) continue;
                         if (Vector3.Distance(u.transform.position, tgt.transform.position) > radius) continue;
                         int eachDmg = dmg;
-                        ProcessAutoRevive(u, ref eachDmg);
-                        ProcessSurviveLethal(u, ref eachDmg);
-                        int before = u.unit.CurrentHp;
-                        u.unit.TakeDamage(eachDmg);
-                        u.OnHit(u.unit.IsDead, this);
-                        manager.OnAttack(this, u, eachDmg, before, u.unit.CurrentHp);
-                        SpawnDamagePopup(u.transform.position, eachDmg, DamagePopupSpawner.PopupKind.Damage);
+                        if (isMagical && u.TryApplyMagicDamageTakenMultiplier(ref eachDmg))
+                            u.SpawnCommonReactionVfx(db => db.magicDamageReducedVfxPrefab);
+                        var hits = ApplyDamageWithDamageShare(u, eachDmg);
+                        ReportDamageApplications(hits, this, DamagePopupSpawner.PopupKind.Damage);
                         // ノックバック: subSkill.knockbackMass > 0 ならキャスター中心の放射方向 (= ApplyKnockback 既定挙動)
                         if (subSkill.knockbackMass > 0f && u.IsAlive())
                         {
@@ -2997,6 +3704,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     foreach (var (u, _) in boxTargets)
                     {
                         MovePreventOverlap(u, forward, kbDist, this, ignoreSet);
+                        u.SpawnCommonReactionVfx(db => db.knockbackTakenVfxPrefab);
                         float lockoutSec = u.ComputeKnockbackLockout();
                         u.OnDisrupted(lockoutSec);
                     }
@@ -3162,7 +3870,7 @@ namespace SteraCube.SpaceJourney.Realtime
                                 }
                                 for (int shot = 0; shot < hitCount && tgt.IsAlive(); shot++)
                                 {
-                                    ApplySkillEffect(pe.skill, tgt, dmgMul);
+                                    ApplySkillEffect(pe.skill, tgt, dmgMul, pe.isCounterAttack);
                                 }
                             }
                         }
@@ -3212,6 +3920,7 @@ namespace SteraCube.SpaceJourney.Realtime
                             go = Instantiate(pe.ev.effectPrefab, wp, rot);
                             vfxAttachInfo = "world";
                         }
+                        manager?.RegisterRuntimeEffect(go);
                         // 倍速適用: 生成したエフェクト配下の Particle/Animator を mul で加速
                         ApplyBattleSpeedToEffect(go);
                         // 通常攻撃 (skills[0]) の VFX は basicShapeMul で拡大 (太陽の膨張 1.5 倍)
@@ -3471,7 +4180,7 @@ namespace SteraCube.SpaceJourney.Realtime
             return basePos + right * pe.ev.offset.x + Vector3.up * pe.ev.offset.y + pe.castDir * pe.ev.offset.z;
         }
 
-        private void ApplySkillEffect(RealtimeSkillDefinition s, RealtimeBattleUnit tgt, float extraMul = 1f)
+        private void ApplySkillEffect(RealtimeSkillDefinition s, RealtimeBattleUnit tgt, float extraMul = 1f, bool isCounterAttack = false)
         {
             if (tgt == null || tgt.unit == null || unit == null) return;
 
@@ -3512,6 +4221,7 @@ namespace SteraCube.SpaceJourney.Realtime
                                     - Mathf.Sqrt(Mathf.Max(0f, (float)df)) * DfScale);
                                 break;
                         }
+                        bool isMagicDamage = effKind == SkillDamageKind.Magical || effKind == SkillDamageKind.PenetrateMagical;
                         // BasicAttackMul / SkillMul を適用
                         float mul = isBasicHere ? basicAttackMul : skillMul;
                         // Charge 効果: 次の通常攻撃のみ 1.5x (1回消費)
@@ -3530,7 +4240,10 @@ namespace SteraCube.SpaceJourney.Realtime
                         if (guarded && mitigation > 0f)
                         {
                             dmg = Mathf.Max(1, Mathf.RoundToInt(dmg * (1f - mitigation)));
+                            SpawnTextPopup(tgt.transform.position, "GUARD", DamagePopupSpawner.PopupKind.Guard);
                         }
+                        if (isMagicDamage && tgt.TryApplyMagicDamageTakenMultiplier(ref dmg))
+                            tgt.SpawnCommonReactionVfx(db => db.magicDamageReducedVfxPrefab);
                         // NextHitDamageReduction (受け流し等のパッシブ効果)
                         if (tgt._nextHitDamageReductionRatio > 0f)
                         {
@@ -3538,17 +4251,12 @@ namespace SteraCube.SpaceJourney.Realtime
                             tgt._nextHitDamageReductionRatio = 0f; // 1 回限りで消費
                         }
 
-                        int before = tgt.unit.CurrentHp;
-                        ProcessAutoRevive(tgt, ref dmg);
-                        ProcessSurviveLethal(tgt, ref dmg);
-                        tgt.unit.TakeDamage(dmg);
-                        tgt.OnHit(tgt.unit.IsDead);
-                        manager?.OnAttack(this, tgt, dmg, before, tgt.unit.CurrentHp);
                         // ダメージ数値ポップアップ
                         var kind = (s.damageKind == SkillDamageKind.Magical || s.damageKind == SkillDamageKind.PenetrateMagical)
                             ? DamagePopupSpawner.PopupKind.Magic
                             : DamagePopupSpawner.PopupKind.Damage;
-                        SpawnDamagePopup(tgt.transform.position, dmg, kind);
+                        var hits = ApplyDamageWithDamageShare(tgt, dmg);
+                        ReportDamageApplications(hits, this, kind);
 
                         // 戦士 rank3+ 自動追撃は通常攻撃 SO の timeline に ConditionalCast
                         // (HasExtraAttack 条件) を置いて発動する形式に統一済 (Slash.timeline 参照)。
@@ -3568,8 +4276,10 @@ namespace SteraCube.SpaceJourney.Realtime
                         else { _lastHitTarget = tgt; _sameTargetHitStreak = 1; }
 
                         // 与ダメ % 系 passive (LifestealPercent / HealAlliesOnHitPercent) のため
-                        // 実際に通った値 (= before - after、 overkill 除外) をセットする。
-                        _lastDealtDamage = before - tgt.unit.CurrentHp;
+                        // 実際に通ったHP減少量 (overkill 除外) をセットする。
+                        _lastDealtDamage = 0;
+                        foreach (DamageApplication hit in hits)
+                            _lastDealtDamage += Mathf.Max(0, hit.hpBefore - hit.hpAfter);
                         EvaluatePassives(PassiveTrigger.OnDealDamage, ctxTarget: tgt);
                         if (isBasic)
                             EvaluatePassives(PassiveTrigger.OnNthBasicAttackHit, ctxTarget: tgt);
@@ -3583,7 +4293,7 @@ namespace SteraCube.SpaceJourney.Realtime
                         }
 
                         // 被害者側: OnDamaged + OnSelfHpBelowPercent
-                        tgt.OnDamagedByPassive(this);
+                        tgt.OnDamagedByPassive(this, allowCounter: !isCounterAttack);
 
                         if (tgt.unit.IsDead)
                         {
@@ -3607,6 +4317,7 @@ namespace SteraCube.SpaceJourney.Realtime
                         if (healAmt > 0)
                         {
                             tgt.unit.Heal(healAmt);
+                            SpawnHealResolvedVfx(tgt, s.healResolvedVfxPrefab);
                             SpawnDamagePopup(tgt.transform.position, healAmt, DamagePopupSpawner.PopupKind.Heal);
                         }
                         ApplyStatusEffects(s, tgt);
@@ -3633,8 +4344,9 @@ namespace SteraCube.SpaceJourney.Realtime
                 case RealtimeSkillType.Control:
                     // ノックバック
                     if (s.knockbackMass > 0f) ApplyKnockback(tgt, s.knockbackMass);
-                    // 挑発
-                    if (s.tauntDurationSec > 0f) tgt.ForceTarget(this, s.tauntDurationSec);
+                    // 挑発: 旧 ForceTarget (対象 1 体に強制) は廃止 → 発動者自身に Taunt status 付与する形に変更。
+                    //       MaintainCurrentTarget が周囲 2m の敵を毎フレ判定して引き寄せる。
+                    //       (重複付与防止: 発動者本人ループ内で 1 度だけセット)
                     // 付随ステータス (スタン等)
                     ApplyStatusEffects(s, tgt);
                     break;
@@ -3687,6 +4399,7 @@ namespace SteraCube.SpaceJourney.Realtime
             if (dir.sqrMagnitude < 0.01f) dir = transform.forward;
             dir.Normalize();
             MovePreventOverlap(tgt, dir, dist, this); // caster (this) を衝突判定から除外
+            tgt.SpawnCommonReactionVfx(db => db.knockbackTakenVfxPrefab);
             // 行動妨害共通仕様: 進行中SOキャンセル + CT判定 + 硬直
             float lockoutSec = tgt.ComputeKnockbackLockout();
             tgt.OnDisrupted(lockoutSec);
@@ -3756,7 +4469,24 @@ namespace SteraCube.SpaceJourney.Realtime
             currentCast.skillIndex = skillIndex;
             currentCast.refundCtTime = BT; // 払戻 = 即時使用可
             currentCast.animEndTime = BT + Mathf.Max(0f, s.castAnimSec);
-            currentCast.hasFiredDealDamage = false;
+
+            // DealDamage event を持たない自己バフ系スキル (Provoke / Defend 等) は
+            // 中断されても CT 払戻しない (= 最初から fired 扱い)。
+            // これがないと自己バフ系が中断のたびに連続使用可能になる。
+            bool hasDealDamage = false;
+            if (s.timeline != null)
+            {
+                for (int i = 0; i < s.timeline.Count; i++)
+                {
+                    var ev = s.timeline[i];
+                    if (ev != null && ev.kind == RealtimeSkillEventKind.DealDamage)
+                    {
+                        hasDealDamage = true;
+                        break;
+                    }
+                }
+            }
+            currentCast.hasFiredDealDamage = !hasDealDamage;
         }
 
         /// <summary>他 unit と重ならないよう連続位置ベースで動かす。knockback/pull 共通処理。
@@ -3845,7 +4575,7 @@ namespace SteraCube.SpaceJourney.Realtime
         }
 
         /// <summary>スキル設定に従い、最適なターゲットを選ぶ</summary>
-        private RealtimeBattleUnit SelectSkillTarget(RealtimeSkillDefinition s)
+        private RealtimeBattleUnit SelectSkillTarget(RealtimeSkillDefinition s, int skillIndex = -1)
         {
             if (manager == null) return null;
             if (s.targetSide == RealtimeTargetSide.Self) return this;
@@ -3863,6 +4593,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     case RealtimeTargetSide.AnyAllyIncludingSelf:
                         if (u.ownerSide != ownerSide) continue; break;
                 }
+                if (IsHiddenEnemy(u)) continue;
                 // ジョブフィルタ
                 if (s.targetJobFilter != null && s.targetJobFilter.Length > 0)
                 {
@@ -3877,6 +4608,13 @@ namespace SteraCube.SpaceJourney.Realtime
                 float maxReach = GetShapeMaxReach(s.shape);
                 if (d < s.shape.rangeMin || d > maxReach) continue;
                 candidates.Add(u);
+            }
+            if (candidates.Count == 0
+                && currentTarget != null
+                && currentTarget.IsAlive()
+                && IsStuckNearMeleeRange(skillIndex, s, Vector3.Distance(transform.position, currentTarget.transform.position)))
+            {
+                return currentTarget;
             }
             if (candidates.Count == 0) return null;
 
@@ -3940,6 +4678,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     case RealtimeTargetSide.AnyAllyIncludingSelf:
                         if (u.ownerSide != ownerSide) continue; break;
                 }
+                if (IsHiddenEnemy(u)) continue;
                 if (IsInShape(s.shape, selfPos, aim, dn, u.transform.position, isBasicHere))
                 {
                     if (meleeBlockedByBarricade && IsBarricadeBetween(selfPos, u.transform.position)) continue;
@@ -4012,6 +4751,7 @@ namespace SteraCube.SpaceJourney.Realtime
                     case RealtimeTargetSide.AnyAllyIncludingSelf:
                         if (u.ownerSide != ownerSide) continue; break;
                 }
+                if (IsHiddenEnemy(u)) continue;
                 Vector3 uPos = u.transform.position; uPos.y = 0;
                 if (IsInShape(s.shape, selfPos, aim, dir, uPos, isBasicHere))
                 {
